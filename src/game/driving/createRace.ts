@@ -48,6 +48,7 @@ export interface Race {
   start(): void;
   togglePause(): void;
   restart(): void;
+  useFocus(): boolean;
   recover(): void;
   toggleCockpit(): void;
   cycleTrack(): void;
@@ -65,6 +66,7 @@ export function createRace(
   configuration: DroneConfiguration = DEFAULT_DRONE_CONFIGURATION,
   altitudeProfile?: AltitudeProfile,
   difficulty?: DifficultyPreset,
+  focusSlots = 0,
 ): Race {
   const config = resolveDroneConfiguration(configuration);
   const visuals = config.speedEffects;
@@ -82,7 +84,7 @@ export function createRace(
   const sun = new THREE.DirectionalLight(0xc8dfed, 3);
   sun.position.set(-50, 150, -100); scene.add(sun);
   const track = createTrack(altitudeProfile, difficulty);
-  const trackVisual = createTrackVisual(track);
+  const trackVisual = createTrackVisual(track, config.boostStyle.pulseColor);
   scene.add(trackVisual.object);
   const drone = createRacingDrone({ variant: config.modelVariant, neonBoost: 1.7, thrusterIntensity: 0.35 });
   scene.add(drone);
@@ -94,8 +96,8 @@ export function createRace(
   const coarsePointer = window.matchMedia('(any-pointer: coarse)');
   let storage: Storage | undefined;
   try { storage = window.localStorage; } catch { /* Private browsing can deny storage. */ }
-  const records = createRaceRecords({ trackId: `neon-circuit-v1:${difficulty?.id ?? 'beginner'}`, configurationId: JSON.stringify({ performance: config.performance, altitude: track.altitudeProfile }) }, storage);
-  const timeAttack = createTimeAttack(track, config.performance, records);
+  const records = createRaceRecords({ trackId: `neon-circuit-v1:${difficulty?.id ?? 'beginner'}`, configurationId: JSON.stringify({ performance: config.performance, altitude: track.altitudeProfile, ...(focusSlots ? { assisted: true } : {}) }) }, storage);
+  const timeAttack = createTimeAttack(track, config.performance, records, focusSlots);
   const model = timeAttack.model;
   const raceGates = createRaceGates(track, timeAttack.snapshot().gatesPerLap);
   scene.add(raceGates.object);
@@ -385,7 +387,7 @@ export function createRace(
   }, listen);
   notify(); animation = requestAnimationFrame(tick);
   return {
-    start, togglePause, restart, recover, toggleCockpit, cycleTrack,
+    start, togglePause, restart, useFocus() { const used = timeAttack.useFocus(); if (used) notify(); return used; }, recover, toggleCockpit, cycleTrack,
     setBloom(enabled) { bloom.enabled = enabled; },
     setQuality(quality) { renderQuality = quality; resize(); },
     setExhaustHaze(enabled) { exhaustHaze.setEnabled(enabled); },

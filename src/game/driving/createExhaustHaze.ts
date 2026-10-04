@@ -25,7 +25,9 @@ export function createExhaustHaze(drone: THREE.Group, camera: THREE.PerspectiveC
       }
       void main(){
         float mask=max(plume(starts[0],ends[0],radii.x),plume(starts[1],ends[1],radii.y));
-        vec2 wave=vec2(sin(vUv.y*170.0-time*13.0)+sin(vUv.x*95.0+time*9.0),cos(vUv.x*130.0-time*11.0));
+        // Broad moving ripples bend the track lines; fine ripples add heat shimmer.
+        vec2 wave=vec2(sin(vUv.y*85.0-time*9.0)+0.45*sin(vUv.x*155.0+time*13.0),
+          0.65*cos(vUv.x*75.0-time*7.0)+0.3*sin(vUv.y*190.0-time*17.0));
         vec2 displacement=wave*mask*strength/vec2(aspect,1.0);
         gl_FragColor=texture2D(tDiffuse,clamp(vUv+displacement,vec2(0.001),vec2(0.999)));
       }`,
@@ -55,13 +57,14 @@ export function createExhaustHaze(drone: THREE.Group, camera: THREE.PerspectiveC
         ends[index].set(projected.x * .5 + .5, projected.y * .5 + .5);
         const endDepth = -world.applyMatrix4(camera.matrixWorldInverse).z;
         const inFront = depth > camera.near && endDepth > camera.near;
-        radii.setComponent(index, inFront ? Math.min(.14, .38 / (depth * 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)))) : 0);
+        const width = stage === 2 ? .78 : stage === 1 ? .65 : .52;
+        radii.setComponent(index, inFront ? Math.min(.19, width / (depth * 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)))) : 0);
         visible ||= inFront;
       });
       pass.enabled = visible;
       pass.uniforms.aspect.value = camera.aspect;
       pass.uniforms.time.value = time;
-      pass.uniforms.strength.value = stage === 2 ? .004 : stage === 1 ? .003 : .002;
+      pass.uniforms.strength.value = stage === 2 ? .010 : stage === 1 ? .007 : .004;
     },
   };
 }

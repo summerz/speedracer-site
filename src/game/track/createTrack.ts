@@ -163,7 +163,7 @@ export function createTrack(profile?: AltitudeProfile, preset?: DifficultyPreset
 
 const maxAltitude = (track: Track) => track.altitudeProfile.levels[track.altitudeProfile.levels.length - 1];
 
-export function createTrackVisual(track: Track) {
+export function createTrackVisual(track: Track, lineColor?: string) {
   const group = new THREE.Group();
   group.name = 'neonLoop';
   const count = Math.ceil(track.length / 1.2);
@@ -188,7 +188,7 @@ export function createTrackVisual(track: Track) {
   roadGeometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
   roadGeometry.setIndex(indices); roadGeometry.computeVertexNormals();
   group.add(new THREE.Mesh(roadGeometry, new THREE.MeshStandardMaterial({ color: 0x12242d, roughness: 0.85, metalness: 0.2, side: THREE.DoubleSide })));
-  const edgeMaterial = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.12, 1.3, 1.1) });
+  const edgeMaterial = new THREE.MeshBasicMaterial({ color: lineColor ? new THREE.Color(lineColor).multiplyScalar(1.3) : new THREE.Color(0.12, 1.3, 1.1) });
   for (const edge of [left, right]) {
     edge.pop();
     const edgeCurve = new THREE.CatmullRomCurve3(edge, true, 'centripetal');
@@ -196,7 +196,7 @@ export function createTrackVisual(track: Track) {
   }
   // Repeated markings and pillars make nearby movement legible without textures.
   const dashGeometry = new THREE.BoxGeometry(0.16, 0.035, 3.8);
-  const dashMaterial = new THREE.MeshBasicMaterial({ color: 0x426c76 });
+  const dashMaterial = new THREE.MeshBasicMaterial({ color: lineColor ? new THREE.Color(lineColor).multiplyScalar(.28) : 0x426c76 });
   const dashCount = Math.floor(track.length / 9);
   const dashes = new THREE.InstancedMesh(dashGeometry, dashMaterial, dashCount);
   const dummy = new THREE.Object3D();

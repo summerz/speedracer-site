@@ -4,7 +4,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { createRacingDrone } from './drone/createRacingDrone';
+import { createRacingDrone, DRONE_VARIANTS } from './drone/createRacingDrone';
 import { createThrusterEffect } from './drone/createThrusterEffect';
 import { DEFAULT_DRONE_CONFIGURATION } from './drone/droneConfiguration';
 import type { DroneConfiguration } from './drone/droneConfiguration';
@@ -20,7 +20,7 @@ export interface Hangar {
   dispose(): void;
 }
 
-export function createHangar(container: HTMLDivElement, onContextLost: () => void, configuration: DroneConfiguration = DEFAULT_DRONE_CONFIGURATION): Hangar {
+export function createHangar(container: HTMLDivElement, onContextLost: () => void, configuration: DroneConfiguration = DEFAULT_DRONE_CONFIGURATION, trackPreview = false): Hangar {
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setClearColor(0x080e14, 0);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -40,6 +40,9 @@ export function createHangar(container: HTMLDivElement, onContextLost: () => voi
   controls.target.set(0, 1.0, 0);
   controls.enableDamping = true;
   controls.enablePan = false;
+  controls.enableZoom = false;
+  // Keep vertical touch scrolling available over the preview; horizontal drag rotates it.
+  renderer.domElement.style.touchAction = 'pan-y';
   controls.minDistance = 5.5;
   controls.maxDistance = 16;
   controls.minPolarAngle = 0.25;
@@ -81,7 +84,7 @@ export function createHangar(container: HTMLDivElement, onContextLost: () => voi
 
   const ring = new THREE.Mesh(
     new THREE.RingGeometry(3.11, 3.15, 100),
-    new THREE.MeshBasicMaterial({ color: 0x51bbb9, side: THREE.DoubleSide, transparent: true, opacity: 0.65 }),
+    new THREE.MeshBasicMaterial({ color: (DRONE_VARIANTS.find(v => v.id === configuration.modelVariant) ?? DRONE_VARIANTS[0]).neon, toneMapped: false, side: THREE.DoubleSide, transparent: true, opacity: 0.65 }),
   );
   ring.rotation.x = -Math.PI / 2;
   ring.position.y = -0.018;
@@ -93,6 +96,15 @@ export function createHangar(container: HTMLDivElement, onContextLost: () => voi
   gridMaterial.transparent = true;
   gridMaterial.opacity = 0.32;
   scene.add(grid);
+
+  let preview: THREE.LineSegments | undefined;
+  if (trackPreview) {
+    const points: number[] = [];
+    for (const x of [-3.7, 3.7]) points.push(x, -.02, -10, x, -.02, 10);
+    for (let z = -10; z < 10; z += 2) points.push(0, -.02, z, 0, -.02, z + .8);
+    preview = new THREE.LineSegments(new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(points, 3)), new THREE.LineBasicMaterial({ color: configuration.boostStyle.pulseColor }));
+    scene.add(preview);
+  }
 
   // Renderer antialiasing does not cover offscreen postprocessing targets.
   const renderTarget = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 });
@@ -157,6 +169,8 @@ export function createHangar(container: HTMLDivElement, onContextLost: () => voi
 
   return {
     setDrone(next) {
+      ring.material.color.setHex((DRONE_VARIANTS.find(v => v.id === next.modelVariant) ?? DRONE_VARIANTS[0]).neon);
+      if (preview) (preview.material as THREE.LineBasicMaterial).color.set(next.boostStyle.pulseColor);
       disposeDrone();
       drone = createRacingDrone({ variant: next.modelVariant, thrusterIntensity: 0, neonBoost: 2 });
       drone.position.y = 1.05; scene.add(drone);

@@ -321,6 +321,14 @@ function buildHalo(): DroneParts {
 
 const BUILDERS: Record<string, () => DroneParts> = { vanguard: buildVanguard, needle: buildNeedle, hammerhead: buildHammerhead, catamaran: buildCatamaran, halo: buildHalo };
 
+// Keep low-luminance reds/purples above the Bloom threshold without changing their hue.
+function neonColor(value: THREE.ColorRepresentation, boost: number): THREE.Color {
+  const color = new THREE.Color(value);
+  const weights = THREE.ColorManagement.getLuminanceCoefficients(new THREE.Vector3());
+  const luminance = color.r * weights.x + color.g * weights.y + color.b * weights.z;
+  return color.multiplyScalar(boost * .65 / Math.min(.65, Math.max(.05, luminance)));
+}
+
 // ---------- assembly ----------
 export function createRacingDrone(options: DroneOptions = {}): THREE.Group {
   const o: Required<DroneOptions> = { ...DRONE_DEFAULTS, ...options };
@@ -333,8 +341,8 @@ export function createRacingDrone(options: DroneOptions = {}): THREE.Group {
   const frameMat = new THREE.MeshStandardMaterial({ name: 'frame', color: col(o.frameColor, v.frame), roughness: 0.6, metalness: 0.3, flatShading: true });
   const glassMat = new THREE.MeshPhysicalMaterial({ name: 'glass', color: col(o.glassColor, v.glass), roughness: 0.12, metalness: 0.1, transparent: true, opacity: 0.55,
     emissive: new THREE.Color(col(o.neonColor, v.neon)).multiplyScalar(0.12), side: THREE.FrontSide });
-  const neonMat = new THREE.MeshBasicMaterial({ name: 'neon', color: new THREE.Color(col(o.neonColor, v.neon)).multiplyScalar(o.neonBoost), toneMapped: false });
-  const accentBase = new THREE.Color(col(o.accentColor, v.accent)).multiplyScalar(o.neonBoost);
+  const neonMat = new THREE.MeshBasicMaterial({ name: 'neon', color: neonColor(col(o.neonColor, v.neon), o.neonBoost), toneMapped: false });
+  const accentBase = neonColor(col(o.accentColor, v.accent), o.neonBoost);
   const accentMat = new THREE.MeshBasicMaterial({ name: 'neonAccent', color: accentBase.clone(), toneMapped: false });
   const thrustMat = new THREE.MeshBasicMaterial({ name: 'thrusterCore', color: accentBase.clone(), toneMapped: false, side: THREE.DoubleSide });
 

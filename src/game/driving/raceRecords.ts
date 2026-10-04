@@ -3,7 +3,7 @@ import { RACE_LAPS, RACE_RULES_VERSION } from './raceProgress.js';
 export interface RaceRecord { total: number; laps: number[]; recordedAt: string }
 export interface RecordStorage { getItem(key: string): string | null; setItem(key: string, value: string): void }
 export interface RecordScope { trackId: string; configurationId: string }
-export interface RecordResult { best: RaceRecord; isNewBest: boolean; saved: boolean }
+export interface RecordResult { best: RaceRecord; isNewBest: boolean; improvedExistingBest: boolean; saved: boolean }
 
 const validRecord = (record: unknown): record is RaceRecord => {
   if (!record || typeof record !== 'object') return false;
@@ -37,6 +37,7 @@ export function createRaceRecords(scope: RecordScope, storage?: RecordStorage) {
       const record = { total, laps: [...laps], recordedAt: new Date().toISOString() };
       if (!validRecord(record)) throw new Error('Invalid completed race');
       refresh(); // Another tab may have finished a faster race since this one started.
+      const hadBest = best !== null;
       const isNewBest = !best || total < best.total - 1e-8;
       if (isNewBest) { best = record; persisted = false; }
       if (!persisted && storage) {
@@ -45,7 +46,7 @@ export function createRaceRecords(scope: RecordScope, storage?: RecordStorage) {
           persisted = true;
         } catch { /* Keep the best in memory for another attempt. */ }
       }
-      return { best: copy(best)!, isNewBest, saved: persisted };
+      return { best: copy(best)!, isNewBest, improvedExistingBest: hadBest && isNewBest, saved: persisted };
     },
   };
 }

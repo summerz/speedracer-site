@@ -1,3 +1,4 @@
+import { soundtrack } from '../audio/soundtrack.js';
 import type { RacePhase } from './createTimeAttack.js';
 import type { RaceCue } from './createRaceFeedback.js';
 
@@ -6,7 +7,7 @@ interface Voice { source: AudioScheduledSourceNode; nodes: AudioNode[]; music: b
 const frequency = (midi: number) => 440 * 2 ** ((midi - 69) / 12);
 const STEP_SECONDS = 60 / 144 / 4;
 
-/** Original synth score and drone sounds. Scheduling runs on the race frame, with no timers. */
+/** Drone engine and transient effects; the app owns the MIDI soundtrack. Scheduling runs on the race frame, with no timers. */
 export function createRaceAudio() {
   let context: AudioContext | undefined;
   let effects: GainNode;
@@ -25,9 +26,6 @@ export function createRaceAudio() {
   let disposed = false;
   let phase: RacePhase = 'ready';
   let previousStage = 0;
-  let nextStep = 0;
-  let step = 0;
-  let sequencing = false;
   let engineRestartAt = -10;
   const voices = new Set<Voice>();
 
@@ -138,37 +136,12 @@ export function createRaceAudio() {
       notes.forEach((note, i) => tone(frequency(note), now + i * 0.11, 0.24, cue === 'final-lap' ? 0.14 : 0.1, 'triangle'));
     }
   };
-  const sequenceStep = (index: number, at: number) => {
-    const bar = Math.floor(index / 16) % 8;
-    const beat = index % 16;
-    // E minor: i → VI → iv → V. The raised leading tone resolves back to E.
-    const roots = [40, 40, 36, 36, 45, 45, 47, 47];
-    const intervals = bar === 7 ? [0, 4, 7, 10] : bar === 2 || bar === 3 ? [0, 4, 7, 11]
-      : bar === 6 ? [0, 5, 7, 10] : [0, 3, 7, 10];
-    const root = roots[bar];
-    if (beat % 4 === 0) {
-      tone(135, at, 0.20, 0.15, 'sine', true, 42);
-      hiss(at, 0.022, 0.022, 3800, true);
-    }
-    if (beat === 4 || beat === 12) {
-      hiss(at, 0.13, 0.09, 2400, true);
-      tone(185, at, 0.08, 0.045, 'triangle', true, 120);
-    }
-    if (beat % 2 === 0) hiss(at, 0.035, 0.015, 7500, true);
-    if ([0, 6, 8, 14].includes(beat)) tone(frequency(root), at, STEP_SECONDS * 1.5, 0.035, 'triangle', true);
-    // Bright sixteenth-note arpeggios lead; the percussion only supports them.
-    const motif = [0, 1, 2, 3, 2, 1, 0, 2, 1, 2, 3, 2, 3, 1, 2, 0];
-    const note = root + 36 + intervals[motif[beat]] + (bar >= 4 && beat >= 12 ? 12 : 0);
-    tone(frequency(note), at, STEP_SECONDS * 1.45, beat % 4 === 0 ? 0.062 : 0.048, 'sawtooth', true);
-    tone(frequency(note + 12), at, STEP_SECONDS * 0.8, 0.01, 'sine', true);
-    if (beat === 0) for (const interval of intervals.slice(0, 3)) tone(frequency(root + 12 + interval), at, STEP_SECONDS * 15, 0.012, 'sine', true);
-  };
   return {
     activate,
     play,
-    reset() { stopVoices(); previousStage = 0; step = 0; sequencing = false; },
+    reset() { stopVoices(); previousStage = 0; },
     pause() {
-      phase = 'paused'; sequencing = false; previousStage = 0; stopVoices(false, true);
+      phase = 'paused'; previousStage = 0; stopVoices(false, true); soundtrack.setScene('paused');
       if (context) {
         effects.gain.setTargetAtTime(0, context.currentTime, 0.015);
         music.gain.setTargetAtTime(0, context.currentTime, 0.035);
@@ -180,12 +153,12 @@ export function createRaceAudio() {
       else if (context) effects.gain.setTargetAtTime(0, context.currentTime, 0.015);
     },
     setMusicEnabled(value: boolean) {
-      musicEnabled = value;
+      musicEnabled = value; soundtrack.setEnabled(value);
       if (value) activate();
-      else { sequencing = false; stopVoices(true, true); if (context) music.gain.setTargetAtTime(0, context.currentTime, 0.015); }
+      else { stopVoices(true, true); if (context) music.gain.setTargetAtTime(0, context.currentTime, 0.015); }
     },
     update(nextPhase: RacePhase, stage: number, progress: number, speedRatio: number, braking: boolean) {
-      phase = nextPhase;
+      phase = nextPhase; soundtrack.setScene(nextPhase);
       if (!context || context.state !== 'running' || disposed) return;
       const now = context.currentTime;
       const racing = phase === 'running';
@@ -205,10 +178,7 @@ export function createRaceAudio() {
       }
       previousStage = racing ? stage : 0;
       music.gain.setTargetAtTime(active() && musicEnabled ? 0.65 : 0, now, 0.12);
-      if (active() && musicEnabled) {
-        if (!sequencing || nextStep < now - 0.2) { nextStep = now + 0.025; sequencing = true; }
-        while (nextStep < now + 0.22) { sequenceStep(step++, nextStep); nextStep += STEP_SECONDS; }
-      } else if (sequencing) { sequencing = false; stopVoices(true, true); }
+
     },
     dispose() {
       disposed = true; stopVoices();

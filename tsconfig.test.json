@@ -8,6 +8,7 @@
   },
   "include": [
     "src/game/driving/createTimeAttack.ts",
+    "src/game/progression/progressStore.ts",
     "src/game/driving/createDrivingModel.ts",
     "src/game/track/createTrack.ts",
     "src/game/track/createRaceGates.ts",
@@ -17,6 +18,7 @@
     "src/platform/appUpdate.ts",
     "src/game/driving/createRaceFeedback.ts",
     "src/game/driving/createRaceAudio.ts",
+    "src/game/audio/soundtrack.ts",
     "src/game/drone/droneCatalog.ts",
     "src/game/drone/createRacingDrone.ts",
     "src/game/driving/createExhaustHaze.ts"

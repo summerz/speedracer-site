@@ -1,0 +1,51 @@
+.menu-header.masthead {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 20px 24px;
+  min-height: auto;
+  padding-block: calc(20px + env(safe-area-inset-top)) 16px;
+  background: #080e14;
+}
+.menu-header-tools { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
+.menu-header .app-tools { margin: 0; }
+.menu-header .app-shell-tools { margin: 0; gap: 8px; }
+.menu-navigation { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.menu-header-tabs { display: flex; gap: 8px; }
+.menu-header .menu-header-button, .menu-header .app-shell-tools button {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 9px 16px;
+  border: 1px solid #58717d70;
+  border-radius: 3px;
+  background: #0b1c28;
+  color: #c9dadf;
+  font: 500 12px/1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  white-space: nowrap;
+  transition: background 160ms, border-color 160ms;
+}
+.menu-header button:hover:not(:disabled) { background: #17303c; border-color: #7bb7be; }
+.menu-header .menu-header-button[aria-pressed='true'],
+.menu-header .menu-header-button[aria-current='page'],
+.menu-header .app-shell-tools .update-ready {
+  color: #d6fffa;
+  border-color: #56dacf80;
+  background: #56dacf13;
+}
+.menu-header .menu-header-button[aria-current='page'] { opacity: 1; cursor: default; }
+.menu-balance { color: #bce6eb; font-size: 14px; font-weight: 400; white-space: nowrap; }
+@media (max-width: 760px) {
+  .menu-header.masthead { gap: 16px; padding-block: calc(16px + env(safe-area-inset-top)) 12px; }
+  .menu-header .wordmark { grid-column: 1 / -1; }
+  .menu-header-tools { grid-column: 1 / -1; justify-content: space-between; gap: 12px; }
+  .menu-header .app-tools { flex: 0 1 auto; order: initial; }
+  .menu-header .menu-header-button, .menu-header .app-shell-tools button { min-height: 40px; padding: 9px 12px; font-size: 11px; }
+  .menu-header .app-version { font-size: 10px; }
+}
+
+@media (min-width: 761px) {
+  .menu-header.masthead { gap: 12px 24px; padding-block: calc(12px + env(safe-area-inset-top)) 12px; }
+  .menu-header .menu-header-button, .menu-header .app-shell-tools button { min-height: 36px; padding-block: 7px; }
+}

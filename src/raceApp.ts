@@ -1,3 +1,4 @@
+import { soundtrack } from './game/audio/soundtrack';
 import { OFF_TRACK_PENALTY_POINTS } from './game/driving/createDrivingModel';
 import { RENDER_QUALITIES } from './platform/renderQuality';
 import type { RenderQuality } from './platform/renderQuality';
@@ -10,13 +11,17 @@ import { raceViewLayout } from './game/driving/createRaceViews';
 import { createRace } from './game/driving/createRace';
 import type { Race, RaceSnapshot } from './game/driving/createRace';
 import './race.css';
+import type { ProgressStore } from './game/progression/progressStore';
+import type { RewardInput } from './game/progression/progress';
+import './shop.css';
 
 const formatTime = (seconds: number) => {
   const ms = Math.round(Math.max(0, seconds) * 1000);
   return `${Math.floor(ms / 60000).toString().padStart(2, '0')}:${Math.floor(ms / 1000 % 60).toString().padStart(2, '0')}.${(ms % 1000).toString().padStart(3, '0')}`;
 };
 
-export function mountRace(root: HTMLDivElement, onHangar: () => void, configuration: DroneConfiguration = DEFAULT_DRONE_CONFIGURATION): () => void {
+export function mountRace(root: HTMLDivElement, onHangar: () => void, configuration: DroneConfiguration = DEFAULT_DRONE_CONFIGURATION, store?: ProgressStore, onShop?: () => void): () => void {
+  const focusSlots = store ? Math.min(store.snapshot().focusSlots, store.snapshot().focus) : 0;
   document.title = 'Speedracer — 타임어택';
   root.innerHTML = `
     <main class="drive-screen">
@@ -28,7 +33,7 @@ export function mountRace(root: HTMLDivElement, onHangar: () => void, configurat
       </header>
       <button type="button" id="race-pause" class="race-pause" aria-label="일시정지 메뉴" aria-keyshortcuts="Escape" aria-controls="drive-overlay" aria-expanded="false"><span aria-hidden="true">Ⅱ</span></button>
       <div class="driving-overlay"><div id="race-announcement" class="race-announcement" role="status" aria-live="polite" hidden><strong></strong><span></span></div><p id="race-notice" class="race-notice" role="status" aria-live="polite"></p><div id="race-countdown" class="race-countdown" role="status" aria-live="assertive" hidden><span>READY</span><strong>3</strong></div>
-      <footer class="drive-hud" aria-label="고도와 부스트 계기판">
+      <button id="race-focus" type="button" class="race-focus" aria-keyshortcuts="V" hidden>집중 모드</button><p id="focus-feedback" class="focus-feedback" role="status" aria-live="polite"></p><footer class="drive-hud" aria-label="고도와 부스트 계기판">
         <aside class="height-guide" aria-label="고도 안내: 선택 단계, 민트색 통과 가능, 빨강 통과 불가, 주황 전환 중"><div id="height-level" class="height-bars"></div><strong id="height-instruction"></strong></aside>
         <div class="boost-readout"><div class="hud-pair"><span class="hud-label">BOOST</span><span id="boost-value" class="mono">100%</span></div><div id="boost-meter" class="boost-meter" role="progressbar" aria-label="부스트 잔량" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"><span></span></div><div id="boost-stage-meter" class="boost-stage-meter" role="progressbar" aria-label="부스트 2단계 축적" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span></span></div><span id="boost-status">Space 유지 · 3초 후 2단계</span></div>
       </footer></div>
@@ -36,9 +41,9 @@ export function mountRace(root: HTMLDivElement, onHangar: () => void, configurat
         <div class="drive-dialog">
           <p class="eyebrow">NEON CIRCUIT · TIME ATTACK</p><h2 id="drive-overlay-title">레이스 준비</h2><p id="drive-overlay-copy"></p>
           <p id="pause-summary" class="pause-summary" hidden></p>
-          <section id="race-result" class="race-result" aria-label="경기 결과" hidden><p id="result-status" class="result-status"></p><time id="result-total" class="result-total"></time><ol id="result-laps" class="result-laps"></ol><p id="result-best"></p><p id="result-penalties"></p><p id="record-warning" class="record-warning" hidden>기록을 저장하지 못했습니다. 이번 화면에서 확인할 수 있습니다.</p></section>
+          <section id="race-result" class="race-result" aria-label="경기 결과" hidden><p id="result-status" class="result-status"></p><time id="result-total" class="result-total"></time><ol id="result-laps" class="result-laps"></ol><p id="result-best"></p><p id="result-penalties"></p><div id="result-reward" class="reward-summary" role="status" aria-live="polite"></div><button id="reward-retry" type="button" hidden>보상 저장 다시 시도</button><button id="result-shop" type="button" hidden>상점으로 ↗</button><p id="record-warning" class="record-warning" hidden>기록을 저장하지 못했습니다. 이번 화면에서 확인할 수 있습니다.</p></section>
           <fieldset id="difficulty-picker" class="difficulty-picker"><legend>난이도</legend><div><label><input type="radio" name="difficulty" value="beginner" checked /><span>초급</span></label><label><input type="radio" name="difficulty" value="intermediate" /><span>중급</span></label><label><input type="radio" name="difficulty" value="advanced" /><span>고급</span></label></div></fieldset><p id="difficulty-description" class="difficulty-description"></p>
-          <p id="ready-best" class="ready-best"></p><button type="button" id="drive-start" class="primary-action">레이스 시작 <span aria-hidden="true">↗</span></button>
+          <p id="ready-best" class="ready-best"></p><p class="shop-hint" id="race-loadout"></p><button type="button" id="drive-start" class="primary-action">레이스 시작 <span aria-hidden="true">↗</span></button>
           <button type="button" id="race-hangar" class="race-exit">격납고로</button>
           <div class="menu-preview"><span>화면 미리보기</span><div class="race-actions"><button type="button" id="race-view">콕핏 보기 <kbd>C</kbd></button><button type="button" id="race-track">트랙 PIP 보기 <kbd>X</kbd></button></div></div>
           <nav class="race-actions menu-actions" aria-label="주행 메뉴">
@@ -53,7 +58,7 @@ export function mountRace(root: HTMLDivElement, onHangar: () => void, configurat
       </nav>
       <dialog id="race-preferences" class="race-preferences" aria-labelledby="preferences-title">
         <header><h2 id="preferences-title">설정</h2><button type="button" id="preferences-close" aria-label="설정 닫기">닫기</button></header>
-        <div class="preference-options"><button type="button" id="race-bloom" aria-pressed="true"><span>네온 발광 <small>Bloom</small></span></button><button type="button" id="race-sound" aria-pressed="true"><span>주행 효과음</span></button><button type="button" id="race-music" aria-pressed="true"><span>배경 음악 <small>Neon Circuit</small></span></button><button type="button" id="race-haptics" aria-pressed="true"><span>진동</span></button></div>
+        <div class="preference-options"><button type="button" id="race-bloom" aria-pressed="true"><span>네온 발광 <small>Bloom</small></span></button><button type="button" id="race-sound" aria-pressed="true"><span>주행 효과음</span></button><button type="button" id="race-music" aria-pressed="true"><span>배경 음악 <small>MIDI · 5곡</small></span></button><button type="button" id="race-haptics" aria-pressed="true"><span>진동</span></button></div>
         <div class="render-options"><label for="race-quality">렌더링 품질</label><select id="race-quality">${Object.entries(RENDER_QUALITIES).map(([id, option]) => `<option value="${id}" ${id === 'balanced' ? 'selected' : ''}>${option.label}</option>`).join('')}</select></div>
         <div class="preference-options"><button type="button" id="race-haze" aria-pressed="false"><span>배기 아지랑이 <small>추적 시점</small></span></button></div>
         <p class="quality-hint">아지랑이는 배기 주변에만 적용합니다. 성능이 낮으면 끄거나 ‘성능 우선’을 선택하세요.</p>
@@ -73,6 +78,7 @@ export function mountRace(root: HTMLDivElement, onHangar: () => void, configurat
   const hazeButton = get<HTMLButtonElement>('race-haze');
   const soundButton = get<HTMLButtonElement>('race-sound');
   const musicButton = get<HTMLButtonElement>('race-music');
+  musicButton.setAttribute('aria-pressed', String(soundtrack.enabled));
   const hapticsButton = get<HTMLButtonElement>('race-haptics');
   const coarsePointer = window.matchMedia('(any-pointer: coarse)');
   const refreshHaptics = () => {
@@ -97,6 +103,21 @@ export function mountRace(root: HTMLDivElement, onHangar: () => void, configurat
   const heightGuide = root.querySelector<HTMLElement>('.height-guide')!;
   let selectedDifficulty: DifficultyId = 'beginner';
   let lastPhase = '';
+  let rewardInput: RewardInput | undefined; let rewardPending = false; let focusPending = false; let canFocus = false; let activeRaceId = '';
+  let screenDisposed = false; let focusSerial = 0; let focusMessageUntil = 0;
+  const saveReward = async () => {
+    if (!store || !rewardInput || rewardPending) return;
+    const input = rewardInput; rewardPending = true; get('reward-retry').hidden = true;
+    try {
+      const profile = await store.command({ kind: 'reward', input });
+      if (screenDisposed || rewardInput?.raceId !== input.raceId) return;
+      const r = profile.rewards[input.raceId];
+      get('result-reward').innerHTML = `<p>완주 ${r.base}P${r.assisted ? ' · 보조 80%' : ''} · 클린 +${r.clean}P · 기록 +${r.best}P${r.penalty ? ` · 벌점 -${r.penalty}P` : ''}</p><p><strong>획득 ${r.total} P</strong> · 보유 ${profile.balance.toLocaleString()} P</p>`;
+    } catch (error) {
+      if (!screenDisposed && rewardInput?.raceId === input.raceId) { get('result-reward').textContent = `보상을 저장하지 못했습니다. ${error instanceof Error ? error.message : ''}`; get('reward-retry').hidden = false; }
+    } finally { rewardPending = false; if (!screenDisposed && rewardInput && rewardInput.raceId !== input.raceId) void saveReward(); }
+  };
+  get('race-loadout').textContent = focusSlots ? `보조 타임어택 · 집중 모드 ${focusSlots}개 · 기본 보상 80%` : '일반 타임어택 · 아이템 없음';
   let lastViewKey = '';
   let previewing = false;
   const preferences = get<HTMLDialogElement>('race-preferences');
@@ -130,6 +151,12 @@ export function mountRace(root: HTMLDivElement, onHangar: () => void, configurat
     for (const id of ['race-track', 'preview-track']) get(id).innerHTML = `${trackAction} <kbd>X</kbd>`;
     get('pause-summary').textContent = `${DIFFICULTIES[selectedDifficulty].label} · ${formatTime(state.elapsed)}`;
     const attack = state.timeAttack;
+    activeRaceId = attack.raceId; canFocus = attack.canFocus;
+    const focus = get<HTMLButtonElement>('race-focus');
+    focus.hidden = !focusSlots || state.phase !== 'running'; focus.disabled = !canFocus || focusPending;
+    focus.textContent = attack.focusRemaining > 0 ? `집중 ${attack.focusRemaining.toFixed(1)}s` : `집중 ${focusSlots - attack.focusUsed} · V`;
+    get('focus-feedback').hidden = attack.focusRemaining === 0 && !focusPending && performance.now() >= focusMessageUntil;
+    screen.classList.toggle('is-focused', attack.focusRemaining > 0 && state.phase === 'running');
     get('race-lap').textContent = `LAP ${attack.lap}/${attack.totalLaps}`;
     get('race-lap').setAttribute('aria-label', `${attack.totalLaps}랩 중 ${attack.lap}랩`);
     get('ready-best').textContent = attack.bestRecord ? `최고 기록 ${formatTime(attack.bestRecord.total)}` : '3랩 · 아직 최고 기록이 없습니다';
@@ -144,6 +171,10 @@ export function mountRace(root: HTMLDivElement, onHangar: () => void, configurat
       get('result-penalties').textContent = state.penaltyPoints ? `코스 이탈 ${state.offTrackExits}회 · 벌점 -${state.penaltyPoints}P` : '';
       get('result-penalties').hidden = state.penaltyPoints === 0;
       get('record-warning').hidden = attack.result!.saved;
+      get('result-shop').hidden = !onShop;
+      rewardInput = { raceId: attack.raceId, difficulty: selectedDifficulty, collisions: state.collisions, offTrackExits: state.offTrackExits, recoveries: state.recoveries, penaltyPoints: state.penaltyPoints, improvedExistingBest: !!attack.result?.improvedExistingBest, assisted: attack.assisted };
+      get('result-reward').textContent = store ? '완주 보상을 저장하고 있습니다…' : '';
+      void saveReward();
     }
     if (state.collisions > lastCollisions && state.notice === 'height-collision') {
       const flash = get('race-impact');
@@ -280,12 +311,31 @@ export function mountRace(root: HTMLDivElement, onHangar: () => void, configurat
     get<HTMLButtonElement>('race-restart').disabled = true; pauseButton.disabled = true; bloomButton.disabled = true; soundButton.disabled = true; musicButton.disabled = true; hapticsButton.disabled = true; get<HTMLButtonElement>('race-view').disabled = true; get<HTMLButtonElement>('race-track').disabled = true; get<HTMLButtonElement>('race-settings').disabled = true;
   };
   get('race-hangar').addEventListener('click', onHangar, listen);
+  get('result-shop').addEventListener('click', () => onShop?.(), listen);
+  get('reward-retry').addEventListener('click', () => { void saveReward(); }, listen);
+  const useFocus = async () => {
+    if (!store || focusPending || lastPhase !== 'running' || !canFocus) return;
+    focusPending = true; get<HTMLButtonElement>('race-focus').disabled = true;
+    const requestedRaceId = activeRaceId; const receipt = `${requestedRaceId}:${++focusSerial}`;
+    try {
+      await store.command({ kind: 'consume-focus', id: receipt });
+      if (screenDisposed || activeRaceId !== requestedRaceId || !race?.useFocus()) await store.command({ kind: 'refund-focus', id: receipt });
+      else { get('focus-feedback').textContent = '집중 모드 · 2초'; await store.command({ kind: 'confirm-focus', id: receipt }); }
+    } catch (error) { if (!screenDisposed) { get('focus-feedback').textContent = error instanceof Error ? error.message : '아이템을 사용할 수 없습니다.'; focusMessageUntil = performance.now() + 2500; } }
+    finally { focusPending = false; }
+  };
+  get('race-focus').addEventListener('click', () => { void useFocus(); }, listen);
+  window.addEventListener('keydown', event => {
+    if (event.code !== 'KeyV' || event.repeat || event.ctrlKey || event.metaKey || event.altKey || document.querySelector('dialog[open]') || event.target instanceof HTMLElement && event.target.closest('input, select, textarea, [contenteditable]')) return;
+    event.preventDefault(); void useFocus();
+  }, listen);
   get('drive-retry').addEventListener('click', () => location.reload(), listen);
   const prepareRace = () => {
+    rewardInput = undefined; get('result-reward').textContent = ''; get('reward-retry').hidden = true; get('result-shop').hidden = true;
     race?.dispose(); lastPhase = ''; lastViewKey = ''; previewing = false; lastCollisions = 0; lastBoostStage = 0; lastAnnouncement = 0; impactAnimation?.cancel(); boostFlashAnimation?.cancel();
     get('difficulty-description').textContent = DIFFICULTIES[selectedDifficulty].description;
     try {
-      race = createRace(get<HTMLDivElement>('race-scene'), update, showError, configuration, undefined, DIFFICULTIES[selectedDifficulty]);
+      race = createRace(get<HTMLDivElement>('race-scene'), update, showError, configuration, undefined, DIFFICULTIES[selectedDifficulty], focusSlots);
       race.setQuality(qualitySelect.value as RenderQuality);
       race.setExhaustHaze(hazeButton.getAttribute('aria-pressed') === 'true');
       race.setBloom(bloomButton.getAttribute('aria-pressed') === 'true');
@@ -336,5 +386,5 @@ export function mountRace(root: HTMLDivElement, onHangar: () => void, configurat
     const enabled = hapticsButton.getAttribute('aria-pressed') !== 'true';
     hapticsButton.setAttribute('aria-pressed', String(enabled)); race?.setHapticsEnabled(enabled);
   }, listen);
-  return () => { preferences.close(); impactAnimation?.cancel(); boostFlashAnimation?.cancel(); events.abort(); race?.dispose(); window.dispatchEvent(new CustomEvent('speedracer:phase', { detail: 'hangar' })); };
+  return () => { screenDisposed = true; preferences.close(); impactAnimation?.cancel(); boostFlashAnimation?.cancel(); events.abort(); race?.dispose(); window.dispatchEvent(new CustomEvent('speedracer:phase', { detail: 'hangar' })); };
 }

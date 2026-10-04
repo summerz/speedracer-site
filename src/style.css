@@ -7,7 +7,7 @@ button:disabled { opacity: 0.35; cursor: not-allowed; }
 button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 5px; }
 [hidden] { display: none !important; }
 .mono { font-family: 'IBM Plex Mono', monospace; }
-.hangar { min-height: 100dvh; position: relative; display: grid; grid-template-columns: 36% 64%; grid-template-rows: auto minmax(570px, auto) auto; background: radial-gradient(ellipse at 72% 48%, #142830 0%, #0a141d 36%, #080e14 70%); overflow: hidden; }
+.hangar { min-height: 100dvh; position: relative; display: grid; grid-template-columns: 36% 64%; grid-template-rows: auto minmax(570px, 1fr); background: radial-gradient(ellipse at 72% 48%, #142830 0%, #0a141d 36%, #080e14 70%); overflow: hidden; }
 .masthead { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; min-height: calc(100px + env(safe-area-inset-top)); gap: 16px; padding: calc(16px + env(safe-area-inset-top)) max(4.5%, env(safe-area-inset-right)) 16px max(4.5%, env(safe-area-inset-left)); border-bottom: 1px solid #ffffff0d; z-index: 2; }
 .wordmark { display: flex; align-items: center; gap: 11px; color: #e9f2f4; text-decoration: none; font-size: 18px; font-weight: 750; letter-spacing: 1.8px; }
 .wordmark svg { width: 24px; height: 30px; fill: var(--accent); }
@@ -66,16 +66,22 @@ h1 span { color: #687e89; }
 .scene-error h2 { font-size: 18px; }
 .scene-error p { color: #a5b6bf; line-height: 1.7; font-size: 13px; }
 .scene-error button { padding: 10px 14px; border: 1px solid #456f75; background: #173c40; color: #d8f9f4; }
-@media (max-width: 1050px) { .hangar { grid-template-columns: 35% 65%; grid-template-rows: auto minmax(530px, auto) auto; } .masthead { min-height: calc(80px + env(safe-area-inset-top)); } .toolbar { min-height: calc(86px + env(safe-area-inset-bottom)); } .wordmark-caption, .wordmark-divider { display: none; } .introduction { padding-left: max(12.85%, env(safe-area-inset-left)); } h1 { font-size: 9vw; } .toolbar { gap: 15px; } .effect-controls { gap: 18px; padding-left: 18px; } .view-controls button { padding: 11px 13px; } .orbit-hint { left: 4%; } }
+@media (max-width: 1050px) { .hangar { grid-template-columns: 35% 65%; grid-template-rows: auto minmax(530px, 1fr); } .masthead { min-height: calc(80px + env(safe-area-inset-top)); } .toolbar { min-height: calc(86px + env(safe-area-inset-bottom)); } .wordmark-caption, .wordmark-divider { display: none; } .introduction { padding-left: max(12.85%, env(safe-area-inset-left)); } h1 { font-size: 9vw; } .toolbar { gap: 15px; } .effect-controls { gap: 18px; padding-left: 18px; } .view-controls button { padding: 11px 13px; } .orbit-hint { left: 4%; } }
 @media (max-width: 760px) { .hangar { grid-template-columns: 1fr; grid-template-rows: auto auto minmax(340px, 50dvh) auto; } .masthead { min-height: calc(72px + env(safe-area-inset-top)); padding-right: max(24px, env(safe-area-inset-right)); padding-left: max(24px, env(safe-area-inset-left)); } .wordmark { font-size: 15px; } .location { font-size: 11px; } .introduction { padding: 36px max(24px, env(safe-area-inset-right)) 12px max(24px, env(safe-area-inset-left)); display: grid; grid-template-columns: 1fr 1fr; column-gap: 24px; } .eyebrow { grid-column: 1 / -1; font-size: 9px; margin-bottom: 18px; } h1 { font-size: 69px; } .intro-copy { font-size: 13px; margin: 0; align-self: center; } .model-id { margin: 22px 0 0; } .development-note { margin: 22px 0 0; align-self: center; line-height: 1.6; } .specs { display: none; } .viewport { grid-column: 1; } .scene-label { top: 15px; right: 24px; } .scene-status { bottom: 26px; right: 24px; } .orbit-hint { bottom: 14px; left: 24px; font-size: 10px; gap: 7px; } .toolbar { flex-wrap: wrap; justify-content: space-between; padding: 17px max(24px, env(safe-area-inset-right)) calc(17px + env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left)); gap: 16px; } .toolbar-label { display: none; } .effect-controls { border: 0; padding: 0; gap: 18px; } .view-controls { gap: 0; } .view-controls button { padding: 9px 12px; } }
 @media (max-width: 420px) { .toolbar { justify-content: center; } .effect-controls { width: 100%; justify-content: center; border-top: 1px solid #ffffff0d; padding-top: 10px; } .scene-status { bottom: 57px; } .development-note { font-size: 10px; } .intro-copy { font-size: 12px; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; } }
 @media (max-width: 760px) { .thrust-test { grid-column: 1 / -1; max-width: none; margin-top: 24px; } .thrust-controls { max-width: 360px; } .thrust-heading { max-width: 360px; } }
 
 /* Shared resolved performance display for the hangar and future shop. */
-.craft-picker { max-width: 310px; margin: 24px 0 16px; }
-.craft-picker label { display: block; font-size: 11px; color: #a4b7c0; margin-bottom: 8px; }
-.craft-picker select { width: 100%; min-height: 44px; padding: 10px; background: #14232d; border: 1px solid #39515c; color: #e9f2f4; font: inherit; font-size: 13px; border-radius: 4px; }
+.craft-picker { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; max-width: 310px; margin: 24px 0 16px; }
+.craft-choice { position: relative; display: grid; align-content: center; gap: 5px; min-height: 96px; padding: 16px 14px; text-align: left; color: #c9dadf; background: #0b1c28; border: 1px solid #58717d70; border-radius: 3px; touch-action: manipulation; transition: background 160ms, border-color 160ms; }
+.craft-choice:only-child { grid-column: 1 / -1; }
+.craft-choice:hover:not(:disabled) { background: #17303c; border-color: #7bb7be; }
+.craft-choice[aria-pressed='true'] { border-color: var(--choice-color); background: #142832; box-shadow: inset 3px 0 var(--choice-color); }
+.craft-choice-name { font: 600 22px/1.1 'Barlow Condensed', sans-serif; letter-spacing: .3px; }
+.craft-choice-role { font-size: 11px; color: #9fb3bf; }
+.craft-choice-status { margin-top: 6px; font-size: 10px; color: #6d8997; }
+.craft-choice[aria-pressed='true'] .craft-choice-status { color: var(--choice-color); }
 .craft-description { max-width: 310px; color: #a4b7c0; font-size: 12px; line-height: 1.6; margin: 0 0 16px; min-height: 38px; }
 .craft-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 18px; max-width: 310px; margin: 0; }
 .craft-stats div { min-width: 0; }
@@ -88,7 +94,7 @@ h1 span { color: #687e89; }
 .stat-line i { display: block; height: 100%; background: var(--craft-color, var(--accent)); }
 .craft-trial { max-width: 310px; font-size: 10px; line-height: 1.5; color: #a4b7c0; margin: 18px 0 0; }
 @media (max-width: 760px) {
-  .hangar { grid-template-rows: auto minmax(270px, 40dvh) auto auto; }
+  .hangar { grid-template-rows: auto minmax(270px, 40dvh) auto; }
   .hangar .viewport { grid-row: 2; }
   .hangar .introduction { grid-row: 3; display: block; padding-top: 24px; }
   .hangar .model-id { margin: 0 0 12px; }
@@ -97,4 +103,46 @@ h1 span { color: #687e89; }
   .hangar .introduction h1 span { margin-left: 8px; }
   .craft-picker, .craft-description, .craft-stats, .craft-trial { max-width: none; }
   .hangar .eyebrow { margin-bottom: 18px; }
+}
+
+/* Desktop hangar keeps the complete loadout and model within an ordinary window. */
+.progress-warning:empty { display: none; }
+@media (min-width: 761px) {
+  .hangar { grid-template-columns: clamp(340px, 34vw, 460px) minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+  .hangar .introduction { align-self: center; padding: 20px 24px 20px max(24px, 3vw); }
+  .hangar .introduction h1 { font-size: clamp(32px, 3vw, 44px); line-height: 1; letter-spacing: -.5px; white-space: nowrap; }
+  .hangar .craft-picker { margin: 16px 0 12px; gap: 8px; max-width: none; }
+  .hangar .craft-choice { grid-template-columns: minmax(0, 1fr) auto; min-height: 60px; padding: 10px 12px; gap: 4px 6px; }
+  .hangar .craft-choice-name { font-size: 20px; }
+  .hangar .craft-choice-role { grid-column: 1 / -1; font-size: 10px; }
+  .hangar .craft-choice-status { grid-column: 2; grid-row: 1; margin: 0; font-size: 9px; }
+  .hangar .craft-description { max-width: none; min-height: 0; margin-bottom: 12px; font-size: 11px; }
+  .hangar .craft-stats { max-width: none; gap: 12px 16px; }
+  .hangar .craft-stats dd { margin: 4px 0 6px; }
+  .hangar .craft-stats strong { font-size: 21px; }
+  .hangar .craft-stats p { margin-top: 4px; font-size: 9px; }
+  .hangar .thrust-test { max-width: none; margin-top: 14px; }
+  .hangar .thrust-controls { margin-top: 8px; }
+  .hangar .hangar-start { width: 100%; min-height: 44px; padding: 11px 18px; margin-top: 14px; border-radius: 3px; }
+}
+@media (min-width: 761px) and (max-height: 800px) {
+  .hangar .introduction { padding-block: 14px; }
+  .hangar .introduction h1 { font-size: 32px; }
+  .hangar .craft-picker { margin-block: 12px 10px; gap: 6px; }
+  .hangar .craft-choice { min-height: 54px; padding: 8px 10px; }
+  .hangar .craft-description { margin-bottom: 10px; }
+  .hangar .craft-stats { gap: 10px 14px; }
+  .hangar .craft-stats p { display: none; }
+  .hangar .thrust-test { margin-top: 12px; }
+  .hangar .hangar-start { margin-top: 12px; }
+}
+@media (min-width: 761px) and (max-height: 650px) {
+  .hangar .introduction { padding-block: 10px; }
+  .hangar .introduction h1 { font-size: 30px; }
+  .hangar .craft-picker { margin-block: 8px; }
+  .hangar .craft-choice { min-height: 48px; padding-block: 6px; }
+  .hangar .craft-description { margin-bottom: 8px; }
+  .hangar .craft-stats { gap: 8px 14px; }
+  .hangar .craft-stats dd { margin-block: 3px 4px; }
+  .hangar .thrust-test, .hangar .hangar-start { margin-top: 10px; }
 }

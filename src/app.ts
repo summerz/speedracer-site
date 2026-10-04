@@ -1,30 +1,28 @@
+import { soundtrack } from './game/audio/soundtrack';
 import { DRONE_CATALOG, droneStats } from './game/drone/droneCatalog';
 import type { DroneCatalogEntry } from './game/drone/droneCatalog';
 import { mountRace } from './raceApp';
 import { createHangar } from './game/createHangar';
 import type { Hangar } from './game/createHangar';
 import type { ThrustMode } from './game/drone/createThrusterEffect';
+import { createProgressStore, indexedProgressRepository } from './game/progression/progressStore';
+import type { ProgressStore } from './game/progression/progressStore';
+import { upgradedConfiguration } from './game/progression/catalog';
+import { mountShop } from './shopApp';
+import { menuHeader } from './menuHeader';
 
-function mountHangar(root: HTMLDivElement, selected: DroneCatalogEntry, onSelect: (entry: DroneCatalogEntry) => void, onDrive: () => void): () => void {
+function mountHangar(root: HTMLDivElement, selected: DroneCatalogEntry, onSelect: (entry: DroneCatalogEntry) => void, onDrive: () => void, store: ProgressStore): () => void {
   document.title = 'Speedracer · 격납고';
   root.innerHTML = `
     <main class="hangar">
-      <header class="masthead">
-        <a class="wordmark" href="/" aria-label="Speedracer 홈">
-          <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M20 3 7 17h10l-5 12L26 13H16z"/></svg>
-          SPEEDRACER<span class="wordmark-divider"></span><span class="wordmark-caption">DRONE RACING</span>
-        </a>
-        <div class="app-tools" data-app-tools></div><span class="location"><span class="status-dot"></span>격납고 <span class="mono">/ 01</span></span>
-      </header>
+      ${menuHeader('hangar', store.snapshot().balance)}
 
       <section class="introduction" aria-labelledby="drone-title">
-        <p class="eyebrow"><span class="short-rule"></span> PILOTED RACING DRONE</p>
-        <h1 id="drone-title">RACING<br /><span>DRONE.</span></h1>
-        <div class="craft-picker"><label for="craft-select">기체 선택</label><select id="craft-select">${DRONE_CATALOG.map((entry) => `<option value="${entry.configuration.id}" ${entry === selected ? 'selected' : ''}>${entry.name} · ${entry.role}</option>`).join('')}</select></div>
-        <div class="model-id"><span class="mono" id="craft-name"></span><span id="craft-role"></span></div>
+        <h1 id="drone-title">RACING <span>DRONE.</span></h1>
+        <div class="craft-picker" role="group" aria-label="보유 기체 선택">${DRONE_CATALOG.filter(entry => store.snapshot().owned.includes(entry.configuration.id)).map((entry) => `<button class="craft-choice" type="button" data-hangar-craft="${entry.configuration.id}" aria-pressed="${entry.configuration.id === selected.configuration.id}" style="--choice-color:${entry.lineColor}"><span class="craft-choice-name">${entry.name}</span><span class="craft-choice-role">${entry.role}</span><span class="craft-choice-status">${entry.configuration.id === selected.configuration.id ? '선택 중' : '선택'}</span></button>`).join('')}</div>
         <p id="craft-description" class="craft-description"></p>
         <dl id="craft-stats" class="craft-stats"></dl>
-        <p class="craft-trial">상점 오픈 전 · 모든 기체 시험 주행 가능</p>
+        <p class="progress-warning" id="hangar-progress-warning" role="status"></p>
         <div class="thrust-test" aria-labelledby="thrust-heading">
           <div class="thrust-heading"><span id="thrust-heading">추진 테스트</span><span id="thrust-status" role="status" aria-live="polite">대기</span></div>
           <div class="thrust-controls" role="group" aria-label="추진 상태">
@@ -32,7 +30,6 @@ function mountHangar(root: HTMLDivElement, selected: DroneCatalogEntry, onSelect
             <button type="button" data-thrust="accelerate" aria-pressed="false" aria-keyshortcuts="2"><kbd>2</kbd>가속</button>
             <button type="button" data-thrust="boost" aria-pressed="false" aria-keyshortcuts="3"><kbd>3</kbd>부스트</button>
           </div>
-          <p class="thrust-hint">1 · 2 · 3 키 또는 버튼으로 전환</p>
         </div>
         <button type="button" id="start-driving" class="primary-action hangar-start">타임어택 <span aria-hidden="true">↗</span></button>
       </section>
@@ -46,28 +43,14 @@ function mountHangar(root: HTMLDivElement, selected: DroneCatalogEntry, onSelect
           <p>브라우저의 하드웨어 가속과 WebGL 지원을 확인한 후 다시 시도해주세요.</p>
           <button type="button" id="retry">다시 불러오기</button>
         </div>
-        <p class="orbit-hint"><span class="hint-cross" aria-hidden="true">＋</span>드래그하여 회전 <span class="hint-divider">/</span> 스크롤하여 확대</p>
+        <p class="orbit-hint"><span class="hint-cross" aria-hidden="true">＋</span>드래그하여 회전</p>
       </section>
 
-      <footer class="toolbar">
-        <div class="toolbar-label"><span class="mono">01</span><span>기체 살펴보기</span></div>
-        <div class="view-controls" role="group" aria-label="기체 보기 방향">
-          <button type="button" data-view="front">전면</button>
-          <button type="button" data-view="rear">후면</button>
-          <button type="button" data-view="reset" aria-label="기본 시점으로 초기화">시점 초기화 <span aria-hidden="true">↗</span></button>
-        </div>
-        <div class="effect-controls">
-          <button class="toggle" type="button" id="rotate-toggle" aria-pressed="true">자동 회전<span class="toggle-track" aria-hidden="true"></span></button>
-          <button class="toggle" type="button" id="bloom-toggle" aria-pressed="true">Bloom<span class="toggle-track" aria-hidden="true"></span></button>
-        </div>
-      </footer>
     </main>`;
 
   const scene = root.querySelector<HTMLDivElement>('#scene')!;
   const status = root.querySelector<HTMLDivElement>('.scene-status')!;
   const error = root.querySelector<HTMLDivElement>('.scene-error')!;
-  const bloomButton = root.querySelector<HTMLButtonElement>('#bloom-toggle')!;
-  const rotateButton = root.querySelector<HTMLButtonElement>('#rotate-toggle')!;
   const thrustButtons = root.querySelectorAll<HTMLButtonElement>('[data-thrust]');
   const thrustStatus = root.querySelector<HTMLSpanElement>('#thrust-status')!;
   const eventController = new AbortController();
@@ -80,28 +63,43 @@ function mountHangar(root: HTMLDivElement, selected: DroneCatalogEntry, onSelect
     error.hidden = false;
     status.classList.remove('is-ready');
     status.textContent = '화면 연결을 확인해주세요';
-    root.querySelectorAll<HTMLButtonElement>('.toolbar button, [data-thrust], #craft-select, #start-driving').forEach((button) => { button.disabled = true; });
+    root.querySelectorAll<HTMLButtonElement>('[data-thrust], [data-hangar-craft], #start-driving').forEach((button) => { button.disabled = true; });
     thrustStatus.textContent = '연결 끊김';
   };
 
+  root.querySelector<HTMLButtonElement>('#open-shop')!.addEventListener('click', () => { location.hash = 'shop'; }, listen);
+  root.querySelector('#hangar-balance')!.textContent = `${store.snapshot().balance.toLocaleString()} P`;
+  root.querySelector('#hangar-progress-warning')!.textContent = store.issue;
   root.querySelector<HTMLButtonElement>('#start-driving')!.addEventListener('click', onDrive, listen);
   root.querySelector<HTMLButtonElement>('#retry')!.addEventListener('click', () => location.reload(), listen);
   try {
     hangar = createHangar(scene, showError, selected.configuration);
     const displayCraft = () => {
-      root.querySelector('#craft-name')!.textContent = selected.name;
-      root.querySelector('#craft-role')!.textContent = selected.role;
+      root.querySelectorAll<HTMLButtonElement>('[data-hangar-craft]').forEach(button => {
+        const active = button.dataset.hangarCraft === selected.configuration.id;
+        button.setAttribute('aria-pressed', String(active));
+        button.querySelector('.craft-choice-status')!.textContent = active ? '선택 중' : '선택';
+      });
       root.querySelector('#craft-description')!.textContent = selected.description;
       root.querySelector('.scene-label .mono')!.textContent = selected.name.toUpperCase();
       root.querySelector<HTMLElement>('.introduction')!.style.setProperty('--craft-color', selected.lineColor);
       root.querySelector('#craft-stats')!.innerHTML = droneStats(selected.configuration).map((stat) => `<div><dt>${stat.label}</dt><dd><strong>${stat.value}</strong> <small>${stat.unit}</small></dd><span class="stat-line" aria-hidden="true"><i style="width:${Math.min(1, stat.fill) * 100}%"></i></span><p>${stat.hint}</p></div>`).join('');
     };
     displayCraft();
-    root.querySelector<HTMLSelectElement>('#craft-select')!.addEventListener('change', (event) => {
-      if (!ready) return;
-      selected = DRONE_CATALOG.find((entry) => entry.configuration.id === (event.target as HTMLSelectElement).value)!;
-      hangar!.setDrone(selected.configuration); displayCraft(); onSelect(selected);
-    }, listen);
+    let selecting = false;
+    root.querySelectorAll<HTMLButtonElement>('[data-hangar-craft]').forEach(picker => picker.addEventListener('click', async () => {
+      if (!ready || selecting || picker.dataset.hangarCraft === selected.configuration.id) return;
+      selecting = true;
+      const controls = root.querySelectorAll<HTMLButtonElement>('[data-hangar-craft], #start-driving');
+      controls.forEach(button => { button.disabled = true; });
+      try {
+        const profile = await store.command({ kind: 'equip', id: picker.dataset.hangarCraft! });
+        const entry = DRONE_CATALOG.find(craft => craft.configuration.id === profile.equipped)!;
+        selected = { ...entry, configuration: upgradedConfiguration(profile.equipped, profile.upgrades[profile.equipped]) };
+        if (!eventController.signal.aborted) { hangar!.setDrone(selected.configuration); displayCraft(); onSelect(selected); }
+      } catch (error) { if (!eventController.signal.aborted) root.querySelector('#hangar-progress-warning')!.textContent = String(error instanceof Error ? error.message : error); }
+      finally { selecting = false; if (!eventController.signal.aborted && ready) controls.forEach(button => { button.disabled = false; }); }
+    }, listen));
     ready = true;
     status.textContent = '기체 연결됨';
     status.classList.add('is-ready');
@@ -123,21 +121,6 @@ function mountHangar(root: HTMLDivElement, selected: DroneCatalogEntry, onSelect
       event.preventDefault();
       setThrustMode(mode);
     }, listen);
-    bloomButton.addEventListener('click', () => {
-      const enabled = bloomButton.getAttribute('aria-pressed') !== 'true';
-      hangar!.setBloom(enabled);
-      bloomButton.setAttribute('aria-pressed', String(enabled));
-    }, listen);
-    rotateButton.addEventListener('click', () => {
-      const enabled = rotateButton.getAttribute('aria-pressed') !== 'true';
-      hangar!.setAutoRotate(enabled);
-      rotateButton.setAttribute('aria-pressed', String(enabled));
-    }, listen);
-    root.querySelectorAll<HTMLButtonElement>('[data-view]').forEach((button) => {
-      button.addEventListener('click', () => {
-        hangar!.setView(button.dataset.view as 'front' | 'rear' | 'reset');
-      }, listen);
-    });
   } catch (cause) {
     console.error('격납고 초기화 실패:', cause);
     showError();
@@ -151,19 +134,56 @@ function mountHangar(root: HTMLDivElement, selected: DroneCatalogEntry, onSelect
 }
 
 export function mountApp(root: HTMLDivElement): () => void {
-  let selected = DRONE_CATALOG[0];
-  let disposeScreen = () => {};
-  const render = () => {
-    disposeScreen();
-    disposeScreen = location.hash === '#drive'
-      ? mountRace(root, () => { location.hash = ''; }, selected.configuration)
-      : mountHangar(root, selected, (entry) => { selected = entry; }, () => { location.hash = 'drive'; });
+  const repository = (() => {
+    try { return indexedProgressRepository(window.indexedDB); }
+    catch { return { read: async () => { throw new Error('진행 저장을 사용할 수 없습니다. 주행은 가능합니다.'); }, transact: async () => { throw new Error('진행 저장을 사용할 수 없습니다.'); }, close() {} }; }
+  })();
+  const store = createProgressStore(repository);
+  soundtrack.start();
+  const activateAudio = () => soundtrack.activate();
+  const visibility = () => document.hidden ? soundtrack.suspend() : soundtrack.activate();
+  const musicToggle = (event: Event) => {
+    if (!(event.target instanceof Element) || !event.target.closest('[data-music-toggle]')) return;
+    soundtrack.setEnabled(!soundtrack.enabled); refreshMusicButton();
   };
-  window.addEventListener('hashchange', render);
-  render();
+  const refreshMusicButton = () => {
+    for (const button of root.querySelectorAll<HTMLButtonElement>('[data-music-toggle]')) {
+      button.setAttribute('aria-pressed', String(soundtrack.enabled)); button.textContent = soundtrack.enabled ? '음악 켜짐' : '음악 꺼짐';
+    }
+  };
+  document.addEventListener('pointerdown', activateAudio);
+  document.addEventListener('keydown', activateAudio);
+  document.addEventListener('visibilitychange', visibility);
+  root.addEventListener('click', musicToggle);
+  let disposeScreen = () => {}; let renderId = 0; let disposed = false;
+  const developmentGrant = import.meta.env.DEV
+    ? import('./devProgress').then(module => module.grantLocalPlaytestPoints(repository)).catch(() => {})
+    : Promise.resolve();
+  const render = async () => {
+    const id = ++renderId;
+    disposeScreen(); disposeScreen = () => {};
+    root.innerHTML = '<p class="progress-warning" role="status">격납고를 준비하고 있습니다…</p>';
+    await developmentGrant;
+    await store.refresh();
+    if (disposed || id !== renderId) return;
+    soundtrack.setScene(location.hash === '#drive' ? 'ready' : 'menu');
+    const profile = store.snapshot();
+    const entry = DRONE_CATALOG.find(craft => craft.configuration.id === profile.equipped)!;
+    const selected = { ...entry, configuration: upgradedConfiguration(profile.equipped, profile.upgrades[profile.equipped]) };
+    disposeScreen = location.hash === '#drive'
+      ? mountRace(root, () => { location.hash = ''; }, selected.configuration, store, () => { location.hash = 'shop'; })
+      : location.hash === '#shop' ? mountShop(root, store, () => { location.hash = ''; })
+      : mountHangar(root, selected, () => {}, () => { location.hash = 'drive'; }, store);
+    refreshMusicButton();
+  };
+  const onHash = () => { void render(); };
+  window.addEventListener('hashchange', onHash);
+  void render();
   return () => {
-    window.removeEventListener('hashchange', render);
-    disposeScreen();
-    root.replaceChildren();
+    disposed = true; renderId++;
+    window.removeEventListener('hashchange', onHash);
+    document.removeEventListener('pointerdown', activateAudio); document.removeEventListener('keydown', activateAudio);
+    document.removeEventListener('visibilitychange', visibility); root.removeEventListener('click', musicToggle);
+    disposeScreen(); store.close(); soundtrack.dispose(); root.replaceChildren();
   };
 }

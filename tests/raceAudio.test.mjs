@@ -84,31 +84,6 @@ test('music and sound effects have independent mute controls, and pause clears s
   } finally { globalThis.AudioContext = original; }
 });
 
-test('the score keeps four evenly spaced kicks, backbeat snares and minor high arpeggios through its cadence', () => {
-  const original = globalThis.AudioContext;
-  globalThis.AudioContext = Context;
-  try {
-    const audio = createRaceAudio(); audio.activate();
-    const ctx = Context.instances.at(-1);
-    for (let frame = 0; frame <= 783; frame++) {
-      ctx.currentTime = frame / 60;
-      audio.update('running', 0, 0, 1, false);
-    }
-    const kicks = ctx.oscillators.filter(node => node.frequency.values[0] === 135);
-    const snares = ctx.oscillators.filter(node => node.frequency.values[0] === 185);
-    assert.equal(kicks.length, 32);
-    assert.equal(snares.length, 16);
-    for (let i = 1; i < kicks.length; i++) assert.ok(Math.abs(kicks[i].starts[0] - kicks[i - 1].starts[0] - 60 / 144) < 1e-8);
-    for (let i = 0; i < snares.length; i++) assert.ok(Math.abs(snares[i].starts[0] - kicks[i * 2 + 1].starts[0]) < 1e-8);
-    const arpeggios = ctx.oscillators.filter(node => node.type === 'sawtooth' && node.frequency.values.length);
-    const notes = arpeggios.map(node => Math.round(69 + 12 * Math.log2(node.frequency.values[0] / 440)));
-    assert.deepEqual(notes.slice(0, 4), [76, 79, 83, 86], 'E–G–B–D establishes E minor');
-    assert.ok(notes.slice(-16).some(note => note % 12 === 3), 'D sharp leads the last chord back to E');
-    assert.ok(notes.every(note => note >= 72 && [0, 2, 3, 4, 6, 7, 9, 11].includes(note % 12)));
-    audio.dispose();
-  } finally { globalThis.AudioContext = original; }
-});
-
 test('missing or blocked Web Audio cannot prevent a race', () => {
   const original = globalThis.AudioContext;
   delete globalThis.AudioContext;
