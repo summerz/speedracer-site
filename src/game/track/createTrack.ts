@@ -244,7 +244,8 @@ export function createTrackVisual(track: Track) {
   });
   const gateGeometry = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(archPoints), 64, 0.16, 6, false);
   const gateFoot = new THREE.CylinderGeometry(0.45, 0.65, 0.4, 8);
-  for (let i = 0; i < Math.round(track.length / track.checkpointSpacing); i++) {
+  // The start line uses the separate gold arch cluster in createRaceGates.
+  for (let i = 1; i < Math.round(track.length / track.checkpointSpacing); i++) {
     track.sample(i * track.checkpointSpacing, frame);
     const gate = new THREE.Group();
     gate.position.copy(frame.position);

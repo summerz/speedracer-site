@@ -1,6 +1,7 @@
 .primary-action { display:flex; align-items:center; justify-content:space-between; gap:24px; min-height:50px; padding:14px 22px; color:#081a1d; background:var(--accent); border:1px solid var(--accent); font-size:14px; font-weight:650; }
 .hangar-start { margin-top:18px; width:min(290px,100%); }
 .drive-screen { position:relative; height:100dvh; overflow:hidden; background:#080f19; color:#d7e9ec; }
+.drive-screen,.drive-screen * { user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; }
 .race-scene { position:absolute; inset:0; }
 .race-scene canvas { display:block; width:100%; height:100%; }
 .drive-screen kbd { font:10px 'IBM Plex Mono',monospace; color:#9dbac6; }
@@ -62,7 +63,10 @@
 .drive-dialog p { font-size:12px; line-height:1.7; color:#adc1cc; margin:0 0 12px; }
 .drive-dialog .eyebrow { margin:0; font-size:10px; color:var(--accent); }
 .drive-dialog #drive-overlay-copy:empty { display:none; }
-.drive-dialog .primary-action { width:100%; margin:18px 0; }
+.drive-dialog .primary-action { width:100%; margin:18px 0 8px; }
+.race-exit { width:100%; min-height:44px; margin-bottom:18px; padding:10px; border:1px solid #58717d70; background:#0b1c28; color:#c9dadf; font-size:12px; touch-action:manipulation; }
+.race-exit:hover { background:#17303c; }
+.drive-screen[data-phase='paused'] .race-exit { color:#ffd0a7; border-color:#b47e565e; }
 .drive-dialog .pause-summary { font:12px 'IBM Plex Mono',monospace; color:#a6c6d0; }
 .menu-preview { border-top:1px solid #58717d50; padding-top:14px; margin-bottom:14px; }
 .menu-preview>span { display:block; font-size:10px; color:#9ab3bf; margin-bottom:8px; }

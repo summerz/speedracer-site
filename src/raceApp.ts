@@ -32,10 +32,11 @@ export function mountRace(root: HTMLDivElement, onHangar: () => void): () => voi
           <section id="race-result" class="race-result" aria-label="경기 결과" hidden><p id="result-status" class="result-status"></p><time id="result-total" class="result-total"></time><ol id="result-laps" class="result-laps"></ol><p id="result-best"></p><p id="record-warning" class="record-warning" hidden>기록을 저장하지 못했습니다. 이번 화면에서 확인할 수 있습니다.</p></section>
           <fieldset id="difficulty-picker" class="difficulty-picker"><legend>난이도</legend><div><label><input type="radio" name="difficulty" value="beginner" checked /><span>초급</span></label><label><input type="radio" name="difficulty" value="intermediate" /><span>중급</span></label><label><input type="radio" name="difficulty" value="advanced" /><span>고급</span></label></div></fieldset><p id="difficulty-description" class="difficulty-description"></p>
           <p id="ready-best" class="ready-best"></p><button type="button" id="drive-start" class="primary-action">레이스 시작 <span aria-hidden="true">↗</span></button>
+          <button type="button" id="race-hangar" class="race-exit">격납고로</button>
           <div class="menu-preview"><span>화면 미리보기</span><div class="race-actions"><button type="button" id="race-view">콕핏 보기 <kbd>C</kbd></button><button type="button" id="race-track">트랙 PIP 보기 <kbd>X</kbd></button></div></div>
           <nav class="race-actions menu-actions" aria-label="주행 메뉴">
             <button type="button" id="race-restart" hidden>처음부터 다시 <kbd>R</kbd></button><button type="button" id="race-difficulty" hidden>난이도 변경</button><button type="button" id="race-recover" hidden>체크포인트 복귀 <kbd>F</kbd></button>
-            <button type="button" id="race-settings">설정 · 조작 안내</button><button type="button" id="race-hangar">격납고로</button>
+            <button type="button" id="race-settings">설정 · 조작 안내</button>
           </nav>
           <div class="app-tools" data-app-tools></div>
         </div>
@@ -216,12 +217,17 @@ export function mountRace(root: HTMLDivElement, onHangar: () => void): () => voi
       get('drive-overlay-title').textContent = state.phase === 'paused' ? '일시정지' : state.phase === 'finished' ? '레이스 완료' : '레이스 준비';
       get('drive-overlay-copy').textContent = state.phase === 'ready' ? '체크포인트를 차례로 통과해 3랩을 완주하세요. 자동으로 가속하며 급한 코너에서는 감속합니다.' : '';
       startButton.innerHTML = `${state.phase === 'paused' ? '계속하기' : state.phase === 'finished' ? '다시 도전' : '레이스 시작'} <span aria-hidden="true">↗</span>`;
+      get('race-hangar').textContent = state.phase === 'paused' ? '포기하고 격납고로' : '격납고로';
       if (state.phase === 'paused' || state.phase === 'finished') startButton.focus({ preventScroll: true });
     }
     paintMenu();
   };
   const events = new AbortController();
   const listen = { signal: events.signal };
+  // iOS long-press selection/callouts can originate on a control's child label.
+  for (const type of ['contextmenu', 'selectstart', 'dragstart']) {
+    screen.addEventListener(type, event => event.preventDefault(), listen);
+  }
   coarsePointer.addEventListener('change', refreshHaptics, listen);
   let race: Race | undefined;
   const showError = () => {
