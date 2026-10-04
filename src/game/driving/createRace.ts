@@ -172,8 +172,9 @@ export function createRace(
     if (lost || disposed) return;
     views.cycleTrack(); resize(); notify();
   };
-  const controlCodes = new Set(['KeyW', 'KeyS', 'KeyA', 'KeyD', 'ArrowDown', 'ArrowUp', 'Space', 'KeyR', 'KeyF', 'KeyC', 'KeyX', 'Escape']);
+  const controlCodes = new Set(['KeyS', 'KeyA', 'KeyD', 'ArrowDown', 'ArrowUp', 'Space', 'KeyR', 'KeyF', 'KeyC', 'KeyX', 'Escape']);
   window.addEventListener('keydown', (event) => {
+    if (event.defaultPrevented || document.querySelector('dialog[open]')) return;
     if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
     if (event.target instanceof HTMLElement && event.target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])')) return;
     if (!controlCodes.has(event.code) || lost) return;
@@ -206,7 +207,7 @@ export function createRace(
     if (width <= 0 || height <= 0) return;
     const ratio = Math.min(window.devicePixelRatio || 1, 1.5);
     renderer.setPixelRatio(ratio); renderer.setSize(width, height, false);
-    layout = raceViewLayout(width, height, views.trackDisplay);
+    layout = raceViewLayout(width, height, views.trackDisplay, coarsePointer.matches);
     const driving = layout.driving;
     composer.setPixelRatio(ratio); composer.setSize(driving.width, driving.height);
     speedLines.setSize(driving.width, driving.height); boostWarp.setSize(driving.width, driving.height);
@@ -217,9 +218,12 @@ export function createRace(
     }
     pipFrame.hidden = views.trackDisplay === 'hidden';
     Object.assign(pipFrame.style, { left: `${layout.inset.x}px`, bottom: `${layout.inset.y}px`, width: `${layout.inset.width}px`, height: `${layout.inset.height}px` });
-    pipFrame.textContent = views.trackDisplay === 'primary' ? `${VIEW_LABELS[views.view]} · C 전환 / X 닫기` : '전체 트랙 · X 자리 교환';
+    pipFrame.textContent = coarsePointer.matches
+      ? views.trackDisplay === 'primary' ? VIEW_LABELS[views.view] : '전체 트랙'
+      : views.trackDisplay === 'primary' ? `${VIEW_LABELS[views.view]} · C 전환 / X 닫기` : '전체 트랙 · X 자리 교환';
   };
   const observer = new ResizeObserver(resize); observer.observe(container);
+  coarsePointer.addEventListener('change', resize, listen);
   window.addEventListener('resize', resize, listen); resize();
 
   const tick = (now: number) => {
@@ -228,12 +232,18 @@ export function createRace(
     const oldRecoveries = model.state.recoveries;
     const oldCollisions = model.state.collisions;
     const oldBoostStage = model.state.boostStage;
+    let heightChanged = false;
     if (phase === 'running') {
       const touch = touchControls.read();
-      input.throttle = keys.has('KeyW') || touch.throttle; input.brake = keys.has('KeyS') || touch.brake;
+      input.brake = keys.has('KeyS') || touch.brake;
+      input.throttle = !input.brake;
       input.steer = THREE.MathUtils.clamp(Number(keys.has('KeyD')) - Number(keys.has('KeyA')) + touch.steer, -1, 1);
       input.boost = keys.has('Space') || touch.boost;
-      for (const lift of heightRequests) model.step(0, { ...input, lift });
+      for (const lift of heightRequests) {
+        const previousLevel = model.state.altitudeLevel;
+        model.step(0, { ...input, lift });
+        heightChanged ||= model.state.altitudeLevel !== previousLevel;
+      }
       heightRequests.length = 0;
       input.lift = 0; model.step(delta, input);
     }
@@ -286,6 +296,7 @@ export function createRace(
     boostWarp.update(simulationDelta, state.boostStage === 2, entry, reducedMotion.matches);
     boostAudio.update(phase === 'running', state.boostStage, state.boostStageProgress, state.speed / visuals.referenceSpeed);
     boostHaptics.update(simulationDelta, state.boostStage, phase === 'running' && coarsePointer.matches && !reducedMotion.matches);
+    if (heightChanged && coarsePointer.matches && !reducedMotion.matches) boostHaptics.altitudeStep();
     hudElapsed += delta;
     if (hudElapsed >= 0.08) { hudElapsed = 0; notify(); }
     trackVisual.update(state.elapsed, reducedMotion.matches);

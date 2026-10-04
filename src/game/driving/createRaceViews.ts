@@ -11,12 +11,12 @@ export const TRACK_DISPLAY_LABELS: Record<TrackDisplay, string> = { hidden: '트
 
 export interface Viewport { x: number; y: number; width: number; height: number }
 /** CSS pixels, with bottom-left origin for WebGL viewport/scissor. */
-export function raceViewLayout(width: number, height: number, display: TrackDisplay) {
+export function raceViewLayout(width: number, height: number, display: TrackDisplay, compact = width < 600 || height < 500) {
   const full = { x: 0, y: 0, width, height };
   const margin = width < 600 ? 16 : 24;
   const insetWidth = Math.min(420, width * (width < 600 ? .4 : .3));
   const insetHeight = Math.min(insetWidth * .625, height * .3);
-  const top = Math.min(width < 600 ? 185 : 130, Math.max(margin, height - insetHeight - margin));
+  const top = Math.min(compact ? margin + 22 : 80, Math.max(margin, height - insetHeight - margin));
   const inset = { x: width - insetWidth - margin, y: height - top - insetHeight, width: insetWidth, height: insetHeight };
   return { driving: display === 'primary' ? inset : full, track: display === 'hidden' ? null : display === 'pip' ? inset : full, inset };
 }

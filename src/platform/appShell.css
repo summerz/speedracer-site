@@ -1,0 +1,13 @@
+.app-shell-tools { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-top:18px; }
+.app-shell-tools .app-version { color:#91acb9; font:11px 'IBM Plex Mono',monospace; margin-right:4px; }
+.app-shell-tools button,.install-dialog button { min-height:48px; padding:12px 14px; border:1px solid #58717d70; background:#0b1c28; color:#c9dadf; font-size:12px; }
+.app-shell-tools .update-ready { color:#90f2df; border-color:#56dacf; }
+.app-update-status { flex-basis:100%; color:#a3b9c4; font-size:11px; line-height:1.6; }
+.app-update-status:empty { display:none; }
+.masthead .app-tools { margin-left:auto; }
+.masthead .app-shell-tools { margin:0; }
+.race-pause.has-update::after { content:''; position:absolute; width:8px; height:8px; border-radius:50%; background:#56dacf; top:5px; right:5px; }
+.install-dialog { width:min(420px,calc(100% - 40px)); padding:24px; background:#0b1c28; color:#dae9ed; border:1px solid #56dacf70; }
+.install-dialog::backdrop { background:#030b16d9; }
+.install-dialog h2 { font-size:22px; }.install-dialog p { line-height:1.7; font-size:14px; }.install-dialog button { width:100%; }
+@media (max-width:760px) { .masthead { flex-wrap:wrap; }.masthead .app-tools { order:3; flex-basis:100%; margin:0; }.masthead .app-shell-tools { margin-top:12px; } }

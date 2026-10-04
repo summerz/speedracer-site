@@ -2,14 +2,35 @@
 <html lang="ko">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#080e14" />
-    <meta name="description" content="미래형 드론 레이싱 게임 Speedracer의 기체 격납고." />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="description" content="네온 트랙을 달리는 미래형 드론 레이싱 게임 Speedracer." />
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <style>
+      #app-loading { position:fixed; inset:0; z-index:100; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:20px; padding:24px; box-sizing:border-box; background:#080e14; color:#d6eee9; font:14px system-ui,sans-serif; text-align:center; }
+      #app-loading .loading-ring { width:42px; height:42px; border:2px solid #23434c; border-top-color:#56dacf; border-radius:50%; animation:loading-spin 1s linear infinite; }
+      #app-loading small { color:#91a8b5; } #loading-retry { min-height:48px; padding:12px 22px; background:#56dacf; color:#080e14; border:0; }
+      @keyframes loading-spin { to { transform:rotate(360deg); } }
+      @media (prefers-reduced-motion:reduce) { #app-loading .loading-ring { animation:none; } }
+    </style>
     <title>Speedracer — 드론 격납고</title>
   </head>
   <body>
+    <div id="app-loading" role="status" aria-live="polite"><div class="loading-ring" aria-hidden="true"></div><strong>SPEEDRACER</strong><span id="loading-message">기체와 트랙을 준비하고 있습니다…</span><small>v__APP_VERSION__</small><button id="loading-retry" type="button" hidden onclick="location.reload()">다시 불러오기</button></div>
+    <noscript>Speedracer를 실행하려면 JavaScript를 켜주세요.</noscript>
     <div id="app"></div>
+    <script>
+      window.addEventListener('error', function () {
+        var loading = document.getElementById('app-loading');
+        if (!loading) return;
+        document.getElementById('loading-message').textContent = '불러오지 못했습니다. 연결을 확인하고 다시 시도해주세요.';
+        document.getElementById('loading-retry').hidden = false;
+      }, true);
+    </script>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

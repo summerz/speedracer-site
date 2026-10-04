@@ -1,6 +1,6 @@
 import { DIFFICULTIES } from './game/track/difficulty';
 import type { DifficultyId } from './game/track/difficulty';
-import { VIEW_LABELS, TRACK_DISPLAY_LABELS } from './game/driving/createRaceViews';
+import { raceViewLayout } from './game/driving/createRaceViews';
 import { createRace } from './game/driving/createRace';
 import type { Race, RaceSnapshot } from './game/driving/createRace';
 import './race.css';
@@ -17,29 +17,39 @@ export function mountRace(root: HTMLDivElement, onHangar: () => void): () => voi
       <div id="race-scene" class="race-scene"></div>
       <div id="race-impact" class="race-impact" aria-hidden="true"></div>
       <header class="race-header">
-        <div class="race-identity"><span class="race-brand">SPEEDRACER</span><span class="mono">주행 테스트 / 01</span></div>
-        <nav class="race-actions" aria-label="주행 메뉴">
-          <button type="button" id="race-hangar">격납고</button>
-          <button type="button" id="race-settings">난이도</button><button type="button" id="race-view">추적 <kbd>C</kbd></button><button type="button" id="race-track">트랙 보기 <kbd>X</kbd></button><button type="button" id="race-restart">다시 시작 <kbd>R</kbd></button>
-          <button type="button" id="race-pause">일시정지 <kbd>Esc</kbd></button>
-          <button type="button" id="race-bloom" aria-pressed="true">Bloom</button>
-          <button type="button" id="race-sound" aria-pressed="true">음향</button>
-          <button type="button" id="race-haptics" aria-pressed="true">진동</button>
-        </nav>
+        <div class="race-telemetry" aria-label="주행 정보"><div class="telemetry-row"><span class="speed-readout"><strong id="drive-speed">000</strong><span class="mono">KM/H</span></span><time id="drive-time" class="mono">00:00.0</time></div><div class="corner-guide"><strong id="corner-text">직선</strong><span class="corner-hint">급한 코너에서는 S로 감속</span></div></div>
       </header>
-      <div class="course-label"><p class="mono">SECTOR 01 / FREE PRACTICE</p><h1>NEON LOOP<span><span id="course-mode">초급 · 추적 시점</span></span></h1></div>
-      <div class="corner-guide"><span class="mono">전방 구간</span><strong id="corner-text">직선</strong><span>급한 코너에서는 S로 감속</span></div>
-      <aside class="height-guide" aria-label="고도 안내"><span class="hud-label">FLIGHT HEIGHT · <kbd>↓</kbd> 하강 <kbd>↑</kbd> 상승</span><div class="height-current"><strong id="height-current">1.8</strong><span class="mono">M</span></div><div class="height-meter"><span id="height-safe"></span><i id="height-marker"></i></div><span id="height-level" class="mono">1 / 2 단계</span><strong id="height-instruction">상승 준비</strong><span id="height-distance">전방 장애물</span></aside>
-      <p id="race-notice" class="race-notice" role="status" aria-live="polite"></p>
-      <footer class="drive-hud" aria-label="주행 계기판">
-        <div class="speed-readout"><span class="hud-label">속도</span><div><strong id="drive-speed">000</strong><span class="mono">KM/H</span></div></div>
-        <div class="boost-readout"><div class="hud-pair"><span class="hud-label">부스트 <kbd>Space</kbd></span><span id="boost-value" class="mono">100%</span></div><div id="boost-meter" class="boost-meter" role="progressbar" aria-label="부스트 잔량" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"><span></span></div><div id="boost-stage-meter" class="boost-stage-meter" role="progressbar" aria-label="부스트 2단계 축적" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span></span></div><span id="boost-status">Space 유지 · 3초 후 2단계</span></div>
-        <dl class="drive-stats"><div><dt>경과 시간</dt><dd id="drive-time" class="mono">00:00.0</dd></div><div><dt>트랙 진행</dt><dd id="drive-progress" class="mono">0%</dd></div><div><dt>상대 고도</dt><dd id="drive-altitude" class="mono">1.8 M</dd></div></dl>
-        <div class="drive-keys"><span><kbd>W</kbd><kbd>S</kbd> 가속 / 감속</span><span><kbd>A</kbd><kbd>D</kbd> 좌우 조향</span><span><kbd>↓</kbd><kbd>↑</kbd> 한 단계 하강 / 상승</span><span><kbd>C</kbd> 추적 / 콕핏</span><span><kbd>X</kbd> 트랙 PIP</span><span><kbd>F</kbd> 트랙 복귀</span></div>
-      </footer>
+      <button type="button" id="race-pause" class="race-pause" aria-label="일시정지 메뉴" aria-keyshortcuts="Escape" aria-controls="drive-overlay" aria-expanded="false"><span aria-hidden="true">Ⅱ</span></button>
+      <div class="driving-overlay"><p id="race-notice" class="race-notice" role="status" aria-live="polite"></p>
+      <footer class="drive-hud" aria-label="고도와 부스트 계기판">
+        <aside class="height-guide" aria-label="고도 안내: 청록색은 현재, 주황색은 통과 목표"><div id="height-level" class="height-bars"></div><strong id="height-instruction"></strong></aside>
+        <div class="boost-readout"><div class="hud-pair"><span class="hud-label">BOOST</span><span id="boost-value" class="mono">100%</span></div><div id="boost-meter" class="boost-meter" role="progressbar" aria-label="부스트 잔량" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"><span></span></div><div id="boost-stage-meter" class="boost-stage-meter" role="progressbar" aria-label="부스트 2단계 축적" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span></span></div><span id="boost-status">Space 유지 · 3초 후 2단계</span></div>
+      </footer></div>
       <section id="drive-overlay" class="drive-overlay" aria-labelledby="drive-overlay-title">
-        <div class="drive-dialog"><p class="eyebrow">DR–01 / FREE PRACTICE</p><h2 id="drive-overlay-title">첫 주행을<br />시작해 보세요.</h2><p id="drive-overlay-copy">가속하고, 코너에 맞춰 조향하세요.<br />↓/↑를 한 번 누르면 인접 고도로 빠르게 전환합니다.<br />양쪽 기둥 사이의 전기 아크에 닿으면 속도가 크게 줄어듭니다.</p><p class="drive-scope">자유 주행 테스트 · 경기와 기록 저장은 다음 단계에서 연결합니다.</p><fieldset id="difficulty-picker" class="difficulty-picker"><legend>난이도 · 트랙과 장애물</legend>${Object.values(DIFFICULTIES).map(preset => `<label><input type="radio" name="difficulty" value="${preset.id}" ${preset.id === 'beginner' ? 'checked' : ''} /><span>${preset.label}<small>고도 ${preset.altitude.levels.length}단계</small></span></label>`).join('')}</fieldset><p id="difficulty-description" class="difficulty-description">${DIFFICULTIES.beginner.description}</p><button type="button" id="drive-start" class="primary-action">주행 시작 <span aria-hidden="true">↗</span></button><p class="keyboard-note">키보드 또는 터치로 조종합니다. 모바일은 자동 가속하며 감속 버튼으로 속도를 줄입니다. 화면을 벗어나면 자동으로 일시정지됩니다.</p></div>
+        <div class="drive-dialog">
+          <p class="eyebrow">자유 주행</p><h2 id="drive-overlay-title">주행 준비</h2><p id="drive-overlay-copy"></p>
+          <p id="pause-summary" class="pause-summary" hidden></p>
+          <fieldset id="difficulty-picker" class="difficulty-picker"><legend>난이도</legend><div><label><input type="radio" name="difficulty" value="beginner" checked /><span>초급</span></label><label><input type="radio" name="difficulty" value="intermediate" /><span>중급</span></label><label><input type="radio" name="difficulty" value="advanced" /><span>고급</span></label></div></fieldset><p id="difficulty-description" class="difficulty-description"></p>
+          <button type="button" id="drive-start" class="primary-action">주행 시작 <span aria-hidden="true">↗</span></button>
+          <div class="menu-preview"><span>화면 미리보기</span><div class="race-actions"><button type="button" id="race-view">콕핏 보기 <kbd>C</kbd></button><button type="button" id="race-track">트랙 PIP 보기 <kbd>X</kbd></button></div></div>
+          <nav class="race-actions menu-actions" aria-label="주행 메뉴">
+            <button type="button" id="race-restart" hidden>처음부터 다시 <kbd>R</kbd></button><button type="button" id="race-difficulty" hidden>난이도 변경</button>
+            <button type="button" id="race-settings">설정 · 조작 안내</button><button type="button" id="race-hangar">격납고로</button>
+          </nav>
+          <div class="app-tools" data-app-tools></div>
+        </div>
       </section>
+      <nav id="view-preview" class="view-preview" aria-label="정지 상태에서 시점 미리보기" hidden>
+        <p>시점 미리보기 <span>· 주행 정지</span></p><div><button type="button" id="preview-view">콕핏 보기 <kbd>C</kbd></button><button type="button" id="preview-track">트랙 PIP 보기 <kbd>X</kbd></button><button type="button" id="preview-back">메뉴로</button></div>
+      </nav>
+      <dialog id="race-preferences" class="race-preferences" aria-labelledby="preferences-title">
+        <header><h2 id="preferences-title">설정</h2><button type="button" id="preferences-close" aria-label="설정 닫기">닫기</button></header>
+        <div class="preference-options"><button type="button" id="race-bloom" aria-pressed="true"><span>네온 발광 <small>Bloom</small></span></button><button type="button" id="race-sound" aria-pressed="true"><span>부스트 음향</span></button><button type="button" id="race-haptics" aria-pressed="true"><span>진동</span></button></div>
+        <details class="control-help"><summary>조작 안내</summary>
+          <div class="drive-keys"><span>자동 가속 · <kbd>S</kbd> 감속</span><span><kbd>A</kbd> <kbd>D</kbd> 좌우 조향</span><span><kbd>↓</kbd> <kbd>↑</kbd> 고도 한 단계 전환</span><span><kbd>Space</kbd> 길게 눌러 부스트</span><span><kbd>C</kbd> 기체·콕핏 전환</span><span><kbd>X</kbd> 트랙 PIP·자리 교환·닫기</span><span><kbd>F</kbd> 체크포인트 복귀</span><span><kbd>Esc</kbd> 일시정지·계속하기</span></div>
+          <p class="touch-help">자동으로 가속합니다. 왼쪽 조이스틱은 좌우 조향, 아래로 당기면 감속합니다. 대각선으로 두 조작을 함께 할 수 있습니다.<br />오른쪽 ↑/↓ 버튼은 고도를 한 단계 바꾸고, BOOST는 길게 눌러 사용합니다. 3초 연속 부스트 시 2단계에 진입합니다.<br />시점은 일시정지 메뉴의 화면 미리보기에서 바꿀 수 있습니다.</p>
+        </details>
+      </dialog>
       <section id="drive-error" class="drive-overlay" role="alert" hidden><div class="drive-dialog"><h2>3D 화면 연결이<br />끊어졌습니다.</h2><p>다시 불러온 후 주행을 시작해주세요.</p><button type="button" id="drive-retry" class="primary-action">다시 불러오기</button></div></section>
     </main>`;
   const get = <T extends HTMLElement = HTMLElement>(id: string) => root.querySelector<T>(`#${id}`)!;
@@ -52,7 +62,7 @@ export function mountRace(root: HTMLDivElement, onHangar: () => void): () => voi
   const coarsePointer = window.matchMedia('(any-pointer: coarse)');
   const refreshHaptics = () => {
     hapticsButton.hidden = !coarsePointer.matches || typeof navigator.vibrate !== 'function';
-    root.querySelector('.corner-guide span:last-child')!.textContent = coarsePointer.matches ? '급한 코너에서는 감속 버튼' : '급한 코너에서는 S로 감속';
+    root.querySelector('.corner-guide span:last-child')!.textContent = coarsePointer.matches ? '급한 코너에서는 조이스틱을 아래로' : '급한 코너에서는 S로 감속';
   };
   refreshHaptics();
   const stageMeter = get('boost-stage-meter');
@@ -63,27 +73,43 @@ export function mountRace(root: HTMLDivElement, onHangar: () => void): () => voi
   const charge = get('boost-value');
   const boostStatus = get('boost-status');
   const time = get('drive-time');
-  const progress = get('drive-progress');
-  const altitude = get('drive-altitude');
   const corner = get('corner-text');
   const notice = get('race-notice');
-  const heightCurrent = get('height-current');
-  const heightMarker = get('height-marker');
-  const heightSafe = get('height-safe');
+  const heightBars = get('height-level');
+  const drivingOverlay = root.querySelector<HTMLElement>('.driving-overlay')!;
+  const screen = root.querySelector<HTMLElement>('.drive-screen')!;
   const heightInstruction = get('height-instruction');
-  const heightDistance = get('height-distance');
   const heightGuide = root.querySelector<HTMLElement>('.height-guide')!;
   let selectedDifficulty: DifficultyId = 'beginner';
   let lastPhase = '';
+  let lastViewKey = '';
+  let previewing = false;
+  const preferences = get<HTMLDialogElement>('race-preferences');
+  const paintMenu = () => {
+    overlay.hidden = lastPhase === 'running' || previewing || lost;
+    get('view-preview').hidden = lastPhase === 'running' || !previewing || lost;
+    screen.dataset.preview = String(previewing);
+    pauseButton.innerHTML = `<span aria-hidden="true">${previewing ? '×' : lastPhase === 'paused' ? '▶' : 'Ⅱ'}</span>`;
+    pauseButton.setAttribute('aria-label', previewing ? '메뉴로 돌아가기' : lastPhase === 'paused' ? '주행 계속하기' : '일시정지 메뉴');
+    pauseButton.setAttribute('aria-expanded', String(lastPhase === 'paused' && !previewing));
+    pauseButton.disabled = lastPhase === 'ready' && !previewing;
+  };
+  const leavePreview = () => { previewing = false; paintMenu(); startButton.focus({ preventScroll: true }); };
   let lastCollisions = 0;
   let impactAnimation: Animation | undefined;
   let lost = false;
+  let previousLevel = -1;
+  let highlightUntil = 0;
+  let overlayLayout = '';
   const update = (state: RaceSnapshot) => {
-    get('course-mode').textContent = `${DIFFICULTIES[selectedDifficulty].label} · ${state.trackDisplay === 'primary' ? '전체 트랙' : VIEW_LABELS[state.view]} 시점`;
-    get('race-view').innerHTML = `${VIEW_LABELS[state.view]} <kbd>C</kbd>`;
-    get('race-view').setAttribute('aria-pressed', String(state.view === 'cockpit'));
-    get('race-track').innerHTML = `${TRACK_DISPLAY_LABELS[state.trackDisplay]} <kbd>X</kbd>`;
-    get('race-track').setAttribute('aria-pressed', String(state.trackDisplay !== 'hidden'));
+    const viewKey = `${state.view}/${state.trackDisplay}`;
+    if (lastViewKey && lastViewKey !== viewKey && state.phase !== 'running' && !lost) previewing = true;
+    lastViewKey = viewKey;
+    const cameraAction = state.view === 'cockpit' ? '기체 보기' : '콕핏 보기';
+    const trackAction = state.trackDisplay === 'hidden' ? '트랙 PIP 보기' : state.trackDisplay === 'pip' ? '트랙을 크게 보기' : '주행 화면만 보기';
+    for (const id of ['race-view', 'preview-view']) get(id).innerHTML = `${cameraAction} <kbd>C</kbd>`;
+    for (const id of ['race-track', 'preview-track']) get(id).innerHTML = `${trackAction} <kbd>X</kbd>`;
+    get('pause-summary').textContent = `${DIFFICULTIES[selectedDifficulty].label} · ${formatTime(state.elapsed)}`;
     if (state.collisions > lastCollisions && state.notice === 'height-collision') {
       const flash = get('race-impact');
       flash.style.setProperty('--impact-color', state.heightObstacle?.kind === 'descend' ? '95, 170, 255' : '201, 132, 255');
@@ -108,67 +134,84 @@ export function mountRace(root: HTMLDivElement, onHangar: () => void): () => voi
       : state.boostNeedsRelease ? `${boostControl}를 놓았다가 다시 눌러주세요` : percentage < 15 ? '회복 중'
       : `${boostControl} 유지 · ${state.boostStage2Seconds.toFixed(1)}초 후 2단계`;
     time.textContent = formatTime(state.elapsed);
-    progress.textContent = `${Math.floor(state.distance % state.trackLength / state.trackLength * 100)}%`;
-    altitude.textContent = `${state.altitude.toFixed(1)} M`;
-    heightCurrent.textContent = state.altitude.toFixed(1);
     const levels = state.altitudeProfile.levels;
-    const minHeight = levels[0], maxHeight = levels[levels.length - 1];
-    const heightPercent = (height: number) => Math.max(0, Math.min(100, (height - minHeight) / (maxHeight - minHeight) * 100));
-    get('height-level').textContent = `${state.altitudeLevel + 1} / ${levels.length} 단계`;
-    heightMarker.style.bottom = `${heightPercent(state.altitude)}%`;
+    // Keep altitude, boost and notices within the renderer’s driving viewport.
+    const layoutKey = `${screen.clientWidth}/${screen.clientHeight}/${state.trackDisplay}/${state.view}/${coarsePointer.matches}`;
+    if (layoutKey !== overlayLayout) {
+      overlayLayout = layoutKey;
+      const layout = raceViewLayout(screen.clientWidth, screen.clientHeight, state.trackDisplay, coarsePointer.matches);
+      const viewport = layout.driving;
+      Object.assign(drivingOverlay.style, { left: `${viewport.x}px`, top: `${screen.clientHeight - viewport.y - viewport.height}px`, width: `${viewport.width}px`, height: `${viewport.height}px` });
+      const attachPause = coarsePointer.matches && state.trackDisplay !== 'hidden';
+      pauseButton.classList.toggle('on-pip', attachPause);
+      pauseButton.style.top = attachPause ? `max(env(safe-area-inset-top), ${screen.clientHeight - layout.inset.y - layout.inset.height - 22}px)` : '';
+      pauseButton.style.right = attachPause ? `${screen.clientWidth - layout.inset.x - layout.inset.width + 6}px` : '';
+      drivingOverlay.classList.toggle('is-inset', state.trackDisplay === 'primary');
+      drivingOverlay.dataset.view = state.view;
+    }
+    if (heightBars.childElementCount !== levels.length) heightBars.innerHTML = levels.map(() => '<i></i>').join('');
+    const currentLevel = levels.reduce((best, height, index) => Math.abs(height - state.altitude) < Math.abs(levels[best] - state.altitude) ? index : best, 0);
+    heightGuide.setAttribute('aria-label', `현재 고도 ${currentLevel + 1}/${levels.length} · 청록색 현재, 주황색 통과 목표`);
+    if (state.altitudeLevel !== previousLevel) {
+      if (previousLevel >= 0) highlightUntil = performance.now() + 900;
+      previousLevel = state.altitudeLevel;
+    }
+    heightGuide.classList.toggle('height-changed', performance.now() < highlightUntil);
     const obstacle = state.heightObstacle;
+    [...heightBars.children].forEach((line, index) => {
+      line.classList.toggle('is-active', index === currentLevel);
+      line.classList.toggle('is-safe', Boolean(obstacle && levels[index] >= obstacle.minAltitude && levels[index] <= obstacle.maxAltitude));
+    });
     if (obstacle) {
-      heightSafe.style.bottom = `${heightPercent(obstacle.minAltitude)}%`;
-      heightSafe.style.height = `${heightPercent(obstacle.maxAltitude) - heightPercent(obstacle.minAltitude)}%`;
       const safeLevels = levels.map((height, index) => ({ height, index })).filter(({ height }) => height >= obstacle.minAltitude && height <= obstacle.maxAltitude);
       const nearest = safeLevels.sort((a, b) => Math.abs(a.index - state.altitudeLevel) - Math.abs(b.index - state.altitudeLevel))[0];
       const steps = nearest ? nearest.index - state.altitudeLevel : 0;
-      const action = nearest ? steps === 0 ? '고도 유지' : `${steps > 0 ? '↑' : '↓'} ${Math.abs(steps)}회` : '통과 고도 없음';
-      heightInstruction.textContent = `${action} · ${obstacle.kind === 'middle' ? `${obstacle.minAltitude.toFixed(1)}–${obstacle.maxAltitude.toFixed(1)}m` : obstacle.kind === 'rise' ? `${obstacle.minAltitude.toFixed(1)}m 이상` : `${obstacle.maxAltitude.toFixed(1)}m 이하`}`;
-      heightDistance.textContent = `전방 ${Math.ceil(obstacle.distance)}m · ${obstacle.kind === 'middle' ? '중간 고도 통과' : obstacle.kind === 'rise' ? '하단' : '상단'} 방전 장벽`;
       const safe = state.altitude >= obstacle.minAltitude && state.altitude <= obstacle.maxAltitude;
+      const approaching = obstacle.distance < Math.max(60, state.speed * 3);
+      const control = coarsePointer.matches ? '버튼' : '키';
+      const action = nearest ? steps === 0 ? '고도 전환 중' : `${steps > 0 ? '↑' : '↓'} ${control} ${Math.abs(steps)}회` : '통과 고도 없음';
+      heightInstruction.textContent = approaching && !safe ? action : '';
       heightGuide.classList.toggle('height-ready', safe);
+      heightGuide.classList.toggle('height-alert', approaching && !safe);
       heightGuide.classList.toggle('height-urgent', !safe && obstacle.distance < Math.max(35, state.speed * 1.5));
       heightGuide.dataset.kind = obstacle.kind;
+    } else {
+      heightInstruction.textContent = '';
+      heightGuide.classList.remove('height-ready', 'height-alert', 'height-urgent');
     }
     const curvature = state.upcomingCurvature;
     corner.textContent = state.upcomingSection === 'vertical-loop' ? '수직 루프 · 자동 추종' : state.upcomingSection === 'helix' ? '스프링 · 자동 추종' : Math.abs(curvature) < 0.004 ? '직선' : `${curvature > 0 ? '우' : '좌'}회전${Math.abs(curvature) > 0.02 ? ' · 급한 코너' : ''}`;
-    const nextNotice = state.notice === 'collision' ? '경계 접촉 · 속도가 줄었습니다' : state.notice === 'height-collision' ? '방전 장벽 접촉 · 속도가 크게 줄었습니다' : state.notice === 'recovery' ? '체크포인트로 복귀했습니다' : '';
+    const nextNotice = state.notice === 'collision' ? '경계 접촉 · 감속' : state.notice === 'height-collision' ? '방전 접촉 · 급감속' : state.notice === 'recovery' ? '체크포인트 복귀' : '';
     if (notice.textContent !== nextNotice) notice.textContent = nextNotice;
     if (state.phase !== lastPhase) {
       lastPhase = state.phase;
+      if (state.phase === 'running') { previewing = false; preferences.close(); }
       get('difficulty-picker').hidden = state.phase !== 'ready';
       get('difficulty-description').hidden = state.phase !== 'ready';
-      overlay.hidden = state.phase === 'running' || lost;
-      pauseButton.innerHTML = `${state.phase === 'paused' ? '계속하기' : '일시정지'} <kbd>Esc</kbd>`;
-      pauseButton.disabled = state.phase === 'ready';
-      if (state.phase === 'ready') {
-        get('drive-overlay-title').innerHTML = '첫 주행을<br />시작해 보세요.';
-        get('drive-overlay-copy').textContent = coarsePointer.matches
-          ? '자동 가속합니다. 왼쪽에서 좌우 조향·감속, 오른쪽에서 고도 전환·부스트를 조작하세요. 위의 시점·트랙 버튼으로 화면을 바꿀 수 있습니다.'
-          : '난이도를 선택하고 출발하세요. ↓/↑는 고도 전환, C는 추적·콕핏 전환, X는 트랙 PIP와 자리 교환입니다.';
-        startButton.innerHTML = '주행 시작 <span aria-hidden="true">↗</span>';
-      }
-      if (state.phase === 'paused') {
-        get('drive-overlay-title').textContent = '잠시 멈췄습니다.';
-        get('drive-overlay-copy').textContent = '준비되면 계속하기 또는 Esc를 눌러주세요.';
-        startButton.innerHTML = '계속하기 <span aria-hidden="true">↗</span>';
-        startButton.focus({ preventScroll: true });
-      }
+      get('pause-summary').hidden = state.phase !== 'paused';
+      get('race-restart').hidden = state.phase !== 'paused';
+      get('race-difficulty').hidden = state.phase !== 'paused';
+      screen.dataset.phase = state.phase;
+      window.dispatchEvent(new CustomEvent('speedracer:phase', { detail: state.phase }));
+      get('drive-overlay-title').textContent = state.phase === 'paused' ? '일시정지' : '주행 준비';
+      get('drive-overlay-copy').textContent = state.phase === 'ready' ? '자동 가속 · 급한 코너에서는 감속하세요.' : '';
+      startButton.innerHTML = `${state.phase === 'paused' ? '계속하기' : '주행 시작'} <span aria-hidden="true">↗</span>`;
+      if (state.phase === 'paused') startButton.focus({ preventScroll: true });
     }
+    paintMenu();
   };
   const events = new AbortController();
   const listen = { signal: events.signal };
   coarsePointer.addEventListener('change', refreshHaptics, listen);
   let race: Race | undefined;
   const showError = () => {
-    lost = true; overlay.hidden = true; get('drive-error').hidden = false;
+    lost = true; preferences.close(); get('view-preview').hidden = true; overlay.hidden = true; get('drive-error').hidden = false;
     get<HTMLButtonElement>('race-restart').disabled = true; pauseButton.disabled = true; bloomButton.disabled = true; soundButton.disabled = true; hapticsButton.disabled = true; get<HTMLButtonElement>('race-view').disabled = true; get<HTMLButtonElement>('race-track').disabled = true; get<HTMLButtonElement>('race-settings').disabled = true;
   };
   get('race-hangar').addEventListener('click', onHangar, listen);
   get('drive-retry').addEventListener('click', () => location.reload(), listen);
   const prepareRace = () => {
-    race?.dispose(); lastPhase = ''; lastCollisions = 0; impactAnimation?.cancel();
+    race?.dispose(); lastPhase = ''; lastViewKey = ''; previewing = false; lastCollisions = 0; impactAnimation?.cancel();
     get('difficulty-description').textContent = DIFFICULTIES[selectedDifficulty].description;
     try {
       race = createRace(get<HTMLDivElement>('race-scene'), update, showError, undefined, undefined, DIFFICULTIES[selectedDifficulty]);
@@ -178,16 +221,24 @@ export function mountRace(root: HTMLDivElement, onHangar: () => void): () => voi
     } catch (error) { console.error('주행 화면 초기화 실패:', error); showError(); }
   };
   prepareRace();
+  window.addEventListener('speedracer:pause-request', () => { if (lastPhase === 'running') race?.togglePause(); }, listen);
   get('difficulty-picker').addEventListener('change', event => {
     const target = event.target;
     if (!(target instanceof HTMLInputElement) || !(target.value in DIFFICULTIES)) return;
     selectedDifficulty = target.value as DifficultyId; prepareRace();
   }, listen);
-  get('race-settings').addEventListener('click', () => { prepareRace(); get('difficulty-picker').querySelector<HTMLInputElement>('input:checked')?.focus(); }, listen);
-  get('race-view').addEventListener('click', () => { get<HTMLButtonElement>('race-view').blur(); race?.toggleCockpit(); }, listen);
-  get('race-track').addEventListener('click', () => { get<HTMLButtonElement>('race-track').blur(); race?.cycleTrack(); }, listen);
+  get('race-difficulty').addEventListener('click', () => { prepareRace(); get('difficulty-picker').querySelector<HTMLInputElement>('input:checked')?.focus(); }, listen);
+  for (const id of ['race-view', 'preview-view']) get(id).addEventListener('click', () => { get(id).blur(); race?.toggleCockpit(); }, listen);
+  for (const id of ['race-track', 'preview-track']) get(id).addEventListener('click', () => { get(id).blur(); race?.cycleTrack(); }, listen);
+  get('preview-back').addEventListener('click', leavePreview, listen);
+  get('race-settings').addEventListener('click', () => preferences.showModal(), listen);
+  get('preferences-close').addEventListener('click', () => preferences.close(), listen);
+  window.addEventListener('keydown', event => {
+    if (event.code !== 'Escape' || !previewing || preferences.open) return;
+    event.preventDefault(); event.stopImmediatePropagation(); leavePreview();
+  }, { ...listen, capture: true });
   startButton.addEventListener('click', () => { startButton.blur(); race?.start(); }, listen);
-  pauseButton.addEventListener('click', () => race?.togglePause(), listen);
+  pauseButton.addEventListener('click', () => { pauseButton.blur(); if (previewing) leavePreview(); else race?.togglePause(); }, listen);
   get('race-restart').addEventListener('click', () => race?.restart(), listen);
   bloomButton.addEventListener('click', () => {
     const enabled = bloomButton.getAttribute('aria-pressed') !== 'true';
@@ -201,5 +252,5 @@ export function mountRace(root: HTMLDivElement, onHangar: () => void): () => voi
     const enabled = hapticsButton.getAttribute('aria-pressed') !== 'true';
     hapticsButton.setAttribute('aria-pressed', String(enabled)); race?.setHapticsEnabled(enabled);
   }, listen);
-  return () => { impactAnimation?.cancel(); events.abort(); race?.dispose(); };
+  return () => { preferences.close(); impactAnimation?.cancel(); events.abort(); race?.dispose(); window.dispatchEvent(new CustomEvent('speedracer:phase', { detail: 'hangar' })); };
 }

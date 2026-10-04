@@ -41,6 +41,7 @@ export function createHangar(container: HTMLDivElement, onContextLost: () => voi
   controls.maxDistance = 16;
   controls.minPolarAngle = 0.25;
   controls.maxPolarAngle = Math.PI / 2 - 0.06;
+  controls.autoRotate = true;
   controls.autoRotateSpeed = 0.65;
   controls.update();
   controls.saveState();

@@ -35,3 +35,18 @@ test('disabled, unsupported or denied vibration does not affect racing', () => {
   assert.doesNotThrow(() => createBoostHaptics().update(1, 2, true));
   assert.doesNotThrow(() => createBoostHaptics(() => { throw new Error('Denied'); }).update(1, 2, true));
 });
+
+test('altitude cue is lighter than boost, respects settings and is cancelled when paused', () => {
+  const calls = [];
+  const haptics = createBoostHaptics(pattern => { calls.push(pattern); return true; });
+  haptics.altitudeStep(); haptics.stop(); haptics.stop();
+  assert.deepEqual(calls, [8, 0]);
+  haptics.setEnabled(false); haptics.altitudeStep();
+  assert.deepEqual(calls, [8, 0]);
+  haptics.setEnabled(true); haptics.update(.016, 1, true); haptics.altitudeStep();
+  assert.deepEqual(calls.slice(-2), [18, 8]);
+  haptics.setEnabled(false);
+  assert.equal(calls.at(-1), 0);
+  assert.doesNotThrow(() => createBoostHaptics().altitudeStep());
+  assert.doesNotThrow(() => createBoostHaptics(() => { throw new Error('Denied'); }).altitudeStep());
+});

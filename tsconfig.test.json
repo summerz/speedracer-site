@@ -6,5 +6,5 @@
     "rootDir": "src",
     "outDir": "output/test"
   },
-  "include": ["src/game/driving/createDrivingModel.ts", "src/game/track/createTrack.ts", "src/game/driving/createRaceViews.ts", "src/game/driving/createBoostHaptics.ts"]
+  "include": ["src/game/driving/createDrivingModel.ts", "src/game/track/createTrack.ts", "src/game/driving/createRaceViews.ts", "src/game/driving/createBoostHaptics.ts", "src/game/driving/touchInput.ts", "src/platform/appUpdate.ts"]
 }

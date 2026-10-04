@@ -12,7 +12,7 @@ function mountHangar(root: HTMLDivElement, onDrive: () => void): () => void {
           <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M20 3 7 17h10l-5 12L26 13H16z"/></svg>
           SPEEDRACER<span class="wordmark-divider"></span><span class="wordmark-caption">DRONE RACING</span>
         </a>
-        <span class="location"><span class="status-dot"></span>격납고 <span class="mono">/ 01</span></span>
+        <div class="app-tools" data-app-tools></div><span class="location"><span class="status-dot"></span>격납고 <span class="mono">/ 01</span></span>
       </header>
 
       <section class="introduction" aria-labelledby="drone-title">
@@ -57,7 +57,7 @@ function mountHangar(root: HTMLDivElement, onDrive: () => void): () => void {
           <button type="button" data-view="reset" aria-label="기본 시점으로 초기화">시점 초기화 <span aria-hidden="true">↗</span></button>
         </div>
         <div class="effect-controls">
-          <button class="toggle" type="button" id="rotate-toggle" aria-pressed="false">자동 회전<span class="toggle-track" aria-hidden="true"></span></button>
+          <button class="toggle" type="button" id="rotate-toggle" aria-pressed="true">자동 회전<span class="toggle-track" aria-hidden="true"></span></button>
           <button class="toggle" type="button" id="bloom-toggle" aria-pressed="true">Bloom<span class="toggle-track" aria-hidden="true"></span></button>
         </div>
       </footer>
