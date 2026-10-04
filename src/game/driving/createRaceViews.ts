@@ -37,7 +37,8 @@ export function overviewPose(track: Track, aspect: number, fov = 50) {
 }
 
 export function createRaceViews(camera: THREE.PerspectiveCamera, drone: THREE.Group, scene: THREE.Scene, track: Track,
-  cockpit: CockpitSettings = DEFAULT_COCKPIT_SETTINGS) {
+  cockpit: CockpitSettings = DEFAULT_COCKPIT_SETTINGS,
+  rivals: readonly { object: THREE.Group; color: string }[] = []) {
   const mount = drone.getObjectByName('cockpitCameraMount');
   if (!mount) throw new Error('Drone cockpit camera mount is missing.');
   const canopy = drone.getObjectByName('canopy');
@@ -49,6 +50,12 @@ export function createRaceViews(camera: THREE.PerspectiveCamera, drone: THREE.Gr
   const ring = new THREE.Mesh(new THREE.TorusGeometry(15, 2.2, 6, 32), new THREE.MeshBasicMaterial({ color: 0xffac52, depthTest: false, toneMapped: false }));
   marker.add(core, ring); marker.renderOrder = 20; core.renderOrder = ring.renderOrder = 20;
   scene.add(marker);
+  const rivalMarkers = rivals.map(rival => {
+    const object = new THREE.Mesh(new THREE.OctahedronGeometry(9),
+      new THREE.MeshBasicMaterial({ color: rival.color, depthTest: false, toneMapped: false }));
+    object.name = `overview-${rival.object.name}`; object.renderOrder = 21; scene.add(object);
+    return { object, rival };
+  });
   // Pixel-width overview route remains readable when world-space neon tubes become subpixel.
   const positions: number[] = [];
   for (let d = 0; d < track.length; d += 3) {
@@ -67,6 +74,7 @@ export function createRaceViews(camera: THREE.PerspectiveCamera, drone: THREE.Gr
   const up = new THREE.Vector3(), forward = new THREE.Vector3(), target = new THREE.Vector3();
   const prepareDriving = () => {
     marker.visible = route.visible = false;
+    rivalMarkers.forEach(m => { m.object.visible = false; });
     if (canopy) canopy.visible = view !== 'cockpit';
     if (panel && panelColor) panel.material.color.copy(panelColor).multiplyScalar(view === 'cockpit' ? .08 : 1);
     scene.fog = fog;
@@ -88,12 +96,17 @@ export function createRaceViews(camera: THREE.PerspectiveCamera, drone: THREE.Gr
     prepareDriving,
     prepareOverview() {
       marker.visible = route.visible = true;
+      rivalMarkers.forEach(m => { m.object.visible = true; });
       if (canopy) canopy.visible = true;
       if (panel && panelColor) panel.material.color.copy(panelColor);
       scene.fog = null;
     },
     update(flightForward: THREE.Vector3, flightUp: THREE.Vector3, bank: number, time: number, boost: boolean, reduced: boolean) {
       marker.position.copy(drone.position);
+      for (const m of rivalMarkers) {
+        m.object.position.copy(m.rival.object.position);
+        m.object.scale.setScalar(overviewCamera.position.distanceTo(m.object.position) * 2 * Math.tan(THREE.MathUtils.degToRad(25)) / overviewHeight * 4 / 9);
+      }
       marker.scale.setScalar(overviewCamera.position.distanceTo(marker.position) * 2 * Math.tan(THREE.MathUtils.degToRad(25)) / overviewHeight * 6 / 15);
       ring.quaternion.copy(overviewCamera.quaternion);
       if (view === 'cockpit') {

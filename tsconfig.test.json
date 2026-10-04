@@ -8,6 +8,7 @@
   },
   "include": [
     "src/game/driving/createTimeAttack.ts",
+    "src/game/driving/createRaceSession.ts",
     "src/game/progression/progressStore.ts",
     "src/game/driving/createDrivingModel.ts",
     "src/game/track/createTrack.ts",

@@ -62,3 +62,25 @@ test('a sharp real track corner requires slowing down from boost speed, even wit
   const slowed = driveCorner(45); assert.equal(slowed.recoveries, 0); assert.equal(slowed.collisions, 0);
   assert.ok(slowed.distance >= 1100, 'braking allows the corner to be completed');
 });
+
+test('overview identifies all AI by color and follows their positions across PIP and primary views', () => {
+  const camera = new THREE.PerspectiveCamera(), drone = new THREE.Group(), scene = new THREE.Scene();
+  const mount = new THREE.Object3D(); mount.name = 'cockpitCameraMount'; drone.add(mount);
+  const rivals = ['#b6ff3a', '#ffb020', '#b04dff'].map((color, i) => {
+    const object = new THREE.Group(); object.name = `rival-ai-${i + 1}`;
+    object.position.set(i * 20, 10, -i * 15); scene.add(object); return { object, color };
+  });
+  const views = createRaceViews(camera, drone, scene, track, undefined, rivals);
+  views.resize(180, 120);
+  views.update(new THREE.Vector3(0, 0, -1), new THREE.Vector3(0, 1, 0), 0, 0, false, false);
+  for (const layout of ['pip', 'primary']) {
+    assert.equal(views.cycleTrack(), layout); views.prepareOverview();
+    rivals.forEach(rival => {
+      const marker = scene.getObjectByName(`overview-${rival.object.name}`);
+      assert.equal(marker.visible, true); assert.deepEqual(marker.position.toArray(), rival.object.position.toArray());
+      assert.equal(`#${marker.material.color.getHexString()}`, rival.color); assert.ok(marker.scale.x > 0);
+    });
+    views.prepareDriving();
+    assert.ok(rivals.every(r => !scene.getObjectByName(`overview-${r.object.name}`).visible));
+  }
+});

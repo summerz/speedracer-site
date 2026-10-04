@@ -197,3 +197,14 @@ button:focus-visible { outline:2px solid #c9f9f2; outline-offset:3px; }
 .render-options { display:flex; align-items:center; justify-content:space-between; gap:16px; margin:16px 0 8px; font-size:13px; }
 .render-options select { min-height:44px; padding:8px 12px; background:#14232d; color:#d7e9ec; border:1px solid #58717d70; font:inherit; }
 .quality-hint { font-size:11px; line-height:1.6; color:#9bb4c1; }
+
+.mode-picker>div { grid-template-columns:repeat(2,1fr); }
+.rank-readout { color:var(--accent); font-size:15px; font-weight:600; white-space:nowrap; }
+.race-standings { list-style:none; margin:0 0 14px; padding:0; font-variant-numeric:tabular-nums; }
+.race-standings li { display:grid; grid-template-columns:18px 1fr auto; gap:8px; align-items:center; padding:9px 0; border-bottom:1px solid #58717d40; font-size:11px; color:#adc1cc; }
+.race-standings li.is-player { color:var(--accent); }
+.standing-name { display:flex; align-items:center; gap:6px; }
+.standing-name i { width:6px; height:6px; flex:none; }
+#competition-results #standings-status { color:var(--accent); font:10px 'IBM Plex Mono',monospace; margin:12px 0 4px; }
+@media(max-width:600px) { .telemetry-row { gap:12px; }.rank-readout { font-size:13px; } }
+.race-map-legend { position:absolute; left:7px; bottom:7px; color:#d0e8eb; }

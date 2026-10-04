@@ -23,6 +23,9 @@ import type { RaceAnnouncement } from './createRaceFeedback';
 import { createBoostHaptics } from './createBoostHaptics';
 import { createBoostWarp } from './createBoostWarp';
 import { createTimeAttack } from './createTimeAttack';
+import { createRaceSession } from './createRaceSession';
+import type { RaceMode, CompetitionSnapshot } from './createRaceSession';
+import { createRivalVisuals } from './createRivalVisuals';
 import type { RacePhase } from './createTimeAttack';
 import { createRaceRecords } from './raceRecords';
 import { createRaceGates } from '../track/createRaceGates';
@@ -32,6 +35,7 @@ import type { TrackFrame } from '../track/createTrack';
 
 export type DrivingPhase = RacePhase;
 export interface RaceSnapshot extends DrivingState {
+  competition: CompetitionSnapshot | null;
   altitudeProfile: AltitudeProfile;
   announcement: RaceAnnouncement | null;
   phase: DrivingPhase;
@@ -67,6 +71,7 @@ export function createRace(
   altitudeProfile?: AltitudeProfile,
   difficulty?: DifficultyPreset,
   focusSlots = 0,
+  mode: RaceMode = 'time-attack',
 ): Race {
   const config = resolveDroneConfiguration(configuration);
   const visuals = config.speedEffects;
@@ -96,13 +101,14 @@ export function createRace(
   const coarsePointer = window.matchMedia('(any-pointer: coarse)');
   let storage: Storage | undefined;
   try { storage = window.localStorage; } catch { /* Private browsing can deny storage. */ }
-  const records = createRaceRecords({ trackId: `neon-circuit-v1:${difficulty?.id ?? 'beginner'}`, configurationId: JSON.stringify({ performance: config.performance, altitude: track.altitudeProfile, ...(focusSlots ? { assisted: true } : {}) }) }, storage);
-  const timeAttack = createTimeAttack(track, config.performance, records, focusSlots);
+  const records = createRaceRecords({ trackId: `neon-circuit-v1:${difficulty?.id ?? 'beginner'}`, configurationId: JSON.stringify({ performance: config.performance, altitude: track.altitudeProfile, ...(focusSlots ? { assisted: true } : {}), ...(mode === 'competition' ? { mode } : {}) }) }, storage);
+  const timeAttack = createRaceSession(track, config, records, focusSlots, mode);
+  const rivalVisuals = createRivalVisuals(scene, track, timeAttack.rivals);
   const model = timeAttack.model;
   const raceGates = createRaceGates(track, timeAttack.snapshot().gatesPerLap);
   scene.add(raceGates.object);
   const camera = new THREE.PerspectiveCamera(visuals.baseFov, 1, 0.1, 1100);
-  const views = createRaceViews(camera, drone, scene, track);
+  const views = createRaceViews(camera, drone, scene, track, undefined, rivalVisuals.entries);
   const speedLines = createSpeedLines(visuals);
   camera.add(speedLines.object); scene.add(camera);
   const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 }));
@@ -163,7 +169,8 @@ export function createRace(
     track.sample(model.state.distance + Math.max(22, model.state.speed * 1.1), upcoming);
     const next = upcomingHeightObstacle(track, model.state.distance);
     const heightObstacle = next ? { ...next.obstacle, distance: Math.max(0, next.distance) } : null;
-    onUpdate({ ...model.state, announcement: feedback.announcement, boostStage2Seconds: model.boostStage2Seconds, altitudeProfile: model.altitudeProfile, phase: timeAttack.phase, timeAttack: timeAttack.snapshot(), view: views.view, trackDisplay: views.trackDisplay, trackLength: track.length, upcomingCurvature: upcoming.curvature, upcomingSection: upcoming.section, heightObstacle });
+    const session = timeAttack.snapshot();
+    onUpdate({ ...model.state, competition: session.competition, announcement: feedback.announcement, boostStage2Seconds: model.boostStage2Seconds, altitudeProfile: model.altitudeProfile, phase: timeAttack.phase, timeAttack: session, view: views.view, trackDisplay: views.trackDisplay, trackLength: track.length, upcomingCurvature: upcoming.curvature, upcomingSection: upcoming.section, heightObstacle });
   };
   const heightRequests: number[] = [];
   const touchControls = createTouchControls(container.parentElement ?? container, {
@@ -254,6 +261,10 @@ export function createRace(
     pipFrame.textContent = coarsePointer.matches
       ? views.trackDisplay === 'primary' ? VIEW_LABELS[views.view] : '전체 트랙'
       : views.trackDisplay === 'primary' ? `${VIEW_LABELS[views.view]} · C 전환 / X 닫기` : '전체 트랙 · X 자리 교환';
+    if (mode === 'competition' && views.trackDisplay === 'pip') {
+      const legend = document.createElement('span'); legend.className = 'race-map-legend';
+      legend.textContent = '◎ 나 · ◆ AI'; pipFrame.append(legend);
+    }
   };
   const observer = new ResizeObserver(resize); observer.observe(container);
   coarsePointer.addEventListener('change', resize, listen);
@@ -281,7 +292,9 @@ export function createRace(
       heightRequests.length = 0;
       input.lift = 0; timeAttack.step(delta, input);
     }
+    if (oldPhase === 'finished') timeAttack.step(delta, { throttle: false, brake: false, boost: false, steer: 0, lift: 0 });
     const phase = timeAttack.phase;
+    rivalVisuals.update(delta, reducedMotion.matches);
     const cues = feedback.update({ ...timeAttack.snapshot(), phase, elapsed: model.state.elapsed });
     raceAudio.update(phase, model.state.boostStage, model.state.boostStageProgress, model.state.speed / visuals.referenceSpeed, input.brake);
     for (const cue of cues) raceAudio.play(cue);
@@ -396,7 +409,7 @@ export function createRace(
     setHapticsEnabled(enabled) { boostHaptics.setEnabled(enabled); },
     dispose() {
       disposed = true; cancelAnimationFrame(animation); events.abort(); observer.disconnect();
-      touchControls.dispose(); thrusters.dispose(); boostPulse.dispose(); raceAudio.dispose(); boostHaptics.dispose();
+      touchControls.dispose(); rivalVisuals.dispose(); thrusters.dispose(); boostPulse.dispose(); raceAudio.dispose(); boostHaptics.dispose();
       const geometries = new Set<THREE.BufferGeometry>();
       const materials = new Set<THREE.Material>();
       scene.traverse((object) => {

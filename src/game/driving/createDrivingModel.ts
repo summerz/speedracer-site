@@ -26,7 +26,7 @@ export interface DrivingState {
   recoveries: number;
   offTrackExits: number;
   penaltyPoints: number;
-  notice: 'collision' | 'height-collision' | 'off-track' | 'recovery' | null;
+  notice: 'collision' | 'craft-collision' | 'height-collision' | 'off-track' | 'recovery' | null;
 }
 
 export const OFF_TRACK_PENALTY_POINTS = 5;
@@ -83,6 +83,11 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
     altitudeProfile,
     boostStage2Seconds,
     interruptBoost,
+    contact() {
+      state.speed *= 1 - tuning.collisionSpeedLoss * 0.7;
+      state.collisions++;
+      state.notice = 'craft-collision'; noticeRemaining = 0.8;
+    },
     reset() {
       Object.assign(state, initial);
       fieldPassages.clear();

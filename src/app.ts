@@ -31,7 +31,7 @@ function mountHangar(root: HTMLDivElement, selected: DroneCatalogEntry, onSelect
             <button type="button" data-thrust="boost" aria-pressed="false" aria-keyshortcuts="3"><kbd>3</kbd>부스트</button>
           </div>
         </div>
-        <button type="button" id="start-driving" class="primary-action hangar-start">타임어택 <span aria-hidden="true">↗</span></button>
+        <button type="button" id="start-driving" class="primary-action hangar-start">레이스 <span aria-hidden="true">↗</span></button>
       </section>
 
       <section class="viewport" aria-label="드론 3D 미리보기">
