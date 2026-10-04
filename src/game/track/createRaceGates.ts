@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { createTrackFrame } from './createTrack.js';
 import type { Track } from './createTrack.js';
 
-/** Four gold start arches and checkpoint beacons stay distinct from discharge obstacles. */
+/** Four hot-pink start arches and checkpoint beacons stay distinct from discharge obstacles. */
 export function createRaceGates(track: Track, count: number) {
   const object = new THREE.Group(); object.name = 'Race checkpoints';
   const strip = new THREE.BoxGeometry(track.halfWidth * 2, 0.06, 1.6);
@@ -10,8 +10,8 @@ export function createRaceGates(track: Track, count: number) {
   const gates: THREE.Group[] = [];
   const inactive = new THREE.MeshBasicMaterial({ color: 0x426171 });
   const active = new THREE.MeshBasicMaterial({ color: 0xaafcf0 });
-  const start = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.2, 0.86, 0.12) });
-  const startGlow = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.35, 0.98, 0.14) });
+  const start = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.1, 0.015, 0.19) });
+  const startGlow = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.25, 0.025, 0.26) });
   const frame = createTrackFrame();
   const basis = new THREE.Matrix4();
   for (let i = 0; i < count; i++) {

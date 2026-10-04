@@ -179,3 +179,15 @@ button:focus-visible { outline:2px solid #c9f9f2; outline-offset:3px; }
 .driving-overlay.is-inset .boost-meter { height:3px; margin:3px 0 2px; }
 .driving-overlay.is-inset .boost-stage-meter { height:1px; margin-bottom:0; }
 .driving-overlay.is-inset #boost-status { display:none; }
+
+/* Brief race cues stay at the edge of the driving view, including when it is the PIP. */
+.race-announcement { position:absolute; top:max(80px,calc(env(safe-area-inset-top) + 65px)); left:max(20px,env(safe-area-inset-left)); max-width:calc(100% - 40px); display:grid; gap:3px; padding:0 0 0 10px; border-left:3px solid #8ff4e1; color:#d9fff5; text-shadow:0 2px 8px #000; }
+.race-announcement strong { font:600 24px/1 'Barlow Condensed',sans-serif; letter-spacing:1px; }
+.race-announcement span { font-size:10px; color:#b5d5d9; }
+.race-announcement[data-kind='final-lap'] { border-color:#ff4f92; color:#ffafcc; }
+.race-announcement[data-kind='final-lap'] strong { font-size:32px; }
+.drive-screen:not([data-phase='running']) .race-announcement { visibility:hidden; }
+.driving-overlay.is-inset .race-announcement { top:7px; left:7px; padding-left:5px; gap:0; border-width:2px; max-width:calc(100% - 14px); }
+.driving-overlay.is-inset .race-announcement strong,.driving-overlay.is-inset .race-announcement[data-kind='final-lap'] strong { font-size:13px; letter-spacing:.5px; }
+.driving-overlay.is-inset .race-announcement span { display:none; }
+.race-boost-flash { position:absolute; inset:0; z-index:2; pointer-events:none; opacity:0; background:radial-gradient(ellipse at center,#e8fbff99,#c8edffc9 60%,#80caff); }

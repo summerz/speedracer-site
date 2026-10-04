@@ -16,11 +16,12 @@ export function mountRace(root: HTMLDivElement, onHangar: () => void): () => voi
     <main class="drive-screen">
       <div id="race-scene" class="race-scene"></div>
       <div id="race-impact" class="race-impact" aria-hidden="true"></div>
+      <div id="race-boost-flash" class="race-boost-flash" aria-hidden="true"></div>
       <header class="race-header">
         <div class="race-telemetry" aria-label="주행 정보"><div class="telemetry-row"><span class="speed-readout"><strong id="drive-speed">000</strong><span class="mono">KM/H</span></span><span id="race-lap" class="lap-readout mono">LAP 1/3</span><time id="drive-time" class="mono">00:00.000</time></div><div class="corner-guide"><strong id="corner-text">직선</strong><span class="corner-hint">급한 코너에서는 S로 감속</span></div></div>
       </header>
       <button type="button" id="race-pause" class="race-pause" aria-label="일시정지 메뉴" aria-keyshortcuts="Escape" aria-controls="drive-overlay" aria-expanded="false"><span aria-hidden="true">Ⅱ</span></button>
-      <div class="driving-overlay"><p id="race-notice" class="race-notice" role="status" aria-live="polite"></p><div id="race-countdown" class="race-countdown" role="status" aria-live="assertive" hidden><span>READY</span><strong>3</strong></div>
+      <div class="driving-overlay"><div id="race-announcement" class="race-announcement" role="status" aria-live="polite" hidden><strong></strong><span></span></div><p id="race-notice" class="race-notice" role="status" aria-live="polite"></p><div id="race-countdown" class="race-countdown" role="status" aria-live="assertive" hidden><span>READY</span><strong>3</strong></div>
       <footer class="drive-hud" aria-label="고도와 부스트 계기판">
         <aside class="height-guide" aria-label="고도 안내: 청록색은 현재, 주황색은 통과 목표"><div id="height-level" class="height-bars"></div><strong id="height-instruction"></strong></aside>
         <div class="boost-readout"><div class="hud-pair"><span class="hud-label">BOOST</span><span id="boost-value" class="mono">100%</span></div><div id="boost-meter" class="boost-meter" role="progressbar" aria-label="부스트 잔량" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"><span></span></div><div id="boost-stage-meter" class="boost-stage-meter" role="progressbar" aria-label="부스트 2단계 축적" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span></span></div><span id="boost-status">Space 유지 · 3초 후 2단계</span></div>
@@ -46,7 +47,7 @@ export function mountRace(root: HTMLDivElement, onHangar: () => void): () => voi
       </nav>
       <dialog id="race-preferences" class="race-preferences" aria-labelledby="preferences-title">
         <header><h2 id="preferences-title">설정</h2><button type="button" id="preferences-close" aria-label="설정 닫기">닫기</button></header>
-        <div class="preference-options"><button type="button" id="race-bloom" aria-pressed="true"><span>네온 발광 <small>Bloom</small></span></button><button type="button" id="race-sound" aria-pressed="true"><span>부스트 음향</span></button><button type="button" id="race-haptics" aria-pressed="true"><span>진동</span></button></div>
+        <div class="preference-options"><button type="button" id="race-bloom" aria-pressed="true"><span>네온 발광 <small>Bloom</small></span></button><button type="button" id="race-sound" aria-pressed="true"><span>주행 효과음</span></button><button type="button" id="race-music" aria-pressed="true"><span>배경 음악 <small>Neon Circuit</small></span></button><button type="button" id="race-haptics" aria-pressed="true"><span>진동</span></button></div>
         <details class="control-help"><summary>조작 안내</summary>
           <div class="drive-keys"><span>자동 가속 · <kbd>S</kbd> 감속</span><span><kbd>A</kbd> <kbd>D</kbd> 좌우 조향</span><span><kbd>↓</kbd> <kbd>↑</kbd> 고도 한 단계 전환</span><span><kbd>Space</kbd> 길게 눌러 부스트</span><span><kbd>C</kbd> 기체·콕핏 전환</span><span><kbd>X</kbd> 트랙 PIP·자리 교환·닫기</span><span><kbd>F</kbd> 체크포인트 복귀</span><span><kbd>Esc</kbd> 일시정지·계속하기</span></div>
           <p class="touch-help">자동으로 가속합니다. 왼쪽 조이스틱은 좌우 조향, 아래로 당기면 감속합니다. 대각선으로 두 조작을 함께 할 수 있습니다.<br />오른쪽 ↑/↓ 버튼은 고도를 한 단계 바꾸고, BOOST는 길게 눌러 사용합니다. 3초 연속 부스트 시 2단계에 진입합니다.<br />시점은 일시정지 메뉴의 화면 미리보기에서 바꿀 수 있습니다.</p>
@@ -60,6 +61,7 @@ export function mountRace(root: HTMLDivElement, onHangar: () => void): () => voi
   const pauseButton = get<HTMLButtonElement>('race-pause');
   const bloomButton = get<HTMLButtonElement>('race-bloom');
   const soundButton = get<HTMLButtonElement>('race-sound');
+  const musicButton = get<HTMLButtonElement>('race-music');
   const hapticsButton = get<HTMLButtonElement>('race-haptics');
   const coarsePointer = window.matchMedia('(any-pointer: coarse)');
   const refreshHaptics = () => {
@@ -100,6 +102,10 @@ export function mountRace(root: HTMLDivElement, onHangar: () => void): () => voi
   const leavePreview = () => { previewing = false; paintMenu(); startButton.focus({ preventScroll: true }); };
   let lastCollisions = 0;
   let impactAnimation: Animation | undefined;
+  let boostFlashAnimation: Animation | undefined;
+  let announcementAnimation: Animation | undefined;
+  let lastBoostStage = 0;
+  let lastAnnouncement = 0;
   let lost = false;
   let previousLevel = -1;
   let highlightUntil = 0;
@@ -135,6 +141,29 @@ export function mountRace(root: HTMLDivElement, onHangar: () => void): () => voi
       impactAnimation = flash.animate([{ opacity: 0 }, { opacity: reduced ? 0.08 : 0.26, offset: 0.12 }, { opacity: 0 }], { duration: reduced ? 400 : 280 });
     }
     lastCollisions = state.collisions;
+    if (state.phase === 'running' && state.boostStage === 2 && lastBoostStage !== 2) {
+      boostFlashAnimation?.cancel();
+      const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      boostFlashAnimation = get('race-boost-flash').animate([
+        { opacity: 0 }, { opacity: reduced ? 0.07 : 0.38, offset: 0.1 }, { opacity: 0 },
+      ], { duration: reduced ? 350 : 240 });
+    }
+    lastBoostStage = state.boostStage;
+    if (state.phase !== 'running') boostFlashAnimation?.cancel();
+    const announcement = get('race-announcement');
+    announcement.hidden = !state.announcement || state.phase !== 'running';
+    if (state.announcement && state.announcement.id !== lastAnnouncement) {
+      lastAnnouncement = state.announcement.id;
+      announcement.dataset.kind = state.announcement.kind;
+      announcement.querySelector('strong')!.textContent = state.announcement.title;
+      announcement.querySelector('span')!.textContent = state.announcement.detail;
+      announcementAnimation?.cancel();
+      const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      announcementAnimation = announcement.animate([
+        { opacity: 0, transform: reduced ? 'none' : 'translateX(-10px)' },
+        { opacity: 1, transform: 'none' },
+      ], { duration: state.announcement.kind === 'final-lap' ? 320 : 200 });
+    }
     speed.textContent = Math.round(state.speed * 3.6).toString().padStart(3, '0');
     const percentage = Math.round(state.charge * 100);
     charge.textContent = `${percentage}%`; meter.setAttribute('aria-valuenow', String(percentage));
@@ -232,17 +261,18 @@ export function mountRace(root: HTMLDivElement, onHangar: () => void): () => voi
   let race: Race | undefined;
   const showError = () => {
     lost = true; preferences.close(); get('view-preview').hidden = true; overlay.hidden = true; get('drive-error').hidden = false;
-    get<HTMLButtonElement>('race-restart').disabled = true; pauseButton.disabled = true; bloomButton.disabled = true; soundButton.disabled = true; hapticsButton.disabled = true; get<HTMLButtonElement>('race-view').disabled = true; get<HTMLButtonElement>('race-track').disabled = true; get<HTMLButtonElement>('race-settings').disabled = true;
+    get<HTMLButtonElement>('race-restart').disabled = true; pauseButton.disabled = true; bloomButton.disabled = true; soundButton.disabled = true; musicButton.disabled = true; hapticsButton.disabled = true; get<HTMLButtonElement>('race-view').disabled = true; get<HTMLButtonElement>('race-track').disabled = true; get<HTMLButtonElement>('race-settings').disabled = true;
   };
   get('race-hangar').addEventListener('click', onHangar, listen);
   get('drive-retry').addEventListener('click', () => location.reload(), listen);
   const prepareRace = () => {
-    race?.dispose(); lastPhase = ''; lastViewKey = ''; previewing = false; lastCollisions = 0; impactAnimation?.cancel();
+    race?.dispose(); lastPhase = ''; lastViewKey = ''; previewing = false; lastCollisions = 0; lastBoostStage = 0; lastAnnouncement = 0; impactAnimation?.cancel(); boostFlashAnimation?.cancel(); announcementAnimation?.cancel();
     get('difficulty-description').textContent = DIFFICULTIES[selectedDifficulty].description;
     try {
       race = createRace(get<HTMLDivElement>('race-scene'), update, showError, undefined, undefined, DIFFICULTIES[selectedDifficulty]);
       race.setBloom(bloomButton.getAttribute('aria-pressed') === 'true');
       race.setSoundEnabled(soundButton.getAttribute('aria-pressed') === 'true');
+      race.setMusicEnabled(musicButton.getAttribute('aria-pressed') === 'true');
       race.setHapticsEnabled(hapticsButton.getAttribute('aria-pressed') === 'true');
     } catch (error) { console.error('주행 화면 초기화 실패:', error); showError(); }
   };
@@ -275,9 +305,13 @@ export function mountRace(root: HTMLDivElement, onHangar: () => void): () => voi
     const enabled = soundButton.getAttribute('aria-pressed') !== 'true';
     soundButton.setAttribute('aria-pressed', String(enabled)); race?.setSoundEnabled(enabled);
   }, listen);
+  musicButton.addEventListener('click', () => {
+    const enabled = musicButton.getAttribute('aria-pressed') !== 'true';
+    musicButton.setAttribute('aria-pressed', String(enabled)); race?.setMusicEnabled(enabled);
+  }, listen);
   hapticsButton.addEventListener('click', () => {
     const enabled = hapticsButton.getAttribute('aria-pressed') !== 'true';
     hapticsButton.setAttribute('aria-pressed', String(enabled)); race?.setHapticsEnabled(enabled);
   }, listen);
-  return () => { preferences.close(); impactAnimation?.cancel(); events.abort(); race?.dispose(); window.dispatchEvent(new CustomEvent('speedracer:phase', { detail: 'hangar' })); };
+  return () => { preferences.close(); impactAnimation?.cancel(); boostFlashAnimation?.cancel(); announcementAnimation?.cancel(); events.abort(); race?.dispose(); window.dispatchEvent(new CustomEvent('speedracer:phase', { detail: 'hangar' })); };
 }
