@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createRaceProgress, RACE_RULES_VERSION } from '../output/test/game/driving/raceProgress.js';
 import { createRaceRecords } from '../output/test/game/driving/raceRecords.js';
 import { createTimeAttack } from '../output/test/game/driving/createTimeAttack.js';
-import { NEUTRAL_INPUT, DRIVING_TUNING as tuning } from '../output/test/game/driving/createDrivingModel.js';
+import { NEUTRAL_INPUT, DRIVING_TUNING as tuning, steeringYawRate } from '../output/test/game/driving/createDrivingModel.js';
 import { createTrack, upcomingHeightObstacle } from '../output/test/game/track/createTrack.js';
 import { DIFFICULTIES } from '../output/test/game/track/difficulty.js';
 
@@ -199,7 +199,7 @@ for (const preset of Object.values(DIFFICULTIES)) {
       const curvature = track.sample(s.distance).curvature;
       const ahead = track.sample(s.distance + 25).curvature;
       const target = Math.min(55, .65 / Math.max(.01, Math.abs(curvature), Math.abs(ahead)));
-      const yawRate = tuning.maxYawRate / (1 + s.speed * .006 + Math.max(0, s.speed - tuning.corneringReferenceSpeed) ** 2 * tuning.highSpeedSteeringLoss) * Math.min(s.speed / 10, 1);
+      const yawRate = steeringYawRate(s.speed, tuning);
       const steer = (curvature * s.speed - s.heading * 2.5 - s.offset * .12) / Math.max(.1, yawRate);
       const next = upcomingHeightObstacle(track, s.distance);
       const levels = session.model.altitudeProfile.levels;

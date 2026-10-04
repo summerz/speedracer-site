@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { HeightObstacle } from './createTrack';
+export type BarrierReadiness = 'neutral' | 'ready' | 'blocked';
 
 /** Grounded emitters and separate animated ribbons; the space between arcs stays empty. */
 export function createDischargeBarrier(obstacle: HeightObstacle, halfWidth: number, maxFlightHeight = 6.2) {
@@ -8,8 +9,8 @@ export function createDischargeBarrier(obstacle: HeightObstacle, halfWidth: numb
     const upper = createDischargeBarrier({ ...obstacle, kind: 'descend' }, halfWidth, maxFlightHeight);
     const object = new THREE.Group(); object.name = 'middleDischargeBarrier';
     object.add(lower.object, upper.object);
-    return { object, hit() { lower.hit(); upper.hit(); }, update(time: number, reducedMotion: boolean) {
-      lower.update(time, reducedMotion); upper.update(time, reducedMotion);
+    return { object, hit() { lower.hit(); upper.hit(); }, update(time: number, reducedMotion: boolean, readiness: BarrierReadiness = 'neutral') {
+      lower.update(time, reducedMotion, readiness); upper.update(time, reducedMotion, readiness);
     } };
   }
   const object = new THREE.Group();
@@ -17,6 +18,9 @@ export function createDischargeBarrier(obstacle: HeightObstacle, halfWidth: numb
   const bottom = obstacle.kind === 'rise' ? 0 : obstacle.maxAltitude + 0.65;
   const top = obstacle.kind === 'rise' ? obstacle.minAltitude - 0.65 : maxFlightHeight + 3.8;
   const color = obstacle.kind === 'rise' ? new THREE.Color(1.05, 0.12, 1.6) : new THREE.Color(0.1, 0.55, 1.8);
+  const originalColor = color.clone();
+  const readyColor = new THREE.Color(0.05, 1.3, 0.78);
+  const blockedColor = new THREE.Color(1.6, 0.24, 0.035);
   const housing = new THREE.MeshStandardMaterial({ color: 0x263440, metalness: 0.75, roughness: 0.4 });
   const contact = new THREE.MeshBasicMaterial({ color });
   const baseGeometry = new THREE.CylinderGeometry(0.65, 0.85, 0.3, 8);
@@ -61,7 +65,7 @@ export function createDischargeBarrier(obstacle: HeightObstacle, halfWidth: numb
   // Include shader displacement so frustum culling cannot hide a visible arc.
   if (geometry.boundingSphere) geometry.boundingSphere.radius += 1;
   const material = new THREE.ShaderMaterial({
-    uniforms: { uTime: { value: 0 }, uImpact: { value: 0 }, uColor: { value: color } },
+    uniforms: { uTime: { value: 0 }, uImpact: { value: 0 }, uColor: { value: color }, uBlocked: { value: 0 } },
     transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
     vertexShader: `
       uniform float uTime;
@@ -88,6 +92,7 @@ export function createDischargeBarrier(obstacle: HeightObstacle, halfWidth: numb
       uniform float uTime;
       uniform float uImpact;
       uniform vec3 uColor;
+      uniform float uBlocked;
       varying vec2 vUv;
       varying float vSeed;
       void main() {
@@ -97,7 +102,8 @@ export function createDischargeBarrier(obstacle: HeightObstacle, halfWidth: numb
         float activity = 0.65 + 0.35 * sin(vSeed * 7.0 + uTime * 13.0);
         float breakUp = 0.65 + 0.35 * smoothstep(-0.2, 0.2, sin(vUv.x * 73.0 + vSeed + uTime * 17.0));
         float tail = vSeed > 16.0 ? 1.0 - smoothstep(0.4, 1.0, vUv.x) : 1.0;
-        gl_FragColor = vec4(mix(uColor, vec3(2.5), core * 0.7) * (1.0 + uImpact * 2.0), glow * activity * breakUp * tail);
+        float warning = 1.0 + uBlocked * (0.25 + 0.25 * sin(uTime * 8.0));
+        gl_FragColor = vec4(mix(uColor, vec3(2.5), core * 0.45) * (1.0 + uImpact * 2.0) * warning, glow * activity * breakUp * tail);
       }
     `,
   });
@@ -107,13 +113,16 @@ export function createDischargeBarrier(obstacle: HeightObstacle, halfWidth: numb
   return {
     object,
     hit() { impactTime = lastTime; },
-    update(time: number, reducedMotion: boolean) {
+    update(time: number, reducedMotion: boolean, readiness: BarrierReadiness = 'neutral') {
       lastTime = time;
       // Restarted simulations must not replay a previous impact.
       if (time < impactTime) impactTime = -Infinity;
       const impact = Math.exp(-(time - impactTime) * 9);
       material.uniforms.uTime.value = reducedMotion ? 0 : time;
       material.uniforms.uImpact.value = impact;
+      material.uniforms.uBlocked.value = readiness === 'blocked' && !reducedMotion ? 1 : 0;
+      color.copy(readiness === 'ready' ? readyColor : readiness === 'blocked' ? blockedColor : originalColor);
+      object.userData.readiness = readiness;
       contact.color.copy(color).multiplyScalar(1 + impact * 2);
     },
   };

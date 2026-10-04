@@ -1,8 +1,13 @@
-/** Heights are measured from the local road; Q/E selects an adjacent level. */
+/** Heights are measured from the local road; ↑/↓ selects an adjacent level. */
 export interface AltitudeProfile {
   readonly levels: readonly number[];
   readonly initialLevel: number;
   readonly transitionSeconds: number;
+}
+
+/** Rendering and instruments use the same physical pass window as collision detection. */
+export function altitudeCanPass(altitude: number, obstacle: { minAltitude: number; maxAltitude: number }) {
+  return altitude >= obstacle.minAltitude && altitude <= obstacle.maxAltitude;
 }
 
 export const ALTITUDE_PROFILES = {

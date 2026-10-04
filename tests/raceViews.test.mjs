@@ -5,7 +5,7 @@ import { createRaceViews, raceViewLayout, overviewPose } from '../output/test/ga
 import { createTrack } from '../output/test/game/track/createTrack.js';
 import { DIFFICULTIES } from '../output/test/game/track/difficulty.js';
 import { DEFAULT_DRONE_CONFIGURATION } from '../output/test/game/drone/droneConfiguration.js';
-import { createDrivingModel, NEUTRAL_INPUT } from '../output/test/game/driving/createDrivingModel.js';
+import { createDrivingModel, NEUTRAL_INPUT, steeringYawRate } from '../output/test/game/driving/createDrivingModel.js';
 
 const track = createTrack(undefined, DIFFICULTIES.intermediate);
 test('cockpit choice survives the three track layouts and each camera gets its own scene visibility', () => {
@@ -45,19 +45,18 @@ test('PIP stays inside desktop, portrait and short landscape screens; swapping p
   }
 });
 
-test('a sharp real track corner requires slowing down, even with curvature-aware steering', () => {
+test('a sharp real track corner requires slowing down from boost speed, even with curvature-aware steering', () => {
   const driveCorner = (targetSpeed) => {
     const model = createDrivingModel({ ...track, heightObstacles: [] });
     Object.assign(model.state, { distance: 880, speed: targetSpeed, altitude: 6.2, targetAltitude: 6.2, altitudeLevel: 2 });
     for (let i = 0; i < 800 && model.state.distance < 1100 && model.state.recoveries === 0; i++) {
       const s = model.state;
-      const loss = 1 + s.speed * .006 + Math.max(0, s.speed - DEFAULT_DRONE_CONFIGURATION.performance.corneringReferenceSpeed) ** 2 * DEFAULT_DRONE_CONFIGURATION.performance.highSpeedSteeringLoss;
-      const wanted = (track.sample(s.distance).curvature * s.speed - s.heading * 4 - s.offset * .1) * loss / DEFAULT_DRONE_CONFIGURATION.performance.maxYawRate;
-      model.step(1 / 120, { ...NEUTRAL_INPUT, throttle: s.speed < targetSpeed, brake: s.speed > targetSpeed + 1, steer: Math.max(-1, Math.min(1, wanted)) });
+      const wanted = (track.sample(s.distance).curvature * s.speed - s.heading * 4 - s.offset * .1) / Math.max(.1, steeringYawRate(s.speed));
+      model.step(1 / 120, { ...NEUTRAL_INPUT, throttle: s.speed < targetSpeed, boost: targetSpeed > 85, brake: s.speed > targetSpeed + 1, steer: Math.max(-1, Math.min(1, wanted)) });
     }
     return model.state;
   };
-  assert.equal(driveCorner(85).recoveries, 1, 'full cruise speed leaves the track');
+  assert.equal(driveCorner(125).recoveries, 1, 'boost speed leaves the track');
   const slowed = driveCorner(45); assert.equal(slowed.recoveries, 0); assert.equal(slowed.collisions, 0);
   assert.ok(slowed.distance >= 1100, 'braking allows the corner to be completed');
 });

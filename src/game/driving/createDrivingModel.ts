@@ -36,6 +36,11 @@ export const DRIVING_TUNING = {
 export const NEUTRAL_INPUT: DrivingInput = { throttle: false, brake: false, steer: 0, lift: 0, boost: false };
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
+/** Gentle speed-dependent yaw loss keeps lateral response growing during boost. */
+export function steeringYawRate(speed: number, performance: DronePerformance = DEFAULT_DRONE_CONFIGURATION.performance) {
+  return performance.maxYawRate / (1 + speed * 0.006 + Math.sqrt(Math.max(0, speed - performance.corneringReferenceSpeed)) * performance.highSpeedSteeringLoss) * Math.min(speed / 10, 1);
+}
+
 /** Track coordinates are the simulation; Three.js objects only display the resulting pose. */
 export function createDrivingModel(track: Track, performance: DronePerformance = DEFAULT_DRONE_CONFIGURATION.performance) {
   const altitudeProfile = resolveAltitudeProfile(track.altitudeProfile);
@@ -116,14 +121,15 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
         }
         const oldSpeed = state.speed;
         const limit = state.boostStage === 2 ? tuning.boostStage2Speed : state.boosting ? tuning.boostSpeed : tuning.topSpeed;
-        const acceleration = input.brake ? -tuning.braking
+        const acceleration = input.brake ? (state.speed < tuning.crawlSpeed ? tuning.acceleration : -tuning.braking)
           : state.boostStage === 2 ? tuning.boostStage2Acceleration : state.boosting ? tuning.boostAcceleration : input.throttle ? tuning.acceleration : -tuning.drag;
         state.speed = clamp(state.speed + acceleration * dt, 0, Math.max(limit, state.speed));
+        if (input.brake) state.speed = oldSpeed >= tuning.crawlSpeed ? Math.max(tuning.crawlSpeed, state.speed) : Math.min(tuning.crawlSpeed, state.speed);
         if (state.speed > limit) state.speed = Math.max(limit, state.speed - 18 * dt);
         const speed = (oldSpeed + state.speed) * 0.5;
         const curvature = track.sample(state.distance, frame).curvature;
         const travel = speed * Math.cos(state.heading) / Math.max(0.5, 1 - curvature * state.offset);
-        const turnRate = clamp(input.steer, -1, 1) * tuning.maxYawRate / (1 + speed * 0.006 + Math.max(0, speed - tuning.corneringReferenceSpeed) ** 2 * tuning.highSpeedSteeringLoss) * Math.min(speed / 10, 1);
+        const turnRate = clamp(input.steer, -1, 1) * steeringYawRate(speed, tuning);
         const oldHeading = state.heading;
         state.heading = clamp(state.heading + (turnRate - curvature * travel) * dt, -1.1, 1.1);
         state.offset += speed * Math.sin((oldHeading + state.heading) * 0.5) * dt;

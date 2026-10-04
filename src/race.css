@@ -23,11 +23,14 @@
 .height-guide { position:absolute; left:-32px; top:0; display:flex; flex-direction:column; align-items:center; gap:4px; pointer-events:none; text-shadow:0 2px 6px #000; }
 .height-bars { display:flex; flex-direction:column-reverse; gap:6px; padding:3px 0; }
 .height-bars i { position:relative; display:block; width:20px; height:6px; }
-.height-bars i::before { content:''; position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:14px; height:2px; background:#617b88; }
-.height-bars .is-safe::before { width:18px; height:3px; background:#ffbe72; }
-.height-bars .is-active::before { width:20px; height:6px; background:#8ff4e1; }
-.height-bars .is-active.is-safe::after { content:''; position:absolute; left:0; right:0; bottom:-3px; height:1px; background:#ffbe72; }
-.height-changed .height-bars .is-active::before { box-shadow:0 0 12px #61e9d280; }
+.height-bars i::before,.height-bars .is-active::after { content:''; position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); }
+.height-bars i::before { width:14px; height:2px; background:#617b88; }
+.height-bars .is-safe::before { width:18px; height:3px; background:#64e9ae; }
+.height-bars .is-active::after { width:20px; height:6px; background:#d4fff1; box-shadow:0 0 7px #82eac166; }
+.height-guide[data-readiness='ready'] .is-active::after { background:#64ffb9; box-shadow:0 0 10px #64ffb980; }
+.height-guide[data-readiness='blocked'] .is-active::after { background:#ff6851; box-shadow:0 0 8px #ff685180; }
+.height-guide[data-readiness='switching'] .is-active::after { background:#ffc06c; }
+.height-changed .height-bars .is-active::after { outline:1px solid #e5fff366; }
 .height-guide>strong { position:absolute; left:0; bottom:calc(100% + 8px); color:#e9f9ff; font:10px 'IBM Plex Mono',monospace; white-space:nowrap; }
 .height-guide>strong:empty { display:none; }
 .driving-overlay.is-inset .height-guide { left:-18px; top:auto; bottom:0; gap:2px; }
@@ -35,13 +38,12 @@
 .driving-overlay.is-inset .height-bars i { width:12px; height:4px; }
 .driving-overlay.is-inset .height-bars i::before { width:8px; height:1px; }
 .driving-overlay.is-inset .height-bars .is-safe::before { width:10px; height:2px; }
-.driving-overlay.is-inset .height-bars .is-active::before { width:12px; height:3px; }
-.driving-overlay.is-inset .height-bars .is-active.is-safe::after { bottom:-1px; }
+.driving-overlay.is-inset .height-bars .is-active::after { width:12px; height:4px; }
 .driving-overlay.is-inset .height-guide>strong { font-size:8px; }
 .height-urgent>strong { color:#ffc183; }
 .height-alert .height-bars .is-safe::before { animation:height-warning .7s ease-in-out infinite alternate; }
 .height-urgent .height-bars .is-safe::before { animation-duration:.35s; }
-@keyframes height-warning { from { box-shadow:0 0 4px #ffbe7240; } to { box-shadow:0 0 12px #ffbe72; } }
+@keyframes height-warning { from { box-shadow:0 0 4px #64e9ae40; } to { box-shadow:0 0 12px #64e9ae; } }
 .drive-hud { position:absolute; bottom:max(22px,env(safe-area-inset-bottom)); left:50%; width:min(320px,calc(100% - 84px)); transform:translateX(-50%); pointer-events:none; text-shadow:0 2px 6px #000; }
 .hud-pair { display:flex; justify-content:space-between; gap:12px; align-items:baseline; }
 .hud-pair .mono { font-size:11px; color:var(--accent); }
@@ -171,7 +173,7 @@ button:focus-visible { outline:2px solid #c9f9f2; outline-offset:3px; }
   .drive-dialog { width:340px; max-height:calc(100dvh - 32px); padding:18px; }
   .view-preview { width:max-content; }
 }
-@media (prefers-reduced-motion:reduce) { .stick-knob { will-change:auto; } .height-alert .height-bars .is-safe::before { animation:none; box-shadow:0 0 6px #ffbe72; } }
+@media (prefers-reduced-motion:reduce) { .stick-knob { will-change:auto; } .height-alert .height-bars .is-safe::before { animation:none; box-shadow:0 0 6px #64e9ae; } }
 
 .drive-screen .driving-overlay.is-inset .drive-hud { bottom:6px; width:calc(100% - 48px); }
 .driving-overlay.is-inset .hud-label,.driving-overlay.is-inset .hud-pair .mono { font-size:8px; }
@@ -180,14 +182,14 @@ button:focus-visible { outline:2px solid #c9f9f2; outline-offset:3px; }
 .driving-overlay.is-inset .boost-stage-meter { height:1px; margin-bottom:0; }
 .driving-overlay.is-inset #boost-status { display:none; }
 
-/* Brief race cues stay at the edge of the driving view, including when it is the PIP. */
-.race-announcement { position:absolute; top:max(80px,calc(env(safe-area-inset-top) + 65px)); left:max(20px,env(safe-area-inset-left)); max-width:calc(100% - 40px); display:grid; gap:3px; padding:0 0 0 10px; border-left:3px solid #8ff4e1; color:#d9fff5; text-shadow:0 2px 8px #000; }
-.race-announcement strong { font:600 24px/1 'Barlow Condensed',sans-serif; letter-spacing:1px; }
-.race-announcement span { font-size:10px; color:#b5d5d9; }
-.race-announcement[data-kind='final-lap'] { border-color:#ff4f92; color:#ffafcc; }
-.race-announcement[data-kind='final-lap'] strong { font-size:32px; }
+/* Lap cues sit above the driving view center and follow it into PIP. */
+.race-announcement { position:absolute; top:28%; left:50%; transform:translateX(-50%); width:max-content; max-width:calc(100% - 32px); display:grid; gap:7px; text-align:center; color:#d9fff5; text-shadow:0 2px 10px #000,0 0 18px #45d8b766; opacity:0; }
+.race-announcement strong { font:600 clamp(30px,4.5vw,48px)/1 'Barlow Condensed',sans-serif; letter-spacing:2px; }
+.race-announcement span { font-size:11px; color:#d0e9eb; }
+.race-announcement[data-kind='final-lap'] { color:#ffafcc; text-shadow:0 2px 10px #000,0 0 20px #ff4f9270; }
+.race-announcement[data-kind='final-lap'] strong { font-size:clamp(40px,5.5vw,60px); }
 .drive-screen:not([data-phase='running']) .race-announcement { visibility:hidden; }
-.driving-overlay.is-inset .race-announcement { top:7px; left:7px; padding-left:5px; gap:0; border-width:2px; max-width:calc(100% - 14px); }
-.driving-overlay.is-inset .race-announcement strong,.driving-overlay.is-inset .race-announcement[data-kind='final-lap'] strong { font-size:13px; letter-spacing:.5px; }
+.driving-overlay.is-inset .race-announcement { top:22%; gap:0; max-width:calc(100% - 12px); }
+.driving-overlay.is-inset .race-announcement strong,.driving-overlay.is-inset .race-announcement[data-kind='final-lap'] strong { font-size:15px; letter-spacing:.5px; }
 .driving-overlay.is-inset .race-announcement span { display:none; }
 .race-boost-flash { position:absolute; inset:0; z-index:2; pointer-events:none; opacity:0; background:radial-gradient(ellipse at center,#e8fbff99,#c8edffc9 60%,#80caff); }

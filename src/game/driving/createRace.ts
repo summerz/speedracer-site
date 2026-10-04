@@ -81,6 +81,14 @@ export function createRace(
   scene.add(trackVisual.object);
   const drone = createRacingDrone({ neonBoost: 1.7, thrusterIntensity: 0.35 });
   scene.add(drone);
+  // A cheap road-bound light makes the craft's height above the track visible.
+  const hoverLight = new THREE.Mesh(new THREE.PlaneGeometry(7, 10), new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false,
+    uniforms: { strength: { value: 0.2 } },
+    vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader: 'varying vec2 vUv; uniform float strength; void main() { float r = length((vUv - 0.5) * 2.0); float glow = exp(-r * r * 6.0) * (1.0 - smoothstep(0.7, 1.0, r)); gl_FragColor = vec4(0.06, 0.65, 0.53, glow * strength); }',
+  }));
+  hoverLight.name = 'Road hover light'; scene.add(hoverLight);
   const thrusters = createThrusterEffect(drone, scene, config.boostStyle);
   const boostPulse = createBoostPulse(drone, config.boostStyle.pulseColor);
   const raceAudio = createRaceAudio();
@@ -145,6 +153,7 @@ export function createRace(
   let previous = performance.now();
   let hudElapsed = 0;
   let cameraSnap = true;
+  let cameraAltitude = model.altitudeProfile.levels[model.altitudeProfile.initialLevel];
   let bank = 0;
   let boostEntryAge = 1;
   let craftShake = 0;
@@ -301,6 +310,11 @@ export function createRace(
     const cameraScale = Math.tan(THREE.MathUtils.degToRad(visuals.baseFov / 2)) / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
     track.sample(state.distance, frame);
     drone.position.copy(frame.position).addScaledVector(frame.right, state.offset).addScaledVector(frame.up, state.altitude);
+    const heightRatio = THREE.MathUtils.clamp((state.altitude - model.altitudeProfile.levels[0]) / (model.altitudeProfile.levels.at(-1)! - model.altitudeProfile.levels[0]), 0, 1);
+    hoverLight.position.copy(frame.position).addScaledVector(frame.right, state.offset).addScaledVector(frame.up, 0.075);
+    hoverLight.quaternion.setFromRotationMatrix(poseBasis.makeBasis(frame.right, backward.copy(frame.tangent).negate(), frame.up));
+    hoverLight.scale.setScalar(0.8 + heightRatio * 0.7);
+    hoverLight.material.uniforms.strength.value = 0.32 - heightRatio * 0.16;
     flightForward.copy(frame.tangent).multiplyScalar(Math.cos(state.heading)).addScaledVector(frame.right, Math.sin(state.heading));
     flightRight.copy(frame.right).multiplyScalar(Math.cos(state.heading)).addScaledVector(frame.tangent, -Math.sin(state.heading));
     flightUp.copy(frame.up);
@@ -312,19 +326,22 @@ export function createRace(
     craftShake = THREE.MathUtils.lerp(craftShake, shakeTarget, 1 - Math.exp(-delta * 16));
     if (reducedMotion.matches) craftShake = 0;
     drone.rotateZ(bank + Math.sin(state.elapsed * 51) * craftShake);
-    drone.rotateX(Math.sin(state.elapsed * 67 + 1) * craftShake * .5);
+    drone.rotateX(Math.sin(state.elapsed * 67 + 1) * craftShake * .5 + (reducedMotion.matches ? 0 : (state.targetAltitude - state.altitude) * -0.045));
     drone.rotateY(Math.sin(state.elapsed * 43) * craftShake * .35);
     desiredCameraOffset.copy(flightForward).multiplyScalar(-8.5).addScaledVector(flightUp, 3.5);
+    const targetCameraAltitude = model.altitudeProfile.levels[0] + (state.altitude - model.altitudeProfile.levels[0]) * 0.62;
+    cameraAltitude = cameraSnap ? targetCameraAltitude : THREE.MathUtils.lerp(cameraAltitude, targetCameraAltitude, 1 - Math.exp(-delta * (reducedMotion.matches ? 12 : 4)));
     if (cameraSnap) { cameraOffset.copy(desiredCameraOffset); cameraSnap = false; }
     else cameraOffset.lerp(desiredCameraOffset, 1 - Math.exp(-delta * 9));
     camera.position.copy(drone.position).addScaledVector(cameraOffset, cameraScale);
+    camera.position.addScaledVector(flightUp, cameraAltitude - state.altitude);
     camera.position.addScaledVector(flightForward, -entry * visuals.boostEntryPullback);
     if (!reducedMotion.matches && state.boostStage === 2 && boostEntryAge < 0.22) {
       const shake = visuals.boostEntryShake * (1 - boostEntryAge / 0.22) ** 2;
       camera.position.addScaledVector(flightRight, Math.sin(boostEntryAge * 110) * shake)
         .addScaledVector(flightUp, Math.sin(boostEntryAge * 87 + 1) * shake);
     }
-    lookAt.copy(drone.position).addScaledVector(flightForward, 9).addScaledVector(flightUp, 0.6); camera.up.copy(flightUp); camera.lookAt(lookAt);
+    lookAt.copy(drone.position).addScaledVector(flightForward, 9).addScaledVector(flightUp, cameraAltitude - state.altitude - 0.5); camera.up.copy(flightUp); camera.lookAt(lookAt);
     views.update(flightForward, flightUp, bank, state.elapsed, state.boosting, reducedMotion.matches);
     thrusters.setMode(state.boostStage === 2 ? 'boost-stage2' : phase === 'running' && state.boosting ? 'boost' : phase === 'running' && input.throttle && state.speed > 1 ? 'accelerate' : 'idle');
     thrusters.setBoostCharge(state.boostStageProgress);
@@ -335,7 +352,7 @@ export function createRace(
     if (heightChanged && coarsePointer.matches && !reducedMotion.matches) boostHaptics.altitudeStep();
     hudElapsed += delta;
     if (hudElapsed >= 0.08) { hudElapsed = 0; notify(); }
-    trackVisual.update(state.elapsed, reducedMotion.matches);
+    trackVisual.update(state.elapsed, reducedMotion.matches, state.distance, state.altitude, state.speed);
     raceGates.update(timeAttack.snapshot().nextCheckpoint);
     speedLines.update(state.elapsed, state.speed, state.boosting, reducedMotion.matches, state.boostStage === 2);
     views.prepareDriving(); composer.render(delta);

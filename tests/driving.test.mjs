@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createDrivingModel, DRIVING_TUNING as tuning, NEUTRAL_INPUT } from '../output/test/game/driving/createDrivingModel.js';
+import { createDrivingModel, DRIVING_TUNING as tuning, NEUTRAL_INPUT, steeringYawRate } from '../output/test/game/driving/createDrivingModel.js';
 import { createTrack, createTrackFrame, upcomingHeightObstacle } from '../output/test/game/track/createTrack.js';
 
 const straight = { length: 1200, halfWidth: 11, checkpointSpacing: 100, heightObstacles: [], sample: () => ({ curvature: 0 }) };
@@ -22,17 +22,17 @@ test('30, 60 and 120 Hz produce the same acceleration, travel and boost charge',
   }
 });
 
-test('coasting loses speed and braking stops without reversing', () => {
+test('coasting loses speed and a held brake keeps crawling forward', () => {
   const model = createDrivingModel(straight);
   advance(model, 3, input({ throttle: true }));
   assert.equal(model.state.speed, tuning.topSpeed);
   advance(model, 1, input());
   assert.ok(model.state.speed < tuning.topSpeed && model.state.speed > 0);
   advance(model, 3, input({ brake: true }));
-  assert.equal(model.state.speed, 0);
+  assert.equal(model.state.speed, tuning.crawlSpeed);
   const distance = model.state.distance;
   advance(model, 2, input({ brake: true }));
-  assert.equal(model.state.distance, distance);
+  assert.ok(Math.abs(model.state.distance - distance - tuning.crawlSpeed * 2) < 1e-7);
 });
 
 test('holding boost after depletion cannot repeatedly trigger recharged boost', () => {
@@ -152,7 +152,7 @@ test('steering, braking and height changes complete a lap through every obstacle
     const curvature = track.sample(s.distance).curvature;
     const ahead = track.sample(s.distance + 22).curvature;
     const target = Math.min(tuning.topSpeed, .75 / Math.max(.01, Math.abs(curvature), Math.abs(ahead)));
-    const yawRate = tuning.maxYawRate / (1 + s.speed * .006) * Math.min(s.speed / 10, 1);
+    const yawRate = steeringYawRate(s.speed, tuning);
     const steer = (curvature * s.speed - s.heading * 1.8 - s.offset * .07) / Math.max(.1, yawRate);
     const next = upcomingHeightObstacle(track, s.distance);
     const desiredHeight = next.obstacle.kind === 'rise' ? tuning.maxAltitude : tuning.minAltitude;
@@ -207,4 +207,25 @@ test('height obstacles still apply on a second lap and a fixed height cannot cle
   model.step(.1, input({ boost: true }));
   assert.equal(model.state.notice, 'height-collision');
   assert.ok(model.state.distance < track.length + first.distance);
+});
+
+test('holding the brake from rest accelerates smoothly to crawl without boost or reverse travel', () => {
+  const model = createDrivingModel(straight);
+  model.step(1 / 120, input({ brake: true, boost: true }));
+  assert.ok(model.state.speed > 0 && model.state.speed < tuning.crawlSpeed);
+  advance(model, 2, input({ brake: true, boost: true }));
+  assert.equal(model.state.speed, tuning.crawlSpeed);
+  assert.equal(model.state.boostStage, 0);
+  assert.equal(model.state.charge, 1);
+});
+
+test('boost speeds increase lateral travel for the same steering input', () => {
+  const responses = [tuning.topSpeed, tuning.boostSpeed, tuning.boostStage2Speed].map(speed => {
+    const model = createDrivingModel({ ...straight, halfWidth: 100 });
+    model.state.speed = speed;
+    advance(model, .25, input({ steer: .4 }));
+    return model.state.offset;
+  });
+  assert.ok(responses[1] > responses[0] * 1.05);
+  assert.ok(responses[2] > responses[1]);
 });

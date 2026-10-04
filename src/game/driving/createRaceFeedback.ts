@@ -6,6 +6,8 @@ export interface RaceAnnouncement {
   kind: 'half-lap' | 'lap' | 'final-lap';
   title: string;
   detail: string;
+  startedAt: number;
+  duration: number;
 }
 interface Progress {
   phase: RacePhase;
@@ -46,14 +48,14 @@ export function createRaceFeedback() {
         const half = (lap - 1) * progress.gatesPerLap + Math.ceil(progress.gatesPerLap / 2);
         if (passed < half && nowPassed >= half && half < lap * progress.gatesPerLap) {
           cues.push('half-lap');
-          announcement = { id: ++sequence, kind: 'half-lap', title: `LAP ${lap} · 50%`, detail: lap === progress.totalLaps ? '마지막 반 랩, 끝까지!' : '반 랩 통과' };
+          announcement = { id: ++sequence, kind: 'half-lap', title: `LAP ${lap} · 50%`, detail: lap === progress.totalLaps ? '마지막 반 랩, 끝까지!' : '반 랩 통과', startedAt: progress.elapsed, duration: 2.4 };
           expires = progress.elapsed + 2.4;
         }
         const end = lap * progress.gatesPerLap;
         if (passed < end && nowPassed >= end && lap < progress.totalLaps) {
           const final = lap + 1 === progress.totalLaps;
           cues.push(final ? 'final-lap' : 'lap');
-          announcement = { id: ++sequence, kind: final ? 'final-lap' : 'lap', title: final ? 'FINAL LAP' : `LAP ${lap} COMPLETE`, detail: final ? `${lap}랩 완료 · 마지막 랩 시작!` : `${lap + 1} / ${progress.totalLaps} 랩 시작` };
+          announcement = { id: ++sequence, kind: final ? 'final-lap' : 'lap', title: final ? 'FINAL LAP' : `LAP ${lap} COMPLETE`, detail: final ? `${lap}랩 완료 · 마지막 랩 시작!` : `${lap + 1} / ${progress.totalLaps} 랩 시작`, startedAt: progress.elapsed, duration: final ? 3.4 : 2.8 };
           expires = progress.elapsed + (final ? 3.4 : 2.8);
         }
       }

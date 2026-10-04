@@ -1,4 +1,4 @@
-export const RACE_RULES_VERSION = 'time-attack-v1';
+export const RACE_RULES_VERSION = 'time-attack-v2';
 export const RACE_LAPS = 3;
 
 export interface TravelSegment {

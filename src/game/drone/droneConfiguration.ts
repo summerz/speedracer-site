@@ -6,6 +6,8 @@ export interface DronePerformance {
   boostStage2Threshold: number;
   acceleration: number;
   braking: number;
+  /** Minimum forward speed while holding the brake (m/s). */
+  crawlSpeed: number;
   boostAcceleration: number;
   boostStage2Acceleration: number;
   maxYawRate: number;
@@ -56,8 +58,8 @@ export interface DroneModifier {
 export const DEFAULT_DRONE_CONFIGURATION: DroneConfiguration = {
   id: 'dr-01',
   performance: {
-    topSpeed: 85, boostSpeed: 125, boostStage2Speed: 155, boostStage2Threshold: 0.6, acceleration: 46, braking: 70,
-    boostAcceleration: 68, boostStage2Acceleration: 90, maxYawRate: 2.2, corneringReferenceSpeed: 60, highSpeedSteeringLoss: 0.0035, boostDrain: 0.20, boostRecovery: 0.16,
+    topSpeed: 85, boostSpeed: 125, boostStage2Speed: 155, boostStage2Threshold: 0.6, acceleration: 46, braking: 70, crawlSpeed: 12,
+    boostAcceleration: 68, boostStage2Acceleration: 90, maxYawRate: 2.2, corneringReferenceSpeed: 60, highSpeedSteeringLoss: 0.2, boostDrain: 0.20, boostRecovery: 0.16,
   },
   speedEffects: {
     baseFov: 65, referenceSpeed: 85, cruiseFovGain: 5, boostFovGain: 8,

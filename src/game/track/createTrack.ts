@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { createDischargeBarrier } from './createDischargeBarrier.js';
-import { resolveAltitudeProfile } from './altitudeProfile.js';
+import { altitudeCanPass, resolveAltitudeProfile } from './altitudeProfile.js';
 import type { DifficultyPreset } from './difficulty.js';
 import type { AltitudeProfile } from './altitudeProfile.js';
 
@@ -236,26 +236,6 @@ export function createTrackVisual(track: Track) {
     }
   }
   group.add(rails);
-  const gateMaterial = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.5, 0.48, 0.07) });
-  const archRadius = track.halfWidth + 0.8;
-  const archPoints = Array.from({ length: 33 }, (_, i) => {
-    const angle = i / 32 * Math.PI;
-    return new THREE.Vector3(-Math.cos(angle) * archRadius, Math.sin(angle) * archRadius, 0);
-  });
-  const gateGeometry = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(archPoints), 64, 0.16, 6, false);
-  const gateFoot = new THREE.CylinderGeometry(0.45, 0.65, 0.4, 8);
-  // The start line uses the separate gold arch cluster in createRaceGates.
-  for (let i = 1; i < Math.round(track.length / track.checkpointSpacing); i++) {
-    track.sample(i * track.checkpointSpacing, frame);
-    const gate = new THREE.Group();
-    gate.position.copy(frame.position);
-    orient(gate);
-    gate.add(new THREE.Mesh(gateGeometry, gateMaterial));
-    for (const sign of [-1, 1]) {
-      const foot = new THREE.Mesh(gateFoot, gateMaterial); foot.position.set(sign * archRadius, 0.2, 0); gate.add(foot);
-    }
-    group.add(gate);
-  }
   const barriers = track.heightObstacles.map(obstacle => {
     track.sample(obstacle.distance, frame);
     const barrier = createDischargeBarrier(obstacle, track.halfWidth, maxAltitude(track));
@@ -275,8 +255,15 @@ export function createTrackVisual(track: Track) {
         barriers[track.heightObstacles.indexOf(next.obstacle)].hit();
       }
     },
-    update(time: number, reducedMotion: boolean) {
-      for (const barrier of barriers) barrier.update(time, reducedMotion);
+    update(time: number, reducedMotion: boolean, distance = 0, altitude = 1.8, speed = 0) {
+      const lap = Math.floor(distance / track.length);
+      barriers.forEach((barrier, index) => {
+        const obstacle = track.heightObstacles[index];
+        let ahead = obstacle.distance + lap * track.length - distance;
+        if (ahead < -obstacle.depth / 2 - 2.2) ahead += track.length;
+        const nearby = ahead < Math.max(120, speed * 3.5);
+        barrier.update(time, reducedMotion, nearby ? altitudeCanPass(altitude, obstacle) ? 'ready' : 'blocked' : 'neutral');
+      });
     },
   };
 }

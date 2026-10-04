@@ -4,7 +4,7 @@ import type { RaceCue } from './createRaceFeedback.js';
 export type SoundCue = RaceCue | 'impact' | 'electric-impact' | 'recovery' | 'height';
 interface Voice { source: AudioScheduledSourceNode; nodes: AudioNode[]; music: boolean }
 const frequency = (midi: number) => 440 * 2 ** ((midi - 69) / 12);
-const STEP_SECONDS = 60 / 132 / 4;
+const STEP_SECONDS = 60 / 144 / 4;
 
 /** Original synth score and drone sounds. Scheduling runs on the race frame, with no timers. */
 export function createRaceAudio() {
@@ -67,7 +67,7 @@ export function createRaceAudio() {
     source.frequency.setValueAtTime(hz, at);
     if (endHz) source.frequency.exponentialRampToValueAtTime(endHz, at + duration * 0.8);
     const gain = envelope(at, duration, level, isMusic ? music : effects);
-    const filter = context!.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = isMusic ? 2100 : 6500;
+    const filter = context!.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = isMusic ? hz >= 500 ? 4800 : 1800 : 6500;
     source.connect(filter); filter.connect(gain);
     own(source, [source, filter, gain], isMusic, at, duration);
   };
@@ -144,14 +144,16 @@ export function createRaceAudio() {
     const roots = [40, 36, 43, 38, 40, 36, 45, 47];
     const intervals = bar === 1 || bar === 2 || bar === 5 ? [0, 4, 7, 11] : [0, 3, 7, 10];
     const root = roots[bar];
-    if (beat % 4 === 0) tone(125, at, 0.2, 0.28, 'sine', true, 38);
-    if (beat === 4 || beat === 12) { hiss(at, 0.13, 0.16, 1600, true); tone(170, at, 0.08, 0.07, 'triangle', true); }
-    if (beat % 2 === 0) hiss(at, beat === 14 ? 0.12 : 0.045, beat % 4 === 2 ? 0.065 : 0.035, 7500, true);
-    if ([0, 3, 6, 8, 11, 14].includes(beat)) tone(frequency(root), at, STEP_SECONDS * 1.7, 0.075, 'triangle', true);
-    // Offset arpeggio and a long, quiet chord leave room for the engine and impact sounds.
-    const motif = [0, 2, 1, 3, 2, 1, 3, 1];
-    if (beat % 2 === 1) tone(frequency(root + 24 + intervals[motif[Math.floor(beat / 2)]]), at, STEP_SECONDS * 2.2, 0.034, 'triangle', true);
-    if (beat === 0) for (const interval of intervals.slice(0, 3)) tone(frequency(root + 12 + interval), at, STEP_SECONDS * 15, 0.019, 'sine', true);
+    if (beat === 0 || beat === 8) tone(125, at, 0.16, 0.095, 'sine', true, 38);
+    if (beat === 4 || beat === 12) hiss(at, 0.09, 0.035, 2200, true);
+    if (beat % 2 === 0) hiss(at, 0.035, 0.015, 7500, true);
+    if ([0, 6, 8, 14].includes(beat)) tone(frequency(root), at, STEP_SECONDS * 1.5, 0.035, 'triangle', true);
+    // Bright sixteenth-note arpeggios lead; the percussion only supports them.
+    const motif = [0, 1, 2, 3, 2, 1, 0, 2, 1, 2, 3, 2, 3, 1, 2, 0];
+    const note = root + 36 + intervals[motif[beat]] + (bar >= 4 && beat >= 12 ? 12 : 0);
+    tone(frequency(note), at, STEP_SECONDS * 1.45, beat % 4 === 0 ? 0.062 : 0.048, 'sawtooth', true);
+    tone(frequency(note + 12), at, STEP_SECONDS * 0.8, 0.01, 'sine', true);
+    if (beat === 0) for (const interval of intervals.slice(0, 3)) tone(frequency(root + 12 + interval), at, STEP_SECONDS * 15, 0.012, 'sine', true);
   };
   return {
     activate,

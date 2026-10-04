@@ -1,3 +1,4 @@
+import { altitudeCanPass } from './game/track/altitudeProfile';
 import { DIFFICULTIES } from './game/track/difficulty';
 import type { DifficultyId } from './game/track/difficulty';
 import { raceViewLayout } from './game/driving/createRaceViews';
@@ -23,7 +24,7 @@ export function mountRace(root: HTMLDivElement, onHangar: () => void): () => voi
       <button type="button" id="race-pause" class="race-pause" aria-label="일시정지 메뉴" aria-keyshortcuts="Escape" aria-controls="drive-overlay" aria-expanded="false"><span aria-hidden="true">Ⅱ</span></button>
       <div class="driving-overlay"><div id="race-announcement" class="race-announcement" role="status" aria-live="polite" hidden><strong></strong><span></span></div><p id="race-notice" class="race-notice" role="status" aria-live="polite"></p><div id="race-countdown" class="race-countdown" role="status" aria-live="assertive" hidden><span>READY</span><strong>3</strong></div>
       <footer class="drive-hud" aria-label="고도와 부스트 계기판">
-        <aside class="height-guide" aria-label="고도 안내: 청록색은 현재, 주황색은 통과 목표"><div id="height-level" class="height-bars"></div><strong id="height-instruction"></strong></aside>
+        <aside class="height-guide" aria-label="고도 안내: 선택 단계, 민트색 통과 가능, 빨강 통과 불가, 주황 전환 중"><div id="height-level" class="height-bars"></div><strong id="height-instruction"></strong></aside>
         <div class="boost-readout"><div class="hud-pair"><span class="hud-label">BOOST</span><span id="boost-value" class="mono">100%</span></div><div id="boost-meter" class="boost-meter" role="progressbar" aria-label="부스트 잔량" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"><span></span></div><div id="boost-stage-meter" class="boost-stage-meter" role="progressbar" aria-label="부스트 2단계 축적" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span></span></div><span id="boost-status">Space 유지 · 3초 후 2단계</span></div>
       </footer></div>
       <section id="drive-overlay" class="drive-overlay" aria-labelledby="drive-overlay-title">
@@ -103,7 +104,6 @@ export function mountRace(root: HTMLDivElement, onHangar: () => void): () => voi
   let lastCollisions = 0;
   let impactAnimation: Animation | undefined;
   let boostFlashAnimation: Animation | undefined;
-  let announcementAnimation: Animation | undefined;
   let lastBoostStage = 0;
   let lastAnnouncement = 0;
   let lost = false;
@@ -157,12 +157,11 @@ export function mountRace(root: HTMLDivElement, onHangar: () => void): () => voi
       announcement.dataset.kind = state.announcement.kind;
       announcement.querySelector('strong')!.textContent = state.announcement.title;
       announcement.querySelector('span')!.textContent = state.announcement.detail;
-      announcementAnimation?.cancel();
-      const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      announcementAnimation = announcement.animate([
-        { opacity: 0, transform: reduced ? 'none' : 'translateX(-10px)' },
-        { opacity: 1, transform: 'none' },
-      ], { duration: state.announcement.kind === 'final-lap' ? 320 : 200 });
+    }
+    if (state.announcement) {
+      const age = Math.max(0, state.elapsed - state.announcement.startedAt);
+      const remaining = state.announcement.duration - age;
+      announcement.style.opacity = String(Math.min(1, age / 0.18, Math.max(0, remaining / 0.65)));
     }
     speed.textContent = Math.round(state.speed * 3.6).toString().padStart(3, '0');
     const percentage = Math.round(state.charge * 100);
@@ -196,8 +195,9 @@ export function mountRace(root: HTMLDivElement, onHangar: () => void): () => voi
       drivingOverlay.dataset.view = state.view;
     }
     if (heightBars.childElementCount !== levels.length) heightBars.innerHTML = levels.map(() => '<i></i>').join('');
-    const currentLevel = levels.reduce((best, height, index) => Math.abs(height - state.altitude) < Math.abs(levels[best] - state.altitude) ? index : best, 0);
-    heightGuide.setAttribute('aria-label', `현재 고도 ${currentLevel + 1}/${levels.length} · 청록색 현재, 주황색 통과 목표`);
+    const currentLevel = state.altitudeLevel;
+    const settled = Math.abs(levels[currentLevel] - state.altitude) < 0.08;
+    heightGuide.setAttribute('aria-label', `현재 고도 ${currentLevel + 1}/${levels.length} · 선택 단계 · 민트색 통과 가능, 빨강 통과 불가, 주황 전환 중`);
     if (state.altitudeLevel !== previousLevel) {
       if (previousLevel >= 0) highlightUntil = performance.now() + 900;
       previousLevel = state.altitudeLevel;
@@ -206,22 +206,25 @@ export function mountRace(root: HTMLDivElement, onHangar: () => void): () => voi
     const obstacle = state.heightObstacle;
     [...heightBars.children].forEach((line, index) => {
       line.classList.toggle('is-active', index === currentLevel);
-      line.classList.toggle('is-safe', Boolean(obstacle && levels[index] >= obstacle.minAltitude && levels[index] <= obstacle.maxAltitude));
+      line.classList.toggle('is-safe', Boolean(obstacle && altitudeCanPass(levels[index], obstacle)));
+      line.classList.toggle('is-switching', index === currentLevel && !settled);
     });
     if (obstacle) {
       const safeLevels = levels.map((height, index) => ({ height, index })).filter(({ height }) => height >= obstacle.minAltitude && height <= obstacle.maxAltitude);
       const nearest = safeLevels.sort((a, b) => Math.abs(a.index - state.altitudeLevel) - Math.abs(b.index - state.altitudeLevel))[0];
       const steps = nearest ? nearest.index - state.altitudeLevel : 0;
-      const safe = state.altitude >= obstacle.minAltitude && state.altitude <= obstacle.maxAltitude;
+      const safe = altitudeCanPass(state.altitude, obstacle);
       const approaching = obstacle.distance < Math.max(60, state.speed * 3);
       const control = coarsePointer.matches ? '버튼' : '키';
       const action = nearest ? steps === 0 ? '고도 전환 중' : `${steps > 0 ? '↑' : '↓'} ${control} ${Math.abs(steps)}회` : '통과 고도 없음';
       heightInstruction.textContent = approaching && !safe ? action : '';
       heightGuide.classList.toggle('height-ready', safe);
+      heightGuide.dataset.readiness = !settled ? 'switching' : safe ? 'ready' : 'blocked';
       heightGuide.classList.toggle('height-alert', approaching && !safe);
       heightGuide.classList.toggle('height-urgent', !safe && obstacle.distance < Math.max(35, state.speed * 1.5));
       heightGuide.dataset.kind = obstacle.kind;
     } else {
+      heightGuide.dataset.readiness = settled ? 'neutral' : 'switching';
       heightInstruction.textContent = '';
       heightGuide.classList.remove('height-ready', 'height-alert', 'height-urgent');
     }
@@ -266,7 +269,7 @@ export function mountRace(root: HTMLDivElement, onHangar: () => void): () => voi
   get('race-hangar').addEventListener('click', onHangar, listen);
   get('drive-retry').addEventListener('click', () => location.reload(), listen);
   const prepareRace = () => {
-    race?.dispose(); lastPhase = ''; lastViewKey = ''; previewing = false; lastCollisions = 0; lastBoostStage = 0; lastAnnouncement = 0; impactAnimation?.cancel(); boostFlashAnimation?.cancel(); announcementAnimation?.cancel();
+    race?.dispose(); lastPhase = ''; lastViewKey = ''; previewing = false; lastCollisions = 0; lastBoostStage = 0; lastAnnouncement = 0; impactAnimation?.cancel(); boostFlashAnimation?.cancel();
     get('difficulty-description').textContent = DIFFICULTIES[selectedDifficulty].description;
     try {
       race = createRace(get<HTMLDivElement>('race-scene'), update, showError, undefined, undefined, DIFFICULTIES[selectedDifficulty]);
@@ -313,5 +316,5 @@ export function mountRace(root: HTMLDivElement, onHangar: () => void): () => voi
     const enabled = hapticsButton.getAttribute('aria-pressed') !== 'true';
     hapticsButton.setAttribute('aria-pressed', String(enabled)); race?.setHapticsEnabled(enabled);
   }, listen);
-  return () => { preferences.close(); impactAnimation?.cancel(); boostFlashAnimation?.cancel(); announcementAnimation?.cancel(); events.abort(); race?.dispose(); window.dispatchEvent(new CustomEvent('speedracer:phase', { detail: 'hangar' })); };
+  return () => { preferences.close(); impactAnimation?.cancel(); boostFlashAnimation?.cancel(); events.abort(); race?.dispose(); window.dispatchEvent(new CustomEvent('speedracer:phase', { detail: 'hangar' })); };
 }
