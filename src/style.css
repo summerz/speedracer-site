@@ -1,5 +1,7 @@
 :root { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #e9f2f4; background: #080e14; font-synthesis: none; --accent: #56dacf; --muted: #8c9ba4; }
 * { box-sizing: border-box; }
+/* Disable Safari double-tap zoom throughout the app while keeping menu scrolling. */
+html, body { touch-action: manipulation; }
 body { margin: 0; }
 button, a { -webkit-tap-highlight-color: transparent; }
 button { font: inherit; cursor: pointer; }
