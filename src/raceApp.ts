@@ -1,3 +1,8 @@
+import { OFF_TRACK_PENALTY_POINTS } from './game/driving/createDrivingModel';
+import { RENDER_QUALITIES } from './platform/renderQuality';
+import type { RenderQuality } from './platform/renderQuality';
+import { DEFAULT_DRONE_CONFIGURATION } from './game/drone/droneConfiguration';
+import type { DroneConfiguration } from './game/drone/droneConfiguration';
 import { altitudeCanPass } from './game/track/altitudeProfile';
 import { DIFFICULTIES } from './game/track/difficulty';
 import type { DifficultyId } from './game/track/difficulty';
@@ -11,7 +16,7 @@ const formatTime = (seconds: number) => {
   return `${Math.floor(ms / 60000).toString().padStart(2, '0')}:${Math.floor(ms / 1000 % 60).toString().padStart(2, '0')}.${(ms % 1000).toString().padStart(3, '0')}`;
 };
 
-export function mountRace(root: HTMLDivElement, onHangar: () => void): () => void {
+export function mountRace(root: HTMLDivElement, onHangar: () => void, configuration: DroneConfiguration = DEFAULT_DRONE_CONFIGURATION): () => void {
   document.title = 'Speedracer — 타임어택';
   root.innerHTML = `
     <main class="drive-screen">
@@ -31,7 +36,7 @@ export function mountRace(root: HTMLDivElement, onHangar: () => void): () => voi
         <div class="drive-dialog">
           <p class="eyebrow">NEON CIRCUIT · TIME ATTACK</p><h2 id="drive-overlay-title">레이스 준비</h2><p id="drive-overlay-copy"></p>
           <p id="pause-summary" class="pause-summary" hidden></p>
-          <section id="race-result" class="race-result" aria-label="경기 결과" hidden><p id="result-status" class="result-status"></p><time id="result-total" class="result-total"></time><ol id="result-laps" class="result-laps"></ol><p id="result-best"></p><p id="record-warning" class="record-warning" hidden>기록을 저장하지 못했습니다. 이번 화면에서 확인할 수 있습니다.</p></section>
+          <section id="race-result" class="race-result" aria-label="경기 결과" hidden><p id="result-status" class="result-status"></p><time id="result-total" class="result-total"></time><ol id="result-laps" class="result-laps"></ol><p id="result-best"></p><p id="result-penalties"></p><p id="record-warning" class="record-warning" hidden>기록을 저장하지 못했습니다. 이번 화면에서 확인할 수 있습니다.</p></section>
           <fieldset id="difficulty-picker" class="difficulty-picker"><legend>난이도</legend><div><label><input type="radio" name="difficulty" value="beginner" checked /><span>초급</span></label><label><input type="radio" name="difficulty" value="intermediate" /><span>중급</span></label><label><input type="radio" name="difficulty" value="advanced" /><span>고급</span></label></div></fieldset><p id="difficulty-description" class="difficulty-description"></p>
           <p id="ready-best" class="ready-best"></p><button type="button" id="drive-start" class="primary-action">레이스 시작 <span aria-hidden="true">↗</span></button>
           <button type="button" id="race-hangar" class="race-exit">격납고로</button>
@@ -49,9 +54,12 @@ export function mountRace(root: HTMLDivElement, onHangar: () => void): () => voi
       <dialog id="race-preferences" class="race-preferences" aria-labelledby="preferences-title">
         <header><h2 id="preferences-title">설정</h2><button type="button" id="preferences-close" aria-label="설정 닫기">닫기</button></header>
         <div class="preference-options"><button type="button" id="race-bloom" aria-pressed="true"><span>네온 발광 <small>Bloom</small></span></button><button type="button" id="race-sound" aria-pressed="true"><span>주행 효과음</span></button><button type="button" id="race-music" aria-pressed="true"><span>배경 음악 <small>Neon Circuit</small></span></button><button type="button" id="race-haptics" aria-pressed="true"><span>진동</span></button></div>
+        <div class="render-options"><label for="race-quality">렌더링 품질</label><select id="race-quality">${Object.entries(RENDER_QUALITIES).map(([id, option]) => `<option value="${id}" ${id === 'balanced' ? 'selected' : ''}>${option.label}</option>`).join('')}</select></div>
+        <div class="preference-options"><button type="button" id="race-haze" aria-pressed="false"><span>배기 아지랑이 <small>추적 시점</small></span></button></div>
+        <p class="quality-hint">아지랑이는 배기 주변에만 적용합니다. 성능이 낮으면 끄거나 ‘성능 우선’을 선택하세요.</p>
         <details class="control-help"><summary>조작 안내</summary>
           <div class="drive-keys"><span>자동 가속 · <kbd>S</kbd> 감속</span><span><kbd>A</kbd> <kbd>D</kbd> 좌우 조향</span><span><kbd>↓</kbd> <kbd>↑</kbd> 고도 한 단계 전환</span><span><kbd>Space</kbd> 길게 눌러 부스트</span><span><kbd>C</kbd> 기체·콕핏 전환</span><span><kbd>X</kbd> 트랙 PIP·자리 교환·닫기</span><span><kbd>F</kbd> 체크포인트 복귀</span><span><kbd>Esc</kbd> 일시정지·계속하기</span></div>
-          <p class="touch-help">자동으로 가속합니다. 왼쪽 조이스틱은 좌우 조향, 아래로 당기면 감속합니다. 대각선으로 두 조작을 함께 할 수 있습니다.<br />오른쪽 ↑/↓ 버튼은 고도를 한 단계 바꾸고, BOOST는 길게 눌러 사용합니다. 3초 연속 부스트 시 2단계에 진입합니다.<br />시점은 일시정지 메뉴의 화면 미리보기에서 바꿀 수 있습니다.</p>
+          <p class="touch-help">자동으로 가속합니다. 왼쪽 조이스틱은 좌우 조향, 아래로 당기면 감속합니다. 대각선으로 두 조작을 함께 할 수 있습니다.<br />오른쪽 ↑/↓ 버튼은 고도를 한 단계 바꾸고, BOOST는 길게 눌러 사용합니다. ${(configuration.performance.boostStage2Threshold / configuration.performance.boostDrain).toFixed(1)}초 연속 부스트 시 2단계에 진입합니다.<br />시점은 일시정지 메뉴의 화면 미리보기에서 바꿀 수 있습니다.</p>
         </details>
       </dialog>
       <section id="drive-error" class="drive-overlay" role="alert" hidden><div class="drive-dialog"><h2>3D 화면 연결이<br />끊어졌습니다.</h2><p>다시 불러온 후 주행을 시작해주세요.</p><button type="button" id="drive-retry" class="primary-action">다시 불러오기</button></div></section>
@@ -61,6 +69,8 @@ export function mountRace(root: HTMLDivElement, onHangar: () => void): () => voi
   const startButton = get<HTMLButtonElement>('drive-start');
   const pauseButton = get<HTMLButtonElement>('race-pause');
   const bloomButton = get<HTMLButtonElement>('race-bloom');
+  const qualitySelect = get<HTMLSelectElement>('race-quality');
+  const hazeButton = get<HTMLButtonElement>('race-haze');
   const soundButton = get<HTMLButtonElement>('race-sound');
   const musicButton = get<HTMLButtonElement>('race-music');
   const hapticsButton = get<HTMLButtonElement>('race-haptics');
@@ -131,6 +141,8 @@ export function mountRace(root: HTMLDivElement, onHangar: () => void): () => voi
       get('result-total').textContent = formatTime(state.elapsed);
       get('result-laps').innerHTML = attack.lapTimes.map((lap, i) => `<li><span>LAP ${i + 1}</span><time>${formatTime(lap)}</time></li>`).join('');
       get('result-best').textContent = `최고 기록 ${formatTime(attack.result!.best.total)}`;
+      get('result-penalties').textContent = state.penaltyPoints ? `코스 이탈 ${state.offTrackExits}회 · 벌점 -${state.penaltyPoints}P` : '';
+      get('result-penalties').hidden = state.penaltyPoints === 0;
       get('record-warning').hidden = attack.result!.saved;
     }
     if (state.collisions > lastCollisions && state.notice === 'height-collision') {
@@ -230,7 +242,7 @@ export function mountRace(root: HTMLDivElement, onHangar: () => void): () => voi
     }
     const curvature = state.upcomingCurvature;
     corner.textContent = state.upcomingSection === 'vertical-loop' ? '수직 루프 · 자동 추종' : state.upcomingSection === 'helix' ? '스프링 · 자동 추종' : Math.abs(curvature) < 0.004 ? '직선' : `${curvature > 0 ? '우' : '좌'}회전${Math.abs(curvature) > 0.02 ? ' · 급한 코너' : ''}`;
-    const nextNotice = attack.missedCheckpoint ? `체크포인트 누락 · ${coarsePointer.matches ? '일시정지 메뉴에서 복귀' : 'F로 복귀'}` : state.notice === 'collision' ? '경계 접촉 · 감속' : state.notice === 'height-collision' ? '방전 접촉 · 급감속' : state.notice === 'recovery' ? '체크포인트 복귀' : '';
+    const nextNotice = state.notice === 'off-track' ? `코스 이탈 · -${OFF_TRACK_PENALTY_POINTS}P` : state.notice === 'collision' ? '경계 접촉 · 감속' : state.notice === 'height-collision' ? '방전 접촉 · 급감속' : state.notice === 'recovery' ? '체크포인트 복귀' : '';
     if (notice.textContent !== nextNotice) notice.textContent = nextNotice;
     if (state.phase !== lastPhase) {
       lastPhase = state.phase;
@@ -264,6 +276,7 @@ export function mountRace(root: HTMLDivElement, onHangar: () => void): () => voi
   let race: Race | undefined;
   const showError = () => {
     lost = true; preferences.close(); get('view-preview').hidden = true; overlay.hidden = true; get('drive-error').hidden = false;
+    qualitySelect.disabled = true; hazeButton.disabled = true;
     get<HTMLButtonElement>('race-restart').disabled = true; pauseButton.disabled = true; bloomButton.disabled = true; soundButton.disabled = true; musicButton.disabled = true; hapticsButton.disabled = true; get<HTMLButtonElement>('race-view').disabled = true; get<HTMLButtonElement>('race-track').disabled = true; get<HTMLButtonElement>('race-settings').disabled = true;
   };
   get('race-hangar').addEventListener('click', onHangar, listen);
@@ -272,7 +285,9 @@ export function mountRace(root: HTMLDivElement, onHangar: () => void): () => voi
     race?.dispose(); lastPhase = ''; lastViewKey = ''; previewing = false; lastCollisions = 0; lastBoostStage = 0; lastAnnouncement = 0; impactAnimation?.cancel(); boostFlashAnimation?.cancel();
     get('difficulty-description').textContent = DIFFICULTIES[selectedDifficulty].description;
     try {
-      race = createRace(get<HTMLDivElement>('race-scene'), update, showError, undefined, undefined, DIFFICULTIES[selectedDifficulty]);
+      race = createRace(get<HTMLDivElement>('race-scene'), update, showError, configuration, undefined, DIFFICULTIES[selectedDifficulty]);
+      race.setQuality(qualitySelect.value as RenderQuality);
+      race.setExhaustHaze(hazeButton.getAttribute('aria-pressed') === 'true');
       race.setBloom(bloomButton.getAttribute('aria-pressed') === 'true');
       race.setSoundEnabled(soundButton.getAttribute('aria-pressed') === 'true');
       race.setMusicEnabled(musicButton.getAttribute('aria-pressed') === 'true');
@@ -300,6 +315,11 @@ export function mountRace(root: HTMLDivElement, onHangar: () => void): () => voi
   pauseButton.addEventListener('click', () => { pauseButton.blur(); if (previewing) leavePreview(); else race?.togglePause(); }, listen);
   get('race-restart').addEventListener('click', () => race?.restart(), listen);
   get('race-recover').addEventListener('click', () => race?.recover(), listen);
+  qualitySelect.addEventListener('change', () => race?.setQuality(qualitySelect.value as RenderQuality), listen);
+  hazeButton.addEventListener('click', () => {
+    const enabled = hazeButton.getAttribute('aria-pressed') !== 'true';
+    hazeButton.setAttribute('aria-pressed', String(enabled)); race?.setExhaustHaze(enabled);
+  }, listen);
   bloomButton.addEventListener('click', () => {
     const enabled = bloomButton.getAttribute('aria-pressed') !== 'true';
     bloomButton.setAttribute('aria-pressed', String(enabled)); race?.setBloom(enabled);

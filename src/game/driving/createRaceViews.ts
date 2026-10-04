@@ -59,15 +59,6 @@ export function createRaceViews(camera: THREE.PerspectiveCamera, drone: THREE.Gr
   const route = new Line2(new LineGeometry().setPositions(positions),
     new LineMaterial({ color: 0x159b9b, linewidth: 2.2, toneMapped: false }));
   route.name = 'overviewRoute'; scene.add(route);
-  // Small cockpit instruments remain below the clear forward sightline.
-  const instruments = new THREE.Group(); instruments.name = 'cockpitInstruments';
-  const mat = new THREE.MeshBasicMaterial({ color: 0x67dcca, depthTest: false });
-  for (const sign of [-1, 1]) {
-    const rail = new THREE.Mesh(new THREE.BoxGeometry(.008, .22, .008), mat);
-    rail.position.set(sign * .31, -.24, -.55); rail.rotation.z = sign * -.4; instruments.add(rail);
-  }
-  const dash = new THREE.Mesh(new THREE.BoxGeometry(.25, .006, .008), mat); dash.position.set(0, -.28, -.55); instruments.add(dash);
-  camera.add(instruments);
   let view: RaceView = 'chase';
   let trackDisplay: TrackDisplay = 'hidden';
   // A distant camera needs a farther near plane to keep road/route depth precise.
@@ -76,7 +67,6 @@ export function createRaceViews(camera: THREE.PerspectiveCamera, drone: THREE.Gr
   const up = new THREE.Vector3(), forward = new THREE.Vector3(), target = new THREE.Vector3();
   const prepareDriving = () => {
     marker.visible = route.visible = false;
-    instruments.visible = view === 'cockpit';
     if (canopy) canopy.visible = view !== 'cockpit';
     if (panel && panelColor) panel.material.color.copy(panelColor).multiplyScalar(view === 'cockpit' ? .08 : 1);
     scene.fog = fog;
@@ -97,7 +87,7 @@ export function createRaceViews(camera: THREE.PerspectiveCamera, drone: THREE.Gr
     },
     prepareDriving,
     prepareOverview() {
-      marker.visible = route.visible = true; instruments.visible = false;
+      marker.visible = route.visible = true;
       if (canopy) canopy.visible = true;
       if (panel && panelColor) panel.material.color.copy(panelColor);
       scene.fog = null;

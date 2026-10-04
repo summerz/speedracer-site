@@ -50,7 +50,7 @@ test('countdown and running pause freeze every race clock and resume their own p
 });
 
 test('only ordered forward gates count; reversing and shuttling across the start cannot finish', () => {
-  const progress = createRaceProgress(100, 4, 10);
+  const progress = createRaceProgress(100, 4);
   progress.cross(travel(90, 105)); // Skipped all preceding gates.
   progress.cross(travel(105, 90, 11, 12));
   progress.cross(travel(90, 105, 12, 13));
@@ -64,18 +64,17 @@ test('only ordered forward gates count; reversing and shuttling across the start
   assert.equal(progress.snapshot().completedLaps, 1);
 });
 
-test('gate width is tested at the crossing, and a missed gate needs recovery before later gates', () => {
-  const progress = createRaceProgress(100, 4, 10);
+test('lateral departures do not invalidate ordered forward gates or prevent finishing', () => {
+  const progress = createRaceProgress(100, 4);
   progress.cross(travel(0, 50, 0, 5, 0, 30));
-  assert.equal(progress.snapshot().checkpoint, 0, 'crossing at offset 15 misses gate 25');
-  progress.cross(travel(50, 100, 5, 10));
-  assert.equal(progress.snapshot().completedLaps, 0);
-  progress.cross(travel(0, 100, 10, 20)); // Actual forward travel after recovery.
-  assert.equal(progress.snapshot().completedLaps, 1);
+  assert.equal(progress.snapshot().checkpoint, 50);
+  progress.cross(travel(50, 300, 5, 30, 30, -30));
+  assert.equal(progress.snapshot().completedLaps, 3);
+  assert.deepEqual(progress.snapshot().lapTimes, [10, 10, 10]);
 });
 
 test('swept travel catches multiple high speed gates and interpolates the third finish exactly once', () => {
-  const progress = createRaceProgress(100, 20, 10);
+  const progress = createRaceProgress(100, 20);
   assert.equal(progress.cross(travel(0, 310, 0, 31)), 30);
   const s = progress.snapshot();
   assert.equal(s.completedLaps, 3);
@@ -85,34 +84,48 @@ test('swept travel catches multiple high speed gates and interpolates the third 
 });
 
 test('millisecond lap displays sum to the displayed total, including fractional gate crossings', () => {
-  const progress = createRaceProgress(100, 4, 10);
+  const progress = createRaceProgress(100, 4);
   progress.cross(travel(0, 301, 0, 32.4567));
   const s = progress.snapshot();
   assert.equal(s.lapTimes.reduce((sum, lap) => sum + Math.round(lap * 1000), 0), Math.round(s.finishTime * 1000));
 });
 
 test('invalid motion cannot corrupt checkpoint state', () => {
-  const progress = createRaceProgress(100, 4, 10);
+  const progress = createRaceProgress(100, 4);
   for (const segment of [travel(0, NaN), travel(0, Infinity), travel(0, 100, 10, 0), travel(100, 0, 0, 10)]) progress.cross(segment);
   assert.equal(progress.snapshot().checkpoint, 0);
 });
 
-test('automatic and manual recovery do not award gates and keep time and boost expenditure', () => {
+test('departure penalties survive pause and finish, while restart clears them', () => {
+  const session = race(); session.start(); advance(session, 3.1);
+  Object.assign(session.model.state, { distance: 24, speed: 85, offset: 20, altitude: 5.8, targetAltitude: 5.8 });
+  session.step(.1, controls);
+  assert.ok(session.model.state.distance > 25);
+  assert.equal(session.model.state.checkpoint, 25);
+  assert.equal(session.model.state.recoveries, 0);
+  assert.equal(session.snapshot().penaltyPoints, 5);
+  session.pause(); const paused = session.snapshot(); advance(session, 10);
+  assert.deepEqual(session.snapshot(), paused);
+  session.start(); session.model.state.offset = 0; advance(session, 30);
+  assert.equal(session.phase, 'finished');
+  assert.equal(session.snapshot().offTrackExits, 1);
+  assert.equal(session.snapshot().penaltyPoints, 5);
+  session.restart();
+  assert.equal(session.snapshot().offTrackExits, 0);
+  assert.equal(session.snapshot().penaltyPoints, 0);
+});
+
+test('optional manual recovery does not award gates and preserves time and charge', () => {
   const session = race(); session.start(); advance(session, 3.1);
   session.model.state.distance = 20; session.model.state.speed = 85;
   advance(session, .1, { ...controls, boost: true });
-  assert.equal(session.model.state.checkpoint, 25);
-  const before = session.model.state.elapsed, charge = session.model.state.charge;
-  Object.assign(session.model.state, { offset: 20, altitude: 5.8, targetAltitude: 5.8 });
-  session.step(1 / 120, controls);
-  assert.equal(session.model.state.distance, 25);
-  assert.equal(session.snapshot().completedLaps, 0);
-  assert.equal(session.model.state.recoveries, 1);
-  assert.ok(session.model.state.elapsed > before);
-  assert.ok(session.model.state.charge <= charge);
+  const before = { ...session.snapshot(), ...session.model.state };
   session.pause(); session.recover();
   assert.equal(session.phase, 'paused');
-  assert.equal(session.model.state.distance, 25);
+  assert.equal(session.model.state.distance, before.checkpoint);
+  assert.equal(session.model.state.elapsed, before.elapsed);
+  assert.equal(session.model.state.charge, before.charge);
+  assert.equal(session.snapshot().completedLaps, before.completedLaps);
 });
 
 test('three laps finish only once; result is stable, persisted and restart fully resets the session', () => {

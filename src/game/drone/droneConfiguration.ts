@@ -6,6 +6,8 @@ export interface DronePerformance {
   boostStage2Threshold: number;
   acceleration: number;
   braking: number;
+  /** Fraction of speed lost on a wall impact. Electric fields scale this by severity. */
+  collisionSpeedLoss: number;
   /** Minimum forward speed while holding the brake (m/s). */
   crawlSpeed: number;
   boostAcceleration: number;
@@ -42,6 +44,7 @@ export interface SpeedEffects {
 
 export interface DroneConfiguration {
   id: string;
+  modelVariant: string;
   performance: DronePerformance;
   speedEffects: SpeedEffects;
   boostStyle: { pulseColor: string; core: string; body: string; tail: string; afterglow: string };
@@ -57,8 +60,9 @@ export interface DroneModifier {
 
 export const DEFAULT_DRONE_CONFIGURATION: DroneConfiguration = {
   id: 'dr-01',
+  modelVariant: 'vanguard',
   performance: {
-    topSpeed: 85, boostSpeed: 125, boostStage2Speed: 155, boostStage2Threshold: 0.6, acceleration: 46, braking: 70, crawlSpeed: 12,
+    topSpeed: 85, boostSpeed: 125, boostStage2Speed: 155, boostStage2Threshold: 0.6, acceleration: 46, braking: 70, collisionSpeedLoss: 0.38, crawlSpeed: 12,
     boostAcceleration: 68, boostStage2Acceleration: 90, maxYawRate: 2.2, corneringReferenceSpeed: 60, highSpeedSteeringLoss: 0.2, boostDrain: 0.20, boostRecovery: 0.16,
   },
   speedEffects: {
@@ -92,6 +96,7 @@ export function resolveDroneConfiguration(base: DroneConfiguration, modifiers: r
   performance.boostSpeed = Math.max(performance.topSpeed, performance.boostSpeed);
   performance.boostStage2Speed = Math.max(performance.boostSpeed, performance.boostStage2Speed);
   if (performance.boostStage2Threshold >= 1) throw new RangeError('Stage 2 threshold must be between 0 and 1');
+  if (performance.collisionSpeedLoss >= 1) throw new RangeError('Collision speed loss must be between 0 and 1');
   for (const color of Object.values(boostStyle)) {
     if (!/^#[0-9a-f]{6}$/i.test(color)) throw new RangeError('Boost colors must use six-digit hex');
   }
@@ -102,5 +107,5 @@ export function resolveDroneConfiguration(base: DroneConfiguration, modifiers: r
     throw new RangeError('Invalid speed effect reference, response or field of view');
   }
   if (speedEffects.boostWarpStrength > 1) throw new RangeError('Boost warp strength must be between 0 and 1');
-  return { id: base.id, performance, speedEffects, boostStyle };
+  return { id: base.id, modelVariant: base.modelVariant, performance, speedEffects, boostStyle };
 }

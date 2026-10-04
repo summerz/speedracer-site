@@ -1,3 +1,6 @@
+import { RENDER_QUALITIES } from '../../platform/renderQuality';
+import type { RenderQuality } from '../../platform/renderQuality';
+import { createExhaustHaze } from './createExhaustHaze';
 import * as THREE from 'three';
 import { createRaceViews, raceViewLayout, VIEW_LABELS } from './createRaceViews';
 import type { RaceView, TrackDisplay, Viewport } from './createRaceViews';
@@ -49,6 +52,8 @@ export interface Race {
   toggleCockpit(): void;
   cycleTrack(): void;
   setBloom(enabled: boolean): void;
+  setQuality(quality: RenderQuality): void;
+  setExhaustHaze(enabled: boolean): void;
   setSoundEnabled(enabled: boolean): void;
   setMusicEnabled(enabled: boolean): void;
   setHapticsEnabled(enabled: boolean): void;
@@ -79,16 +84,8 @@ export function createRace(
   const track = createTrack(altitudeProfile, difficulty);
   const trackVisual = createTrackVisual(track);
   scene.add(trackVisual.object);
-  const drone = createRacingDrone({ neonBoost: 1.7, thrusterIntensity: 0.35 });
+  const drone = createRacingDrone({ variant: config.modelVariant, neonBoost: 1.7, thrusterIntensity: 0.35 });
   scene.add(drone);
-  // A cheap road-bound light makes the craft's height above the track visible.
-  const hoverLight = new THREE.Mesh(new THREE.PlaneGeometry(7, 10), new THREE.ShaderMaterial({
-    transparent: true, depthWrite: false,
-    uniforms: { strength: { value: 0.2 } },
-    vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-    fragmentShader: 'varying vec2 vUv; uniform float strength; void main() { float r = length((vUv - 0.5) * 2.0); float glow = exp(-r * r * 6.0) * (1.0 - smoothstep(0.7, 1.0, r)); gl_FragColor = vec4(0.06, 0.65, 0.53, glow * strength); }',
-  }));
-  hoverLight.name = 'Road hover light'; scene.add(hoverLight);
   const thrusters = createThrusterEffect(drone, scene, config.boostStyle);
   const boostPulse = createBoostPulse(drone, config.boostStyle.pulseColor);
   const raceAudio = createRaceAudio();
@@ -109,9 +106,11 @@ export function createRace(
   const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 }));
   const render = new RenderPass(scene, camera);
   const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.65, 0.25, 0.95);
+  const exhaustHaze = createExhaustHaze(drone, camera);
+  let renderQuality: RenderQuality = 'balanced';
   const output = new OutputPass();
   const boostWarp = createBoostWarp(visuals.boostWarpStrength);
-  composer.addPass(render); composer.addPass(bloom); composer.addPass(boostWarp.pass); composer.addPass(output);
+  composer.addPass(render); composer.addPass(bloom); composer.addPass(exhaustHaze.pass); composer.addPass(boostWarp.pass); composer.addPass(output);
   composer.renderToScreen = false;
   const overviewComposer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 }));
   const overviewRender = new RenderPass(scene, views.overviewCamera);
@@ -237,7 +236,7 @@ export function createRace(
     if (disposed || lost) return;
     const { width, height } = container.getBoundingClientRect();
     if (width <= 0 || height <= 0) return;
-    const ratio = Math.min(window.devicePixelRatio || 1, 1.5);
+    const ratio = Math.min(window.devicePixelRatio || 1, RENDER_QUALITIES[renderQuality].pixelRatio);
     renderer.setPixelRatio(ratio); renderer.setSize(width, height, false);
     layout = raceViewLayout(width, height, views.trackDisplay, coarsePointer.matches);
     const driving = layout.driving;
@@ -310,11 +309,6 @@ export function createRace(
     const cameraScale = Math.tan(THREE.MathUtils.degToRad(visuals.baseFov / 2)) / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
     track.sample(state.distance, frame);
     drone.position.copy(frame.position).addScaledVector(frame.right, state.offset).addScaledVector(frame.up, state.altitude);
-    const heightRatio = THREE.MathUtils.clamp((state.altitude - model.altitudeProfile.levels[0]) / (model.altitudeProfile.levels.at(-1)! - model.altitudeProfile.levels[0]), 0, 1);
-    hoverLight.position.copy(frame.position).addScaledVector(frame.right, state.offset).addScaledVector(frame.up, 0.075);
-    hoverLight.quaternion.setFromRotationMatrix(poseBasis.makeBasis(frame.right, backward.copy(frame.tangent).negate(), frame.up));
-    hoverLight.scale.setScalar(0.8 + heightRatio * 0.7);
-    hoverLight.material.uniforms.strength.value = 0.32 - heightRatio * 0.16;
     flightForward.copy(frame.tangent).multiplyScalar(Math.cos(state.heading)).addScaledVector(frame.right, Math.sin(state.heading));
     flightRight.copy(frame.right).multiplyScalar(Math.cos(state.heading)).addScaledVector(frame.tangent, -Math.sin(state.heading));
     flightUp.copy(frame.up);
@@ -355,7 +349,9 @@ export function createRace(
     trackVisual.update(state.elapsed, reducedMotion.matches, state.distance, state.altitude, state.speed);
     raceGates.update(timeAttack.snapshot().nextCheckpoint);
     speedLines.update(state.elapsed, state.speed, state.boosting, reducedMotion.matches, state.boostStage === 2);
-    views.prepareDriving(); composer.render(delta);
+    views.prepareDriving();
+    exhaustHaze.update(state.elapsed, state.boostStage, phase === 'running' && state.speed > 1, views.view === 'cockpit', reducedMotion.matches);
+    composer.render(delta);
     if (layout.track) {
       const linesVisible = speedLines.object.visible;
       speedLines.object.visible = false;
@@ -391,6 +387,8 @@ export function createRace(
   return {
     start, togglePause, restart, recover, toggleCockpit, cycleTrack,
     setBloom(enabled) { bloom.enabled = enabled; },
+    setQuality(quality) { renderQuality = quality; resize(); },
+    setExhaustHaze(enabled) { exhaustHaze.setEnabled(enabled); },
     setSoundEnabled(enabled) { raceAudio.setEnabled(enabled); },
     setMusicEnabled(enabled) { raceAudio.setMusicEnabled(enabled); },
     setHapticsEnabled(enabled) { boostHaptics.setEnabled(enabled); },
@@ -407,7 +405,7 @@ export function createRace(
         }
       });
       geometries.forEach((geometry) => geometry.dispose()); materials.forEach((material) => material.dispose());
-      render.dispose(); bloom.dispose(); boostWarp.pass.dispose(); output.dispose(); composer.dispose();
+      render.dispose(); bloom.dispose(); exhaustHaze.pass.dispose(); boostWarp.pass.dispose(); output.dispose(); composer.dispose();
       overviewRender.dispose(); overviewOutput.dispose(); overviewComposer.dispose();
       blitGeometry.dispose(); blitMaterial.dispose(); pipFrame.remove();
       renderer.dispose(); renderer.forceContextLoss(); renderer.domElement.remove();

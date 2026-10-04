@@ -141,11 +141,19 @@ export function createRaceAudio() {
   const sequenceStep = (index: number, at: number) => {
     const bar = Math.floor(index / 16) % 8;
     const beat = index % 16;
-    const roots = [40, 36, 43, 38, 40, 36, 45, 47];
-    const intervals = bar === 1 || bar === 2 || bar === 5 ? [0, 4, 7, 11] : [0, 3, 7, 10];
+    // E minor: i → VI → iv → V. The raised leading tone resolves back to E.
+    const roots = [40, 40, 36, 36, 45, 45, 47, 47];
+    const intervals = bar === 7 ? [0, 4, 7, 10] : bar === 2 || bar === 3 ? [0, 4, 7, 11]
+      : bar === 6 ? [0, 5, 7, 10] : [0, 3, 7, 10];
     const root = roots[bar];
-    if (beat === 0 || beat === 8) tone(125, at, 0.16, 0.095, 'sine', true, 38);
-    if (beat === 4 || beat === 12) hiss(at, 0.09, 0.035, 2200, true);
+    if (beat % 4 === 0) {
+      tone(135, at, 0.20, 0.15, 'sine', true, 42);
+      hiss(at, 0.022, 0.022, 3800, true);
+    }
+    if (beat === 4 || beat === 12) {
+      hiss(at, 0.13, 0.09, 2400, true);
+      tone(185, at, 0.08, 0.045, 'triangle', true, 120);
+    }
     if (beat % 2 === 0) hiss(at, 0.035, 0.015, 7500, true);
     if ([0, 6, 8, 14].includes(beat)) tone(frequency(root), at, STEP_SECONDS * 1.5, 0.035, 'triangle', true);
     // Bright sixteenth-note arpeggios lead; the percussion only supports them.

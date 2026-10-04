@@ -1,9 +1,11 @@
+import { DRONE_CATALOG, droneStats } from './game/drone/droneCatalog';
+import type { DroneCatalogEntry } from './game/drone/droneCatalog';
 import { mountRace } from './raceApp';
 import { createHangar } from './game/createHangar';
 import type { Hangar } from './game/createHangar';
 import type { ThrustMode } from './game/drone/createThrusterEffect';
 
-function mountHangar(root: HTMLDivElement, onDrive: () => void): () => void {
+function mountHangar(root: HTMLDivElement, selected: DroneCatalogEntry, onSelect: (entry: DroneCatalogEntry) => void, onDrive: () => void): () => void {
   document.title = 'Speedracer · 격납고';
   root.innerHTML = `
     <main class="hangar">
@@ -18,13 +20,11 @@ function mountHangar(root: HTMLDivElement, onDrive: () => void): () => void {
       <section class="introduction" aria-labelledby="drone-title">
         <p class="eyebrow"><span class="short-rule"></span> PILOTED RACING DRONE</p>
         <h1 id="drone-title">RACING<br /><span>DRONE.</span></h1>
-        <p class="intro-copy">속도를 위한 기체.<br />어둠을 가르는 선.</p>
-        <div class="model-id"><span class="mono">DR–01</span><span>기체 외형 확인</span></div>
-        <dl class="specs">
-          <div><dt>기체 유형</dt><dd>탑승형 레이싱 드론</dd></div>
-          <div><dt>추진 구조</dt><dd>듀얼 스러스터</dd></div>
-          <div><dt>외형</dt><dd>솔리드 바디 · 네온 라인</dd></div>
-        </dl>
+        <div class="craft-picker"><label for="craft-select">기체 선택</label><select id="craft-select">${DRONE_CATALOG.map((entry) => `<option value="${entry.configuration.id}" ${entry === selected ? 'selected' : ''}>${entry.name} · ${entry.role}</option>`).join('')}</select></div>
+        <div class="model-id"><span class="mono" id="craft-name"></span><span id="craft-role"></span></div>
+        <p id="craft-description" class="craft-description"></p>
+        <dl id="craft-stats" class="craft-stats"></dl>
+        <p class="craft-trial">상점 오픈 전 · 모든 기체 시험 주행 가능</p>
         <div class="thrust-test" aria-labelledby="thrust-heading">
           <div class="thrust-heading"><span id="thrust-heading">추진 테스트</span><span id="thrust-status" role="status" aria-live="polite">대기</span></div>
           <div class="thrust-controls" role="group" aria-label="추진 상태">
@@ -80,14 +80,28 @@ function mountHangar(root: HTMLDivElement, onDrive: () => void): () => void {
     error.hidden = false;
     status.classList.remove('is-ready');
     status.textContent = '화면 연결을 확인해주세요';
-    root.querySelectorAll<HTMLButtonElement>('.toolbar button, [data-thrust]').forEach((button) => { button.disabled = true; });
+    root.querySelectorAll<HTMLButtonElement>('.toolbar button, [data-thrust], #craft-select, #start-driving').forEach((button) => { button.disabled = true; });
     thrustStatus.textContent = '연결 끊김';
   };
 
   root.querySelector<HTMLButtonElement>('#start-driving')!.addEventListener('click', onDrive, listen);
   root.querySelector<HTMLButtonElement>('#retry')!.addEventListener('click', () => location.reload(), listen);
   try {
-    hangar = createHangar(scene, showError);
+    hangar = createHangar(scene, showError, selected.configuration);
+    const displayCraft = () => {
+      root.querySelector('#craft-name')!.textContent = selected.name;
+      root.querySelector('#craft-role')!.textContent = selected.role;
+      root.querySelector('#craft-description')!.textContent = selected.description;
+      root.querySelector('.scene-label .mono')!.textContent = selected.name.toUpperCase();
+      root.querySelector<HTMLElement>('.introduction')!.style.setProperty('--craft-color', selected.lineColor);
+      root.querySelector('#craft-stats')!.innerHTML = droneStats(selected.configuration).map((stat) => `<div><dt>${stat.label}</dt><dd><strong>${stat.value}</strong> <small>${stat.unit}</small></dd><span class="stat-line" aria-hidden="true"><i style="width:${Math.min(1, stat.fill) * 100}%"></i></span><p>${stat.hint}</p></div>`).join('');
+    };
+    displayCraft();
+    root.querySelector<HTMLSelectElement>('#craft-select')!.addEventListener('change', (event) => {
+      if (!ready) return;
+      selected = DRONE_CATALOG.find((entry) => entry.configuration.id === (event.target as HTMLSelectElement).value)!;
+      hangar!.setDrone(selected.configuration); displayCraft(); onSelect(selected);
+    }, listen);
     ready = true;
     status.textContent = '기체 연결됨';
     status.classList.add('is-ready');
@@ -137,12 +151,13 @@ function mountHangar(root: HTMLDivElement, onDrive: () => void): () => void {
 }
 
 export function mountApp(root: HTMLDivElement): () => void {
+  let selected = DRONE_CATALOG[0];
   let disposeScreen = () => {};
   const render = () => {
     disposeScreen();
     disposeScreen = location.hash === '#drive'
-      ? mountRace(root, () => { location.hash = ''; })
-      : mountHangar(root, () => { location.hash = 'drive'; });
+      ? mountRace(root, () => { location.hash = ''; }, selected.configuration)
+      : mountHangar(root, selected, (entry) => { selected = entry; }, () => { location.hash = 'drive'; });
   };
   window.addEventListener('hashchange', render);
   render();

@@ -90,26 +90,40 @@ test('a fast low-altitude wall crossing is contained and slows the craft', () =>
   assert.equal(model.state.notice, 'collision');
 });
 
-test('a high-altitude departure recovers to the last valid checkpoint', () => {
+test('a departure preserves forward progress and charges one penalty per excursion', () => {
   const model = createDrivingModel(straight);
   Object.assign(model.state, { distance: 298, checkpoint: 200, speed: 64, offset: 14.9, heading: 1, altitude: 4.8, targetAltitude: 4.8 });
   model.step(.1, input());
-  assert.equal(model.state.recoveries, 1);
-  assert.equal(model.state.checkpoint, 200);
-  assert.ok(model.state.distance >= 200 && model.state.distance < 202);
-  assert.equal(model.state.offset, 0);
-  assert.equal(model.state.altitude, tuning.defaultAltitude);
-  assert.ok(model.state.speed <= 12);
+  assert.equal(model.state.recoveries, 0);
+  assert.ok(model.state.distance > 298);
+  assert.ok(model.state.speed > 0 && model.state.speed < 64);
+  assert.equal(model.state.altitude, 4.8);
+  assert.equal(model.state.offTrackExits, 1);
+  assert.equal(model.state.penaltyPoints, 5);
+  assert.equal(model.state.notice, 'off-track');
+  for (let n = 0; n < 5; n++) {
+    model.state.offset = 15;
+    model.step(1 / 120, input());
+  }
+  assert.equal(model.state.penaltyPoints, 5, 'remaining outside cannot charge every frame');
+  model.state.offset = 0;
+  model.step(1 / 120, input());
+  model.state.offset = -15;
+  model.step(1 / 120, input());
+  assert.equal(model.state.offTrackExits, 2);
+  assert.equal(model.state.penaltyPoints, 10);
+  model.reset();
+  assert.equal(model.state.penaltyPoints, 0);
+  assert.equal(model.state.offTrackExits, 0);
 });
 
-test('crossing a checkpoint outside the track does not earn a recovery checkpoint', () => {
+test('forward checkpoint crossings near the edge are accepted without recovery', () => {
   const model = createDrivingModel(straight);
   Object.assign(model.state, { distance: 99, speed: 44, altitude: 4.8, targetAltitude: 4.8, offset: 12 });
   model.step(.1, input({ throttle: true }));
   assert.ok(model.state.distance > 100);
-  assert.equal(model.state.checkpoint, 0);
-  model.recover();
-  assert.equal(model.state.distance, 0);
+  assert.equal(model.state.checkpoint, 100);
+  assert.equal(model.state.recoveries, 0);
 });
 
 test('long blocked frames are capped and restarting clears the complete session', () => {

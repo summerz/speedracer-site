@@ -24,8 +24,12 @@ export interface DrivingState {
   elapsed: number;
   collisions: number;
   recoveries: number;
-  notice: 'collision' | 'height-collision' | 'recovery' | null;
+  offTrackExits: number;
+  penaltyPoints: number;
+  notice: 'collision' | 'height-collision' | 'off-track' | 'recovery' | null;
 }
+
+export const OFF_TRACK_PENALTY_POINTS = 5;
 
 export const DRIVING_TUNING = {
   ...DEFAULT_DRONE_CONFIGURATION.performance, drag: 5,
@@ -49,7 +53,7 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
   const state: DrivingState = {
     distance: 0, offset: 0, heading: 0, altitude: initialAltitude, targetAltitude: initialAltitude, altitudeLevel: initialLevel,
     speed: 0, charge: 1, boosting: false, boostStage: 0, boostElapsed: 0, boostStageProgress: 0, boostNeedsRelease: false, checkpoint: 0, elapsed: 0,
-    collisions: 0, recoveries: 0, notice: null,
+    collisions: 0, recoveries: 0, offTrackExits: 0, penaltyPoints: 0, notice: null,
   };
   const initial = { ...state };
   const frame = track.sample(0);
@@ -57,6 +61,7 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
   let impactCooldown = 0;
   let noticeRemaining = 0;
   let heightSwitchSpeed = 0;
+  let offTrackEpisode = false;
   // One penalty per field passage, even when the craft remains inside its volume.
   const fieldPassages = new Map<number, number>();
   const tuning = { ...DRIVING_TUNING, ...performance };
@@ -82,6 +87,7 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
       Object.assign(state, initial);
       fieldPassages.clear();
       rechargeDelay = 0; impactCooldown = 0; noticeRemaining = 0; heightSwitchSpeed = 0;
+      offTrackEpisode = false;
     },
     recover,
     step(delta: number, input: DrivingInput, onTravel?: (segment: TravelSegment) => boolean) {
@@ -147,28 +153,42 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
             && Math.abs(state.offset) < track.halfWidth + tuning.craftHalfWidth
             && (state.altitude < obstacle.minAltitude || state.altitude > obstacle.maxAltitude)) {
             fieldPassages.set(i, lap);
-            state.speed *= obstacle.speedRetention;
+            const severity = (1 - obstacle.speedRetention) / DEFAULT_DRONE_CONFIGURATION.performance.collisionSpeedLoss;
+            state.speed *= Math.max(0.05, 1 - severity * tuning.collisionSpeedLoss);
             state.collisions++;
             state.notice = 'height-collision'; noticeRemaining = 1.2;
           }
         }
         const boundary = track.halfWidth - tuning.craftHalfWidth;
-        // Above the posts the pilot can overshoot the edge, triggering checkpoint recovery.
+        if (Math.abs(state.offset) < boundary - 0.5) offTrackEpisode = false;
+        // High flight can clear the posts. Keep forward progress when it strays
+        // beyond the road; one excursion earns one penalty until safely back in.
+        if (Math.abs(state.offset) > track.halfWidth + 1) {
+          const side = Math.sign(state.offset);
+          state.offset = side * track.halfWidth;
+          if (state.heading * side > 0) state.heading = -side * 0.12;
+          if (!offTrackEpisode) {
+            offTrackEpisode = true;
+            state.offTrackExits++; state.penaltyPoints += OFF_TRACK_PENALTY_POINTS;
+            state.speed *= 1 - tuning.collisionSpeedLoss;
+            state.notice = 'off-track'; noticeRemaining = 1.8;
+          }
+        }
         if (Math.abs(state.offset) > boundary && state.altitude <= 3.2) {
           const side = Math.sign(state.offset);
           state.offset = side * boundary;
           if (state.heading * side > 0) state.heading = -side * 0.12;
           if (impactCooldown === 0) {
-            state.speed *= 0.62; state.collisions++; impactCooldown = 0.5;
-            state.notice = 'collision'; noticeRemaining = 0.8;
+            state.speed *= 1 - tuning.collisionSpeedLoss; state.collisions++; impactCooldown = 0.5;
+            if (state.notice !== 'off-track') { state.notice = 'collision'; noticeRemaining = 0.8; }
           }
         }
-        if (onTravel?.({ from: oldDistance, to: state.distance, offsetFrom, offsetTo: state.offset, timeFrom, timeTo: state.elapsed })) break;
-        if (Math.abs(state.offset) > track.halfWidth + 4 || !Number.isFinite(state.distance + state.offset)) {
+        if (!Number.isFinite(state.distance + state.offset)) {
           recover(); continue;
         }
+        if (onTravel?.({ from: oldDistance, to: state.distance, offsetFrom, offsetTo: state.offset, timeFrom, timeTo: state.elapsed })) break;
         const checkpoint = Math.floor(state.distance / track.checkpointSpacing) * track.checkpointSpacing;
-        if (!onTravel && checkpoint > state.checkpoint && oldDistance <= checkpoint && Math.abs(state.offset) <= boundary) state.checkpoint = checkpoint;
+        if (!onTravel && checkpoint > state.checkpoint && oldDistance <= checkpoint) state.checkpoint = checkpoint;
       }
     },
   };

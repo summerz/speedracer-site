@@ -6,9 +6,12 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { createRacingDrone } from './drone/createRacingDrone';
 import { createThrusterEffect } from './drone/createThrusterEffect';
+import { DEFAULT_DRONE_CONFIGURATION } from './drone/droneConfiguration';
+import type { DroneConfiguration } from './drone/droneConfiguration';
 import type { ThrustMode, ThrusterStyle } from './drone/createThrusterEffect';
 
 export interface Hangar {
+  setDrone(configuration: DroneConfiguration): void;
   setBloom(enabled: boolean): void;
   setAutoRotate(enabled: boolean): void;
   setThrustMode(mode: ThrustMode): void;
@@ -17,7 +20,7 @@ export interface Hangar {
   dispose(): void;
 }
 
-export function createHangar(container: HTMLDivElement, onContextLost: () => void): Hangar {
+export function createHangar(container: HTMLDivElement, onContextLost: () => void, configuration: DroneConfiguration = DEFAULT_DRONE_CONFIGURATION): Hangar {
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setClearColor(0x080e14, 0);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -54,10 +57,20 @@ export function createHangar(container: HTMLDivElement, onContextLost: () => voi
   rimLight.position.set(-4, 3, 3);
   scene.add(rimLight);
 
-  const drone = createRacingDrone({ thrusterIntensity: 0, neonBoost: 2.0 });
+  let drone = createRacingDrone({ variant: configuration.modelVariant, thrusterIntensity: 0, neonBoost: 2.0 });
   drone.position.y = 1.05;
   scene.add(drone);
-  const thrusters = createThrusterEffect(drone, scene);
+  let thrusters = createThrusterEffect(drone, scene, configuration.boostStyle);
+  let thrustMode: ThrustMode = 'idle';
+  const disposeDrone = () => {
+    thrusters.dispose(); scene.remove(drone);
+    const materials = new Set<THREE.Material>();
+    drone.traverse((object) => {
+      if (object instanceof THREE.Mesh) { object.geometry.dispose();
+        (Array.isArray(object.material) ? object.material : [object.material]).forEach((m) => materials.add(m)); }
+    });
+    materials.forEach((m) => m.dispose());
+  };
 
   const platform = new THREE.Mesh(
     new THREE.CylinderGeometry(3.1, 3.3, 0.15, 80),
@@ -143,9 +156,15 @@ export function createHangar(container: HTMLDivElement, onContextLost: () => voi
   frame = requestAnimationFrame(tick);
 
   return {
+    setDrone(next) {
+      disposeDrone();
+      drone = createRacingDrone({ variant: next.modelVariant, thrusterIntensity: 0, neonBoost: 2 });
+      drone.position.y = 1.05; scene.add(drone);
+      thrusters = createThrusterEffect(drone, scene, next.boostStyle); thrusters.setMode(thrustMode);
+    },
     setBloom(enabled) { bloom.enabled = enabled; },
     setAutoRotate(enabled) { controls.autoRotate = enabled; },
-    setThrustMode(mode) { thrusters.setMode(mode); },
+    setThrustMode(mode) { thrustMode = mode; thrusters.setMode(mode); },
     setThrusterStyle(style) { thrusters.setStyle(style); },
     setView(view) {
       // Consume pending drag momentum before applying an exact camera preset.

@@ -71,3 +71,30 @@ h1 span { color: #687e89; }
 @media (max-width: 420px) { .toolbar { justify-content: center; } .effect-controls { width: 100%; justify-content: center; border-top: 1px solid #ffffff0d; padding-top: 10px; } .scene-status { bottom: 57px; } .development-note { font-size: 10px; } .intro-copy { font-size: 12px; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; } }
 @media (max-width: 760px) { .thrust-test { grid-column: 1 / -1; max-width: none; margin-top: 24px; } .thrust-controls { max-width: 360px; } .thrust-heading { max-width: 360px; } }
+
+/* Shared resolved performance display for the hangar and future shop. */
+.craft-picker { max-width: 310px; margin: 24px 0 16px; }
+.craft-picker label { display: block; font-size: 11px; color: #a4b7c0; margin-bottom: 8px; }
+.craft-picker select { width: 100%; min-height: 44px; padding: 10px; background: #14232d; border: 1px solid #39515c; color: #e9f2f4; font: inherit; font-size: 13px; border-radius: 4px; }
+.craft-description { max-width: 310px; color: #a4b7c0; font-size: 12px; line-height: 1.6; margin: 0 0 16px; min-height: 38px; }
+.craft-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 18px; max-width: 310px; margin: 0; }
+.craft-stats div { min-width: 0; }
+.craft-stats dt { font-size: 11px; color: #a4b7c0; }
+.craft-stats dd { margin: 5px 0 8px; font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; }
+.craft-stats strong { font-size: 23px; font-weight: 500; }
+.craft-stats small { color: #a4b7c0; font-size: 10px; }
+.craft-stats p { margin: 6px 0 0; color: #a4b7c0; font-size: 9px; line-height: 1.5; }
+.stat-line { display: block; height: 3px; background: #ffffff1a; }
+.stat-line i { display: block; height: 100%; background: var(--craft-color, var(--accent)); }
+.craft-trial { max-width: 310px; font-size: 10px; line-height: 1.5; color: #a4b7c0; margin: 18px 0 0; }
+@media (max-width: 760px) {
+  .hangar { grid-template-rows: auto minmax(270px, 40dvh) auto auto; }
+  .hangar .viewport { grid-row: 2; }
+  .hangar .introduction { grid-row: 3; display: block; padding-top: 24px; }
+  .hangar .model-id { margin: 0 0 12px; }
+  .hangar .introduction h1 { font-size: 48px; }
+  .hangar .introduction h1 br { display: none; }
+  .hangar .introduction h1 span { margin-left: 8px; }
+  .craft-picker, .craft-description, .craft-stats, .craft-trial { max-width: none; }
+  .hangar .eyebrow { margin-bottom: 18px; }
+}

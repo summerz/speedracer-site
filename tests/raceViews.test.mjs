@@ -21,7 +21,6 @@ test('cockpit choice survives the three track layouts and each camera gets its o
     views.prepareOverview(); assert.equal(scene.fog, null); assert.equal(canopy.visible, true);
     assert.equal(scene.getObjectByName('overviewPlayer').visible, true);
     views.prepareDriving(); assert.equal(scene.fog, fog); assert.equal(canopy.visible, false);
-    assert.equal(camera.getObjectByName('cockpitInstruments').visible, true);
     assert.equal(scene.getObjectByName('overviewPlayer').visible, false);
   }
   views.toggleCockpit(); assert.equal(views.view, 'chase');
@@ -49,14 +48,17 @@ test('a sharp real track corner requires slowing down from boost speed, even wit
   const driveCorner = (targetSpeed) => {
     const model = createDrivingModel({ ...track, heightObstacles: [] });
     Object.assign(model.state, { distance: 880, speed: targetSpeed, altitude: 6.2, targetAltitude: 6.2, altitudeLevel: 2 });
-    for (let i = 0; i < 800 && model.state.distance < 1100 && model.state.recoveries === 0; i++) {
+    for (let i = 0; i < 800 && model.state.distance < 1100 && model.state.offTrackExits === 0; i++) {
       const s = model.state;
       const wanted = (track.sample(s.distance).curvature * s.speed - s.heading * 4 - s.offset * .1) / Math.max(.1, steeringYawRate(s.speed));
       model.step(1 / 120, { ...NEUTRAL_INPUT, throttle: s.speed < targetSpeed, boost: targetSpeed > 85, brake: s.speed > targetSpeed + 1, steer: Math.max(-1, Math.min(1, wanted)) });
     }
     return model.state;
   };
-  assert.equal(driveCorner(125).recoveries, 1, 'boost speed leaves the track');
+  const fast = driveCorner(125);
+  assert.equal(fast.offTrackExits, 1, 'boost speed leaves the track');
+  assert.equal(fast.penaltyPoints, 5);
+  assert.equal(fast.recoveries, 0, 'departure never rewinds progress');
   const slowed = driveCorner(45); assert.equal(slowed.recoveries, 0); assert.equal(slowed.collisions, 0);
   assert.ok(slowed.distance >= 1100, 'braking allows the corner to be completed');
 });

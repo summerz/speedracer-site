@@ -16,6 +16,9 @@
     "src/game/driving/touchInput.ts",
     "src/platform/appUpdate.ts",
     "src/game/driving/createRaceFeedback.ts",
-    "src/game/driving/createRaceAudio.ts"
+    "src/game/driving/createRaceAudio.ts",
+    "src/game/drone/droneCatalog.ts",
+    "src/game/drone/createRacingDrone.ts",
+    "src/game/driving/createExhaustHaze.ts"
   ]
 }

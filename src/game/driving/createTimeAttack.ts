@@ -1,4 +1,4 @@
-import { createDrivingModel, DRIVING_TUNING } from './createDrivingModel.js';
+import { createDrivingModel } from './createDrivingModel.js';
 import type { DrivingInput } from './createDrivingModel.js';
 import type { DronePerformance } from '../drone/droneConfiguration.js';
 import type { Track } from '../track/createTrack.js';
@@ -11,7 +11,7 @@ export type RacePhase = 'ready' | 'countdown' | 'running' | 'paused' | 'finished
 /** Owns race timing and transitions; the renderer only steps and displays it. */
 export function createTimeAttack(track: Track, performance: DronePerformance, records: ReturnType<typeof createRaceRecords>) {
   const model = createDrivingModel(track, performance);
-  const progress = createRaceProgress(track.length, Math.ceil(track.length / track.checkpointSpacing), track.halfWidth - DRIVING_TUNING.craftHalfWidth);
+  const progress = createRaceProgress(track.length, Math.ceil(track.length / track.checkpointSpacing));
   let phase: RacePhase = 'ready';
   let resumePhase: 'countdown' | 'running' = 'running';
   let countdownRemaining = 3;
@@ -28,7 +28,7 @@ export function createTimeAttack(track: Track, performance: DronePerformance, re
       const p = progress.snapshot();
       return { ...p, phase, totalLaps: RACE_LAPS, countdown: Math.max(1, Math.ceil(countdownRemaining - 1e-8)),
         lapElapsed: model.state.elapsed - p.lapTimes.reduce((sum, time) => sum + time, 0),
-        missedCheckpoint: phase === 'running' && model.state.distance > p.nextCheckpoint + 1e-6,
+        offTrackExits: model.state.offTrackExits, penaltyPoints: model.state.penaltyPoints,
         bestRecord: records.read(), result };
     },
     start,
