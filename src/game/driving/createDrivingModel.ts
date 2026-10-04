@@ -2,6 +2,7 @@ import { DEFAULT_DRONE_CONFIGURATION } from '../drone/droneConfiguration.js';
 import type { DronePerformance } from '../drone/droneConfiguration.js';
 import type { Track } from '../track/createTrack';
 import { ALTITUDE_PROFILES, resolveAltitudeProfile } from '../track/altitudeProfile.js';
+import type { TravelSegment } from './raceProgress.js';
 
 /** lift is a single tap impulse (-1 / 0 / 1), never a held key. */
 export interface DrivingInput { throttle: boolean; brake: boolean; steer: number; lift: number; boost: boolean }
@@ -78,7 +79,7 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
       rechargeDelay = 0; impactCooldown = 0; noticeRemaining = 0; heightSwitchSpeed = 0;
     },
     recover,
-    step(delta: number, input: DrivingInput) {
+    step(delta: number, input: DrivingInput, onTravel?: (segment: TravelSegment) => boolean) {
       if (input.lift !== 0) {
         const nextLevel = clamp(state.altitudeLevel + Math.sign(input.lift), 0, levels.length - 1);
         if (nextLevel !== state.altitudeLevel) {
@@ -93,6 +94,8 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
       let remaining = clamp(delta, 0, 0.1);
       while (remaining > 1e-8) {
         const dt = Math.min(remaining, 1 / 120); remaining -= dt;
+        const timeFrom = state.elapsed;
+        const offsetFrom = state.offset;
         state.elapsed += dt;
         impactCooldown = Math.max(0, impactCooldown - dt);
         noticeRemaining = Math.max(0, noticeRemaining - dt);
@@ -154,11 +157,12 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
             state.notice = 'collision'; noticeRemaining = 0.8;
           }
         }
+        if (onTravel?.({ from: oldDistance, to: state.distance, offsetFrom, offsetTo: state.offset, timeFrom, timeTo: state.elapsed })) break;
         if (Math.abs(state.offset) > track.halfWidth + 4 || !Number.isFinite(state.distance + state.offset)) {
           recover(); continue;
         }
         const checkpoint = Math.floor(state.distance / track.checkpointSpacing) * track.checkpointSpacing;
-        if (checkpoint > state.checkpoint && oldDistance <= checkpoint && Math.abs(state.offset) <= boundary) state.checkpoint = checkpoint;
+        if (!onTravel && checkpoint > state.checkpoint && oldDistance <= checkpoint && Math.abs(state.offset) <= boundary) state.checkpoint = checkpoint;
       }
     },
   };

@@ -34,7 +34,7 @@ function mountHangar(root: HTMLDivElement, onDrive: () => void): () => void {
           </div>
           <p class="thrust-hint">1 · 2 · 3 키 또는 버튼으로 전환</p>
         </div>
-        <button type="button" id="start-driving" class="primary-action hangar-start">주행 테스트 <span aria-hidden="true">↗</span></button>
+        <button type="button" id="start-driving" class="primary-action hangar-start">타임어택 <span aria-hidden="true">↗</span></button>
       </section>
 
       <section class="viewport" aria-label="드론 3D 미리보기">

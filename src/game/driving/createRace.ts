@@ -13,16 +13,19 @@ import { createThrusterEffect } from '../drone/createThrusterEffect';
 import { createTrack, createTrackFrame, createTrackVisual, upcomingHeightObstacle } from '../track/createTrack';
 import { createSpeedLines } from './createSpeedLines';
 import { createTouchControls } from './createTouchControls';
-import { createDrivingModel } from './createDrivingModel';
 import { createBoostPulse } from './createBoostPulse';
 import { createBoostAudio } from './createBoostAudio';
 import { createBoostHaptics } from './createBoostHaptics';
 import { createBoostWarp } from './createBoostWarp';
+import { createTimeAttack } from './createTimeAttack';
+import type { RacePhase } from './createTimeAttack';
+import { createRaceRecords } from './raceRecords';
+import { createRaceGates } from '../track/createRaceGates';
 import type { DrivingState, DrivingInput } from './createDrivingModel';
 import type { AltitudeProfile } from '../track/altitudeProfile';
 import type { TrackFrame } from '../track/createTrack';
 
-export type DrivingPhase = 'ready' | 'running' | 'paused';
+export type DrivingPhase = RacePhase;
 export interface RaceSnapshot extends DrivingState {
   altitudeProfile: AltitudeProfile;
   phase: DrivingPhase;
@@ -33,11 +36,13 @@ export interface RaceSnapshot extends DrivingState {
   upcomingCurvature: number;
   upcomingSection: TrackFrame['section'];
   heightObstacle: { kind: 'rise' | 'descend' | 'middle'; distance: number; minAltitude: number; maxAltitude: number } | null;
+  timeAttack: ReturnType<ReturnType<typeof createTimeAttack>['snapshot']>;
 }
 export interface Race {
   start(): void;
   togglePause(): void;
   restart(): void;
+  recover(): void;
   toggleCockpit(): void;
   cycleTrack(): void;
   setBloom(enabled: boolean): void;
@@ -77,7 +82,13 @@ export function createRace(
   const boostAudio = createBoostAudio();
   const boostHaptics = createBoostHaptics(typeof navigator.vibrate === 'function' ? navigator.vibrate.bind(navigator) : undefined);
   const coarsePointer = window.matchMedia('(any-pointer: coarse)');
-  const model = createDrivingModel(track, config.performance);
+  let storage: Storage | undefined;
+  try { storage = window.localStorage; } catch { /* Private browsing can deny storage. */ }
+  const records = createRaceRecords({ trackId: `neon-circuit-v1:${difficulty?.id ?? 'beginner'}`, configurationId: JSON.stringify({ performance: config.performance, altitude: track.altitudeProfile }) }, storage);
+  const timeAttack = createTimeAttack(track, config.performance, records);
+  const model = timeAttack.model;
+  const raceGates = createRaceGates(track, timeAttack.snapshot().gatesPerLap);
+  scene.add(raceGates.object);
   const camera = new THREE.PerspectiveCamera(visuals.baseFov, 1, 0.1, 1100);
   const views = createRaceViews(camera, drone, scene, track);
   const speedLines = createSpeedLines(visuals);
@@ -123,7 +134,6 @@ export function createRace(
   const lookAt = new THREE.Vector3();
   const poseBasis = new THREE.Matrix4();
   const backward = new THREE.Vector3();
-  let phase: DrivingPhase = 'ready';
   let disposed = false;
   let lost = false;
   let animation = 0;
@@ -138,30 +148,35 @@ export function createRace(
     track.sample(model.state.distance + Math.max(22, model.state.speed * 1.1), upcoming);
     const next = upcomingHeightObstacle(track, model.state.distance);
     const heightObstacle = next ? { ...next.obstacle, distance: Math.max(0, next.distance) } : null;
-    onUpdate({ ...model.state, boostStage2Seconds: model.boostStage2Seconds, altitudeProfile: model.altitudeProfile, phase, view: views.view, trackDisplay: views.trackDisplay, trackLength: track.length, upcomingCurvature: upcoming.curvature, upcomingSection: upcoming.section, heightObstacle });
+    onUpdate({ ...model.state, boostStage2Seconds: model.boostStage2Seconds, altitudeProfile: model.altitudeProfile, phase: timeAttack.phase, timeAttack: timeAttack.snapshot(), view: views.view, trackDisplay: views.trackDisplay, trackLength: track.length, upcomingCurvature: upcoming.curvature, upcomingSection: upcoming.section, heightObstacle });
   };
   const heightRequests: number[] = [];
   const touchControls = createTouchControls(container.parentElement ?? container, {
-    lift(direction) { if (phase === 'running') heightRequests.push(direction); },
+    lift(direction) { if (timeAttack.phase === 'running') heightRequests.push(direction); },
     interact() { boostAudio.activate(); },
     releaseBoost() { if (!keys.has('Space')) { model.interruptBoost(); boostAudio.silence(); boostHaptics.stop(); notify(); } },
   });
   const clearInput = () => { keys.clear(); heightRequests.length = 0; touchControls.reset(); };
   const pause = () => {
     clearInput(); model.interruptBoost(); boostAudio.silence(); boostHaptics.stop(); boostPulse.reset(); boostWarp.reset(); boostEntryAge = 1;
-    if (phase === 'running') { phase = 'paused'; touchControls.setRunning(false); notify(); }
+    timeAttack.pause(); touchControls.setRunning(false); notify();
   };
   const start = () => {
     if (lost || disposed) return;
-    clearInput(); boostAudio.activate(); phase = 'running'; touchControls.setRunning(true); previous = performance.now(); notify();
+    clearInput(); boostAudio.activate(); timeAttack.start(); touchControls.setRunning(timeAttack.phase === 'running'); previous = performance.now(); notify();
   };
   const togglePause = () => {
-    if (phase === 'running') pause();
-    else if (phase === 'paused') start();
+    if (timeAttack.phase === 'running' || timeAttack.phase === 'countdown') pause();
+    else if (timeAttack.phase === 'paused') start();
   };
   const restart = () => {
     if (lost || disposed) return;
-    clearInput(); model.reset(); boostPulse.reset(); boostWarp.reset(); boostAudio.silence(); boostHaptics.stop(); boostEntryAge = 1; bank = 0; craftShake = 0; cameraSnap = true; start();
+    clearInput(); timeAttack.restart(); boostPulse.reset(); boostWarp.reset(); boostAudio.silence(); boostHaptics.stop(); boostEntryAge = 1; bank = 0; craftShake = 0; cameraSnap = true; touchControls.setRunning(false); previous = performance.now(); notify();
+  };
+  const recover = () => {
+    if (lost || disposed) return;
+    clearInput(); timeAttack.recover(); boostPulse.reset(); boostWarp.reset(); boostAudio.silence(); boostHaptics.stop(); boostEntryAge = 1;
+    cameraSnap = true; notify();
   };
   const toggleCockpit = () => {
     if (lost || disposed) return;
@@ -183,11 +198,10 @@ export function createRace(
     if (!event.repeat && event.code === 'KeyX') { cycleTrack(); return; }
     if (!event.repeat && event.code === 'Escape') { togglePause(); return; }
     if (!event.repeat && event.code === 'KeyR') { restart(); return; }
-    if (phase !== 'running') return;
+    if (timeAttack.phase !== 'running') return;
     boostAudio.activate();
     if (!event.repeat && event.code === 'KeyF') {
-      model.recover(); boostPulse.reset(); boostWarp.reset(); boostAudio.silence(); boostEntryAge = 1;
-      cameraSnap = true; notify(); return;
+      recover(); return;
     }
     if (event.code === 'ArrowDown' || event.code === 'ArrowUp') {
       if (!event.repeat) heightRequests.push(event.code === 'ArrowUp' ? 1 : -1);
@@ -232,8 +246,9 @@ export function createRace(
     const oldRecoveries = model.state.recoveries;
     const oldCollisions = model.state.collisions;
     const oldBoostStage = model.state.boostStage;
+    const oldPhase = timeAttack.phase;
     let heightChanged = false;
-    if (phase === 'running') {
+    if (oldPhase === 'running' || oldPhase === 'countdown') {
       const touch = touchControls.read();
       input.brake = keys.has('KeyS') || touch.brake;
       input.throttle = !input.brake;
@@ -245,7 +260,13 @@ export function createRace(
         heightChanged ||= model.state.altitudeLevel !== previousLevel;
       }
       heightRequests.length = 0;
-      input.lift = 0; model.step(delta, input);
+      input.lift = 0; timeAttack.step(delta, input);
+    }
+    const phase = timeAttack.phase;
+    if (phase !== oldPhase) {
+      touchControls.setRunning(phase === 'running');
+      if (phase === 'finished') { clearInput(); boostAudio.silence(); boostHaptics.stop(); boostPulse.reset(); boostWarp.reset(); }
+      notify();
     }
     if (oldRecoveries !== model.state.recoveries) { cameraSnap = true; boostPulse.reset(); boostWarp.reset(); boostAudio.silence(); boostEntryAge = 1; }
     const state = model.state;
@@ -300,6 +321,7 @@ export function createRace(
     hudElapsed += delta;
     if (hudElapsed >= 0.08) { hudElapsed = 0; notify(); }
     trackVisual.update(state.elapsed, reducedMotion.matches);
+    raceGates.update(timeAttack.snapshot().nextCheckpoint);
     speedLines.update(state.elapsed, state.speed, state.boosting, reducedMotion.matches, state.boostStage === 2);
     views.prepareDriving(); composer.render(delta);
     if (layout.track) {
@@ -335,7 +357,7 @@ export function createRace(
   }, listen);
   notify(); animation = requestAnimationFrame(tick);
   return {
-    start, togglePause, restart, toggleCockpit, cycleTrack,
+    start, togglePause, restart, recover, toggleCockpit, cycleTrack,
     setBloom(enabled) { bloom.enabled = enabled; },
     setSoundEnabled(enabled) { boostAudio.setEnabled(enabled); },
     setHapticsEnabled(enabled) { boostHaptics.setEnabled(enabled); },
