@@ -1,0 +1,350 @@
+import * as THREE from 'three';
+import { createRaceViews, raceViewLayout, VIEW_LABELS } from './createRaceViews';
+import type { RaceView, TrackDisplay, Viewport } from './createRaceViews';
+import type { DifficultyPreset } from '../track/difficulty';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { DEFAULT_DRONE_CONFIGURATION, resolveDroneConfiguration } from '../drone/droneConfiguration';
+import type { DroneConfiguration } from '../drone/droneConfiguration';
+import { createRacingDrone } from '../drone/createRacingDrone';
+import { createThrusterEffect } from '../drone/createThrusterEffect';
+import { createTrack, createTrackFrame, createTrackVisual, upcomingHeightObstacle } from '../track/createTrack';
+import { createSpeedLines } from './createSpeedLines';
+import { createTouchControls } from './createTouchControls';
+import { createDrivingModel } from './createDrivingModel';
+import { createBoostPulse } from './createBoostPulse';
+import { createBoostAudio } from './createBoostAudio';
+import { createBoostHaptics } from './createBoostHaptics';
+import { createBoostWarp } from './createBoostWarp';
+import type { DrivingState, DrivingInput } from './createDrivingModel';
+import type { AltitudeProfile } from '../track/altitudeProfile';
+import type { TrackFrame } from '../track/createTrack';
+
+export type DrivingPhase = 'ready' | 'running' | 'paused';
+export interface RaceSnapshot extends DrivingState {
+  altitudeProfile: AltitudeProfile;
+  phase: DrivingPhase;
+  view: RaceView;
+  trackDisplay: TrackDisplay;
+  trackLength: number;
+  boostStage2Seconds: number;
+  upcomingCurvature: number;
+  upcomingSection: TrackFrame['section'];
+  heightObstacle: { kind: 'rise' | 'descend' | 'middle'; distance: number; minAltitude: number; maxAltitude: number } | null;
+}
+export interface Race {
+  start(): void;
+  togglePause(): void;
+  restart(): void;
+  toggleCockpit(): void;
+  cycleTrack(): void;
+  setBloom(enabled: boolean): void;
+  setSoundEnabled(enabled: boolean): void;
+  setHapticsEnabled(enabled: boolean): void;
+  dispose(): void;
+}
+
+export function createRace(
+  container: HTMLDivElement, onUpdate: (snapshot: RaceSnapshot) => void, onError: () => void,
+  configuration: DroneConfiguration = DEFAULT_DRONE_CONFIGURATION,
+  altitudeProfile?: AltitudeProfile,
+  difficulty?: DifficultyPreset,
+): Race {
+  const config = resolveDroneConfiguration(configuration);
+  const visuals = config.speedEffects;
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setClearColor(0x020406);
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.1;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.domElement.setAttribute('role', 'img');
+  renderer.domElement.setAttribute('aria-label', '순환 트랙을 달리는 드론의 추적 시점');
+  container.append(renderer.domElement);
+  const scene = new THREE.Scene();
+  scene.fog = new THREE.FogExp2(0x020406, 0.0045);
+  scene.add(new THREE.HemisphereLight(0xabcbdc, 0x152435, 2.5));
+  const sun = new THREE.DirectionalLight(0xc8dfed, 3);
+  sun.position.set(-50, 150, -100); scene.add(sun);
+  const track = createTrack(altitudeProfile, difficulty);
+  const trackVisual = createTrackVisual(track);
+  scene.add(trackVisual.object);
+  const drone = createRacingDrone({ neonBoost: 1.7, thrusterIntensity: 0.35 });
+  scene.add(drone);
+  const thrusters = createThrusterEffect(drone, scene, config.boostStyle);
+  const boostPulse = createBoostPulse(drone, config.boostStyle.pulseColor);
+  const boostAudio = createBoostAudio();
+  const boostHaptics = createBoostHaptics(typeof navigator.vibrate === 'function' ? navigator.vibrate.bind(navigator) : undefined);
+  const coarsePointer = window.matchMedia('(any-pointer: coarse)');
+  const model = createDrivingModel(track, config.performance);
+  const camera = new THREE.PerspectiveCamera(visuals.baseFov, 1, 0.1, 1100);
+  const views = createRaceViews(camera, drone, scene, track);
+  const speedLines = createSpeedLines(visuals);
+  camera.add(speedLines.object); scene.add(camera);
+  const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 }));
+  const render = new RenderPass(scene, camera);
+  const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.65, 0.25, 0.95);
+  const output = new OutputPass();
+  const boostWarp = createBoostWarp(visuals.boostWarpStrength);
+  composer.addPass(render); composer.addPass(bloom); composer.addPass(boostWarp.pass); composer.addPass(output);
+  composer.renderToScreen = false;
+  const overviewComposer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 }));
+  const overviewRender = new RenderPass(scene, views.overviewCamera);
+  const overviewOutput = new OutputPass();
+  overviewComposer.addPass(overviewRender); overviewComposer.addPass(overviewOutput);
+  overviewComposer.renderToScreen = false;
+  // Both OutputPass targets already contain display-encoded colors. Blit without a second transform.
+  const blitMaterial = new THREE.ShaderMaterial({
+    uniforms: { image: { value: composer.readBuffer.texture } },
+    vertexShader: 'varying vec2 uvOut; void main() { uvOut = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+    fragmentShader: 'uniform sampler2D image; varying vec2 uvOut; void main() { gl_FragColor = texture2D(image, uvOut); }',
+    depthTest: false, depthWrite: false, toneMapped: false,
+  });
+  const blitGeometry = new THREE.PlaneGeometry(2, 2);
+  const blitScene = new THREE.Scene(); blitScene.add(new THREE.Mesh(blitGeometry, blitMaterial));
+  const blitCamera = new THREE.Camera();
+  const pipFrame = document.createElement('div'); pipFrame.className = 'race-pip-frame';
+  pipFrame.setAttribute('aria-hidden', 'true'); container.append(pipFrame);
+  const rendererSize = new THREE.Vector2();
+  let layout = raceViewLayout(1, 1, 'hidden');
+  const events = new AbortController();
+  const listen = { signal: events.signal };
+  const keys = new Set<string>();
+  const input: DrivingInput = { throttle: false, brake: false, steer: 0, lift: 0, boost: false };
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+  const frame = createTrackFrame();
+  const upcoming = createTrackFrame();
+  const flightForward = new THREE.Vector3();
+  const flightRight = new THREE.Vector3();
+  const flightUp = new THREE.Vector3();
+  const desiredCameraOffset = new THREE.Vector3();
+  const cameraOffset = new THREE.Vector3();
+  const lookAt = new THREE.Vector3();
+  const poseBasis = new THREE.Matrix4();
+  const backward = new THREE.Vector3();
+  let phase: DrivingPhase = 'ready';
+  let disposed = false;
+  let lost = false;
+  let animation = 0;
+  let previous = performance.now();
+  let hudElapsed = 0;
+  let cameraSnap = true;
+  let bank = 0;
+  let boostEntryAge = 1;
+  let craftShake = 0;
+
+  const notify = () => {
+    track.sample(model.state.distance + Math.max(22, model.state.speed * 1.1), upcoming);
+    const next = upcomingHeightObstacle(track, model.state.distance);
+    const heightObstacle = next ? { ...next.obstacle, distance: Math.max(0, next.distance) } : null;
+    onUpdate({ ...model.state, boostStage2Seconds: model.boostStage2Seconds, altitudeProfile: model.altitudeProfile, phase, view: views.view, trackDisplay: views.trackDisplay, trackLength: track.length, upcomingCurvature: upcoming.curvature, upcomingSection: upcoming.section, heightObstacle });
+  };
+  const heightRequests: number[] = [];
+  const touchControls = createTouchControls(container.parentElement ?? container, {
+    lift(direction) { if (phase === 'running') heightRequests.push(direction); },
+    interact() { boostAudio.activate(); },
+    releaseBoost() { if (!keys.has('Space')) { model.interruptBoost(); boostAudio.silence(); boostHaptics.stop(); notify(); } },
+  });
+  const clearInput = () => { keys.clear(); heightRequests.length = 0; touchControls.reset(); };
+  const pause = () => {
+    clearInput(); model.interruptBoost(); boostAudio.silence(); boostHaptics.stop(); boostPulse.reset(); boostWarp.reset(); boostEntryAge = 1;
+    if (phase === 'running') { phase = 'paused'; touchControls.setRunning(false); notify(); }
+  };
+  const start = () => {
+    if (lost || disposed) return;
+    clearInput(); boostAudio.activate(); phase = 'running'; touchControls.setRunning(true); previous = performance.now(); notify();
+  };
+  const togglePause = () => {
+    if (phase === 'running') pause();
+    else if (phase === 'paused') start();
+  };
+  const restart = () => {
+    if (lost || disposed) return;
+    clearInput(); model.reset(); boostPulse.reset(); boostWarp.reset(); boostAudio.silence(); boostHaptics.stop(); boostEntryAge = 1; bank = 0; craftShake = 0; cameraSnap = true; start();
+  };
+  const toggleCockpit = () => {
+    if (lost || disposed) return;
+    views.toggleCockpit(); resize(); cameraSnap = true; camera.fov = visuals.baseFov; camera.updateProjectionMatrix(); boostWarp.reset();
+    renderer.domElement.setAttribute('aria-label', `순환 트랙을 달리는 드론의 ${VIEW_LABELS[views.view]} 시점`); notify();
+  };
+  const cycleTrack = () => {
+    if (lost || disposed) return;
+    views.cycleTrack(); resize(); notify();
+  };
+  const controlCodes = new Set(['KeyW', 'KeyS', 'KeyA', 'KeyD', 'ArrowDown', 'ArrowUp', 'Space', 'KeyR', 'KeyF', 'KeyC', 'KeyX', 'Escape']);
+  window.addEventListener('keydown', (event) => {
+    if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
+    if (event.target instanceof HTMLElement && event.target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])')) return;
+    if (!controlCodes.has(event.code) || lost) return;
+    event.preventDefault();
+    if (!event.repeat && event.code === 'KeyC') { toggleCockpit(); return; }
+    if (!event.repeat && event.code === 'KeyX') { cycleTrack(); return; }
+    if (!event.repeat && event.code === 'Escape') { togglePause(); return; }
+    if (!event.repeat && event.code === 'KeyR') { restart(); return; }
+    if (phase !== 'running') return;
+    boostAudio.activate();
+    if (!event.repeat && event.code === 'KeyF') {
+      model.recover(); boostPulse.reset(); boostWarp.reset(); boostAudio.silence(); boostEntryAge = 1;
+      cameraSnap = true; notify(); return;
+    }
+    if (event.code === 'ArrowDown' || event.code === 'ArrowUp') {
+      if (!event.repeat) heightRequests.push(event.code === 'ArrowUp' ? 1 : -1);
+      return;
+    }
+    keys.add(event.code);
+  }, listen);
+  window.addEventListener('keyup', (event) => {
+    keys.delete(event.code);
+    if (event.code === 'Space' && !touchControls.read().boost) { model.interruptBoost(); boostAudio.silence(); boostHaptics.stop(); notify(); }
+  }, listen);
+  window.addEventListener('blur', pause, listen);
+
+  const resize = () => {
+    if (disposed || lost) return;
+    const { width, height } = container.getBoundingClientRect();
+    if (width <= 0 || height <= 0) return;
+    const ratio = Math.min(window.devicePixelRatio || 1, 1.5);
+    renderer.setPixelRatio(ratio); renderer.setSize(width, height, false);
+    layout = raceViewLayout(width, height, views.trackDisplay);
+    const driving = layout.driving;
+    composer.setPixelRatio(ratio); composer.setSize(driving.width, driving.height);
+    speedLines.setSize(driving.width, driving.height); boostWarp.setSize(driving.width, driving.height);
+    camera.aspect = driving.width / driving.height; camera.updateProjectionMatrix();
+    if (layout.track) {
+      overviewComposer.setPixelRatio(ratio); overviewComposer.setSize(layout.track.width, layout.track.height);
+      views.resize(layout.track.width, layout.track.height);
+    }
+    pipFrame.hidden = views.trackDisplay === 'hidden';
+    Object.assign(pipFrame.style, { left: `${layout.inset.x}px`, bottom: `${layout.inset.y}px`, width: `${layout.inset.width}px`, height: `${layout.inset.height}px` });
+    pipFrame.textContent = views.trackDisplay === 'primary' ? `${VIEW_LABELS[views.view]} · C 전환 / X 닫기` : '전체 트랙 · X 자리 교환';
+  };
+  const observer = new ResizeObserver(resize); observer.observe(container);
+  window.addEventListener('resize', resize, listen); resize();
+
+  const tick = (now: number) => {
+    if (disposed || lost) return;
+    const delta = Math.min((now - previous) / 1000, 0.1); previous = now;
+    const oldRecoveries = model.state.recoveries;
+    const oldCollisions = model.state.collisions;
+    const oldBoostStage = model.state.boostStage;
+    if (phase === 'running') {
+      const touch = touchControls.read();
+      input.throttle = keys.has('KeyW') || touch.throttle; input.brake = keys.has('KeyS') || touch.brake;
+      input.steer = THREE.MathUtils.clamp(Number(keys.has('KeyD')) - Number(keys.has('KeyA')) + touch.steer, -1, 1);
+      input.boost = keys.has('Space') || touch.boost;
+      for (const lift of heightRequests) model.step(0, { ...input, lift });
+      heightRequests.length = 0;
+      input.lift = 0; model.step(delta, input);
+    }
+    if (oldRecoveries !== model.state.recoveries) { cameraSnap = true; boostPulse.reset(); boostWarp.reset(); boostAudio.silence(); boostEntryAge = 1; }
+    const state = model.state;
+    const simulationDelta = phase === 'running' ? delta : 0;
+    boostEntryAge += simulationDelta;
+    if (phase === 'running' && state.boostStage === 2 && oldBoostStage !== 2) { boostPulse.trigger(); boostEntryAge = 0; notify(); }
+    if (state.collisions > oldCollisions && state.notice === 'height-collision') {
+      trackVisual.hit(state.distance); notify();
+    }
+    // Quick pullback, then a smooth catch-up over 450 ms. Release cancels the impulse.
+    const entry = !reducedMotion.matches && state.boostStage === 2 && boostEntryAge < 0.45
+      ? boostEntryAge < 0.055 ? boostEntryAge / 0.055 : (1 - (boostEntryAge - 0.055) / 0.395) ** 2 : 0;
+    const targetFov = reducedMotion.matches ? visuals.baseFov : Math.min(100, visuals.baseFov + Math.min(state.speed / visuals.referenceSpeed, 2) * visuals.cruiseFovGain + (state.boosting ? visuals.boostFovGain : 0) + (state.boostStage === 2 ? visuals.boostStage2FovGain : 0) + entry * visuals.boostEntryFovGain);
+    const fov = THREE.MathUtils.lerp(camera.fov, targetFov, 1 - Math.exp(-delta * (entry > 0 ? Math.max(18, visuals.fovResponse) : visuals.fovResponse)));
+    if (Math.abs(camera.fov - fov) > 0.001) { camera.fov = fov; camera.updateProjectionMatrix(); }
+    const cameraScale = Math.tan(THREE.MathUtils.degToRad(visuals.baseFov / 2)) / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+    track.sample(state.distance, frame);
+    drone.position.copy(frame.position).addScaledVector(frame.right, state.offset).addScaledVector(frame.up, state.altitude);
+    flightForward.copy(frame.tangent).multiplyScalar(Math.cos(state.heading)).addScaledVector(frame.right, Math.sin(state.heading));
+    flightRight.copy(frame.right).multiplyScalar(Math.cos(state.heading)).addScaledVector(frame.tangent, -Math.sin(state.heading));
+    flightUp.copy(frame.up);
+    const targetBank = phase === 'running' ? -input.steer * 0.32 * Math.min(state.speed / 25, 1) : 0;
+    bank = THREE.MathUtils.lerp(bank, reducedMotion.matches ? 0 : targetBank, 1 - Math.exp(-delta * 8));
+    drone.quaternion.setFromRotationMatrix(poseBasis.makeBasis(flightRight, flightUp, backward.copy(flightForward).negate()));
+    const shakeTarget = phase === 'running' && state.boosting && !reducedMotion.matches
+      ? visuals.boostCraftShake * (state.boostStage === 2 ? 1.6 : 1) : 0;
+    craftShake = THREE.MathUtils.lerp(craftShake, shakeTarget, 1 - Math.exp(-delta * 16));
+    if (reducedMotion.matches) craftShake = 0;
+    drone.rotateZ(bank + Math.sin(state.elapsed * 51) * craftShake);
+    drone.rotateX(Math.sin(state.elapsed * 67 + 1) * craftShake * .5);
+    drone.rotateY(Math.sin(state.elapsed * 43) * craftShake * .35);
+    desiredCameraOffset.copy(flightForward).multiplyScalar(-8.5).addScaledVector(flightUp, 3.5);
+    if (cameraSnap) { cameraOffset.copy(desiredCameraOffset); cameraSnap = false; }
+    else cameraOffset.lerp(desiredCameraOffset, 1 - Math.exp(-delta * 9));
+    camera.position.copy(drone.position).addScaledVector(cameraOffset, cameraScale);
+    camera.position.addScaledVector(flightForward, -entry * visuals.boostEntryPullback);
+    if (!reducedMotion.matches && state.boostStage === 2 && boostEntryAge < 0.22) {
+      const shake = visuals.boostEntryShake * (1 - boostEntryAge / 0.22) ** 2;
+      camera.position.addScaledVector(flightRight, Math.sin(boostEntryAge * 110) * shake)
+        .addScaledVector(flightUp, Math.sin(boostEntryAge * 87 + 1) * shake);
+    }
+    lookAt.copy(drone.position).addScaledVector(flightForward, 9).addScaledVector(flightUp, 0.6); camera.up.copy(flightUp); camera.lookAt(lookAt);
+    views.update(flightForward, flightUp, bank, state.elapsed, state.boosting, reducedMotion.matches);
+    thrusters.setMode(state.boostStage === 2 ? 'boost-stage2' : phase === 'running' && state.boosting ? 'boost' : phase === 'running' && input.throttle && state.speed > 1 ? 'accelerate' : 'idle');
+    thrusters.setBoostCharge(state.boostStageProgress);
+    thrusters.update(simulationDelta, reducedMotion.matches);
+    boostPulse.update(simulationDelta, reducedMotion.matches);
+    boostWarp.update(simulationDelta, state.boostStage === 2, entry, reducedMotion.matches);
+    boostAudio.update(phase === 'running', state.boostStage, state.boostStageProgress, state.speed / visuals.referenceSpeed);
+    boostHaptics.update(simulationDelta, state.boostStage, phase === 'running' && coarsePointer.matches && !reducedMotion.matches);
+    hudElapsed += delta;
+    if (hudElapsed >= 0.08) { hudElapsed = 0; notify(); }
+    trackVisual.update(state.elapsed, reducedMotion.matches);
+    speedLines.update(state.elapsed, state.speed, state.boosting, reducedMotion.matches, state.boostStage === 2);
+    views.prepareDriving(); composer.render(delta);
+    if (layout.track) {
+      const linesVisible = speedLines.object.visible;
+      speedLines.object.visible = false;
+      views.prepareOverview(); overviewComposer.render(delta);
+      speedLines.object.visible = linesVisible;
+      views.prepareDriving();
+    }
+    renderer.setRenderTarget(null); renderer.setScissorTest(false); renderer.clear();
+    const blit = (rect: Viewport, texture: THREE.Texture) => {
+      renderer.setViewport(rect.x, rect.y, rect.width, rect.height);
+      renderer.setScissor(rect.x, rect.y, rect.width, rect.height); renderer.setScissorTest(true);
+      blitMaterial.uniforms.image.value = texture; renderer.render(blitScene, blitCamera);
+    };
+    if (views.trackDisplay === 'primary' && layout.track) {
+      blit(layout.track, overviewComposer.readBuffer.texture); blit(layout.driving, composer.readBuffer.texture);
+    } else {
+      blit(layout.driving, composer.readBuffer.texture);
+      if (layout.track) blit(layout.track, overviewComposer.readBuffer.texture);
+    }
+    renderer.setScissorTest(false);
+    renderer.getSize(rendererSize); renderer.setViewport(0, 0, rendererSize.x, rendererSize.y);
+    animation = requestAnimationFrame(tick);
+  };
+  document.addEventListener('visibilitychange', () => {
+    cancelAnimationFrame(animation);
+    if (document.hidden) pause();
+    else if (!disposed && !lost) { previous = performance.now(); animation = requestAnimationFrame(tick); }
+  }, listen);
+  renderer.domElement.addEventListener('webglcontextlost', (event) => {
+    event.preventDefault(); lost = true; pause(); cancelAnimationFrame(animation); onError();
+  }, listen);
+  notify(); animation = requestAnimationFrame(tick);
+  return {
+    start, togglePause, restart, toggleCockpit, cycleTrack,
+    setBloom(enabled) { bloom.enabled = enabled; },
+    setSoundEnabled(enabled) { boostAudio.setEnabled(enabled); },
+    setHapticsEnabled(enabled) { boostHaptics.setEnabled(enabled); },
+    dispose() {
+      disposed = true; cancelAnimationFrame(animation); events.abort(); observer.disconnect();
+      touchControls.dispose(); thrusters.dispose(); boostPulse.dispose(); boostAudio.dispose(); boostHaptics.dispose();
+      const geometries = new Set<THREE.BufferGeometry>();
+      const materials = new Set<THREE.Material>();
+      scene.traverse((object) => {
+        if (object instanceof THREE.Mesh || object instanceof THREE.LineSegments) {
+          geometries.add(object.geometry);
+          (Array.isArray(object.material) ? object.material : [object.material]).forEach((material) => materials.add(material));
+          if (object instanceof THREE.InstancedMesh) object.dispose();
+        }
+      });
+      geometries.forEach((geometry) => geometry.dispose()); materials.forEach((material) => material.dispose());
+      render.dispose(); bloom.dispose(); boostWarp.pass.dispose(); output.dispose(); composer.dispose();
+      overviewRender.dispose(); overviewOutput.dispose(); overviewComposer.dispose();
+      blitGeometry.dispose(); blitMaterial.dispose(); pipFrame.remove();
+      renderer.dispose(); renderer.forceContextLoss(); renderer.domElement.remove();
+    },
+  };
+}

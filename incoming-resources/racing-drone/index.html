@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Racing Drone — preview</title>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.184.0/build/three.module.js",
+    "three/addons/controls/OrbitControls.js": "https://unpkg.com/three@0.184.0/examples/jsm/controls/OrbitControls.js",
+    "three/addons/exporters/OBJExporter.js": "https://unpkg.com/three@0.184.0/examples/jsm/exporters/OBJExporter.js",
+    "three/addons/exporters/GLTFExporter.js": "https://unpkg.com/three@0.184.0/examples/jsm/exporters/GLTFExporter.js"
+  },
+  "integrity": {
+    "https://unpkg.com/three@0.184.0/build/three.module.js": "sha384-8FCZ1eVO6it4+pbec2aDtnTrwjWXZLJRC+MAGCIPDgsYnUrl/E0A2YlF8ioMKI/J",
+    "https://unpkg.com/three@0.184.0/build/three.core.js": "sha384-dw2ooPewaEIrAgl6oFDBmmBWCE9oW9LxRGcfwZ0hLvEprzo202wXl7vCYHRlSnOT",
+    "https://unpkg.com/three@0.184.0/examples/jsm/controls/OrbitControls.js": "sha384-4rziNxOBZKQ69i+w+f89KJ55TCYquwchVbByQwmaOeIOXdOU2PLDn3kOfXHwIJC9",
+    "https://unpkg.com/three@0.184.0/examples/jsm/exporters/OBJExporter.js": "sha384-nbwtoZENJD3Vq+ACK0CuGQdPMuDWHkamC2KJD70EV5nfg6jQjfppKOea07YJN+N3",
+    "https://unpkg.com/three@0.184.0/examples/jsm/exporters/GLTFExporter.js": "sha384-VofkvpG6HERhFCYbsUOHeNXBCqID2nfqkQqnVzE1jc/oPcz+qJ13ADdXH08hE+cQ"
+  }
+}
+</script>
+<style>
+  html, body { margin: 0; height: 100%; background: #05070d; color: #cfe7ee; font: 12.5px/1.4 "Helvetica Neue", Helvetica, Arial, sans-serif; }
+  three-d-stage:not(:defined) { visibility: hidden; }
+  three-d-stage { width: 100vw; height: 100vh; }
+  #panel { position: fixed; top: 14px; left: 14px; display: grid; gap: 10px; padding: 12px 14px; width: 220px;
+    background: rgba(7, 11, 20, 0.82); border: 1px solid rgba(39, 234, 255, 0.22); border-radius: 6px; backdrop-filter: blur(6px); user-select: none; }
+  #panel h1 { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.14em; color: #27eaff; text-transform: uppercase; }
+  .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .lbl { width: 100%; font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(207, 231, 238, 0.55); }
+  button { appearance: none; flex: 1 1 auto; padding: 6px 8px; border-radius: 4px; border: 1px solid rgba(207, 231, 238, 0.18); background: rgba(255,255,255,0.04); color: #cfe7ee; font: inherit; cursor: pointer; }
+  button:hover { border-color: rgba(39, 234, 255, 0.6); }
+  button.on { background: rgba(39, 234, 255, 0.16); border-color: #27eaff; color: #fff; }
+  input[type=range] { width: 100%; accent-color: #ff7b1c; }
+  #hint { position: fixed; left: 14px; bottom: 14px; font-size: 11px; color: rgba(207, 231, 238, 0.45); pointer-events: none; }
+  #err { position: fixed; inset: 0; display: none; place-items: center; color: #ff8a65; white-space: pre-wrap; padding: 24px; }
+</style>
+</head>
+<body>
+<three-d-stage name="racing-drone" background="#05070d"></three-d-stage>
+<div id="panel">
+  <h1>Racing Drone</h1>
+  <div class="row"><span class="lbl">View</span>
+    <button id="vExt" class="on">External</button><button id="vCpt">Cockpit</button></div>
+  <div class="row" id="presets"><span class="lbl">Preset</span>
+    <button data-p="front">Front</button><button data-p="side">Side</button><button data-p="rear">Rear</button><button data-p="quarter">¾ Front</button></div>
+  <div class="row"><span class="lbl">Post</span><button id="bloom" class="on">Bloom on</button></div>
+  <div class="row"><span class="lbl">Thruster glow <span id="tiVal">1.0</span></span>
+    <input id="ti" type="range" min="0" max="3" step="0.05" value="1"></div>
+  <div class="row"><button id="dl" class="on">Download project (.zip)</button></div>
+</div>
+<div id="hint"></div>
+<div id="err"></div>
+<script src="./three-d-stage.js"></script>
+<script type="module">
+import { createRacingDrone, setThrusterIntensity } from './createRacingDrone.js';
+
+// ---- lightweight threshold bloom (core three.js only) ----
+class MiniBloom {
+  constructor(THREE, renderer, opts = {}) {
+    this.THREE = THREE; this.renderer = renderer;
+    this.threshold = opts.threshold ?? 1.0; this.strength = opts.strength ?? 0.6;
+    this.w = 0; this.h = 0;
+    const vs = 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }';
+    this.thr = new THREE.ShaderMaterial({ uniforms: { tex: { value: null }, thr: { value: this.threshold } }, vertexShader: vs, depthTest: false, depthWrite: false,
+      fragmentShader: 'uniform sampler2D tex; uniform float thr; varying vec2 vUv; void main(){ vec4 c = texture2D(tex, vUv); float l = max(max(c.r, c.g), c.b); gl_FragColor = vec4(c.rgb * smoothstep(thr, thr + 0.35, l), 1.0); }' });
+    this.blur = new THREE.ShaderMaterial({ uniforms: { tex: { value: null }, dir: { value: new THREE.Vector2() } }, vertexShader: vs, depthTest: false, depthWrite: false,
+      fragmentShader: 'uniform sampler2D tex; uniform vec2 dir; varying vec2 vUv; void main(){ float w[5]; w[0]=0.227; w[1]=0.194; w[2]=0.121; w[3]=0.054; w[4]=0.016; vec3 c = texture2D(tex, vUv).rgb * w[0]; for (int i = 1; i < 5; i++) { vec2 o = dir * float(i); c += texture2D(tex, vUv + o).rgb * w[i]; c += texture2D(tex, vUv - o).rgb * w[i]; } gl_FragColor = vec4(c, 1.0); }' });
+    this.comp = new THREE.ShaderMaterial({ uniforms: { base: { value: null }, bloom: { value: null }, strength: { value: this.strength } }, vertexShader: vs, depthTest: false, depthWrite: false,
+      fragmentShader: 'uniform sampler2D base; uniform sampler2D bloom; uniform float strength; varying vec2 vUv; void main(){ vec3 c = texture2D(base, vUv).rgb + texture2D(bloom, vUv).rgb * strength; gl_FragColor = vec4(c, 1.0);\n#include <tonemapping_fragment>\n#include <colorspace_fragment>\n}' });
+    this.quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.thr);
+    this.quad.frustumCulled = false;
+    this.qs = new THREE.Scene(); this.qs.add(this.quad);
+    this.cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+    this.size = new THREE.Vector2();
+  }
+  _ensure(w, h) {
+    if (w === this.w && h === this.h) return;
+    const T = this.THREE;
+    [this.rtScene, this.rtA, this.rtB].forEach((r) => r && r.dispose());
+    this.rtScene = new T.WebGLRenderTarget(w, h, { type: T.HalfFloatType, samples: 4 });
+    const q = { type: T.HalfFloatType, minFilter: T.LinearFilter, magFilter: T.LinearFilter };
+    this.rtA = new T.WebGLRenderTarget(Math.ceil(w / 4), Math.ceil(h / 4), q);
+    this.rtB = new T.WebGLRenderTarget(Math.ceil(w / 4), Math.ceil(h / 4), q);
+    this.w = w; this.h = h;
+  }
+  _pass(mat, target) { this.quad.material = mat; this.renderer.setRenderTarget(target); this.renderer.render(this.qs, this.cam); }
+  render(scene, camera) {
+    const r = this.renderer;
+    r.getDrawingBufferSize(this.size);
+    this._ensure(this.size.x, this.size.y);
+    r.setRenderTarget(this.rtScene); r.render(scene, camera);
+    this.thr.uniforms.tex.value = this.rtScene.texture;
+    this._pass(this.thr, this.rtA);
+    const qw = this.rtA.width, qh = this.rtA.height;
+    for (let i = 0; i < 3; i++) {
+      const s = 1 + i * 0.8;
+      this.blur.uniforms.tex.value = this.rtA.texture; this.blur.uniforms.dir.value.set(s / qw, 0); this._pass(this.blur, this.rtB);
+      this.blur.uniforms.tex.value = this.rtB.texture; this.blur.uniforms.dir.value.set(0, s / qh); this._pass(this.blur, this.rtA);
+    }
+    this.comp.uniforms.base.value = this.rtScene.texture; this.comp.uniforms.bloom.value = this.rtA.texture;
+    this._pass(this.comp, null);
+  }
+}
+
+// ---- one-click project download: fetch sources, pack a stored ZIP in-browser ----
+const PROJECT_FILES = ['index.html', 'createRacingDrone.js', 'src/createRacingDrone.ts', 'three-d-stage.js', 'README.md',
+  'screenshots/external-quarter.jpg', 'screenshots/cockpit.jpg', 'screenshots/rear-no-bloom.jpg'];
+const crcTable = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+function crc32(u8) { let c = 0xffffffff; for (let i = 0; i < u8.length; i++) c = crcTable[(c ^ u8[i]) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; }
+function makeZip(entries) {
+  const enc = new TextEncoder(), parts = [], central = [];
+  let offset = 0;
+  const u16 = (v) => [v & 255, (v >> 8) & 255], u32 = (v) => [v & 255, (v >> 8) & 255, (v >> 16) & 255, (v >>> 24) & 255];
+  for (const { name, data } of entries) {
+    const n = enc.encode(name), crc = crc32(data);
+    const head = new Uint8Array([...u32(0x04034b50), ...u16(20), ...u16(0x800), ...u16(0), ...u16(0), ...u16(0x21), ...u32(crc), ...u32(data.length), ...u32(data.length), ...u16(n.length), ...u16(0), ...n]);
+    parts.push(head, data);
+    central.push(new Uint8Array([...u32(0x02014b50), ...u16(20), ...u16(20), ...u16(0x800), ...u16(0), ...u16(0), ...u16(0x21), ...u32(crc), ...u32(data.length), ...u32(data.length), ...u16(n.length), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(offset), ...n]));
+    offset += head.length + data.length;
+  }
+  const cdSize = central.reduce((s, c) => s + c.length, 0);
+  const end = new Uint8Array([...u32(0x06054b50), ...u16(0), ...u16(0), ...u16(entries.length), ...u16(entries.length), ...u32(cdSize), ...u32(offset), ...u16(0)]);
+  return new Blob([...parts, ...central, end], { type: 'application/zip' });
+}
+document.getElementById('dl').onclick = async (e) => {
+  const btn = e.currentTarget; btn.disabled = true; btn.textContent = 'Packing…';
+  try {
+    const entries = [];
+    for (const f of PROJECT_FILES) {
+      const r = await fetch('./' + f); if (!r.ok) continue;
+      let data = new Uint8Array(await r.arrayBuffer());
+      if (f.endsWith('.html')) {
+        // strip anything a hosting preview injected into the served page
+        let txt = new TextDecoder().decode(data);
+        txt = txt.replace(/<(style|script)\b[^>]*data-[\w-]*injected[^>]*>[\s\S]*?<\/\1>\s*/gi, '');
+        txt = txt.replace(/<(link|meta)\b[^>]*data-[\w-]*injected[^>]*>\s*/gi, '');
+        data = new TextEncoder().encode(txt);
+      }
+      entries.push({ name: 'racing-drone/' + f, data });
+    }
+    const url = URL.createObjectURL(makeZip(entries));
+    const a = Object.assign(document.createElement('a'), { href: url, download: 'racing-drone.zip' });
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  } finally { btn.disabled = false; btn.textContent = 'Download project (.zip)'; }
+};
+
+const stage = document.querySelector('three-d-stage');
+try {
+  const { THREE } = await stage.ready;
+  stage.shadowRoot.querySelector('.note')?.remove();
+  const renderer = stage._renderer, scene = stage._scene, orbitCam = stage._camera, controls = stage._controls;
+
+  // ---- preview scene: dark hangar, dim studio lights, teal rim, floor grid ----
+  scene.background = new THREE.Color(0x05070d);
+  scene.fog = new THREE.Fog(0x05070d, 14, 40);
+  for (const l of scene.children.filter((c) => c.isLight)) {
+    if (l.isHemisphereLight) { l.color.set(0x6b7fa6); l.groundColor.set(0x0a0f18); l.intensity = 2.2; }
+    else if (l.castShadow) { l.color.set(0xdfe9ff); l.intensity = 3.2; l.position.set(3, 6, -4); }
+    else { l.color.set(0x27eaff); l.intensity = 1.4; l.position.set(-4, 1.5, 6); }
+  }
+  const back = new THREE.DirectionalLight(0xff9a4a, 0.8); back.position.set(0, 1, 8); scene.add(back);
+  const key2 = new THREE.DirectionalLight(0xbfd4ff, 1.4); key2.position.set(-5, 4, -2); scene.add(key2);
+
+  const drone = createRacingDrone();
+  stage.setObject(drone);
+  drone.traverse((o) => { if (o.isMesh && o.material && o.material.isMeshBasicMaterial) o.castShadow = false; });
+  const floorY = stage._ground.position.y - 0.25;
+  stage._ground.position.y = floorY;
+  const grid = new THREE.GridHelper(60, 60, 0x1a4a5c, 0x0d1b26);
+  grid.position.y = floorY + 0.001; grid.material.transparent = true; grid.material.opacity = 0.7;
+  scene.add(grid);
+
+  // ---- cameras ----
+  const mount = drone.getObjectByName('cockpitCameraMount');
+  const chaseTarget = drone.getObjectByName('chaseCameraTarget');
+  const cockpitCam = new THREE.PerspectiveCamera(82, 1, 0.03, 200);
+  mount.add(cockpitCam);
+  const look = { yaw: 0, pitch: 0 };
+  const bloom = new MiniBloom(THREE, renderer);
+
+  const saved = JSON.parse(localStorage.getItem('rd-preview') || '{}');
+  const state = { view: saved.view || 'external', bloom: saved.bloom ?? true, ti: saved.ti ?? 1 };
+  const persist = () => localStorage.setItem('rd-preview', JSON.stringify(state));
+
+  const presets = {
+    front: [0, 0.18, -1], side: [1, 0.12, 0.05], rear: [0, 0.22, 1], quarter: [-0.8, 0.42, -1],
+  };
+  const DIST = 6.4;
+  function setPreset(name) {
+    const d = new THREE.Vector3(...presets[name]).normalize().multiplyScalar(DIST);
+    const t = chaseTarget.getWorldPosition(new THREE.Vector3());
+    controls.target.copy(t);
+    orbitCam.position.copy(t).add(d);
+    controls.update();
+  }
+  function setView(v) {
+    state.view = v; persist();
+    controls.enabled = v === 'external';
+    document.getElementById('vExt').classList.toggle('on', v === 'external');
+    document.getElementById('vCpt').classList.toggle('on', v === 'cockpit');
+    document.getElementById('hint').textContent = v === 'cockpit' ? 'Drag to look around · C to switch view' : 'Drag to orbit · scroll to zoom · C to switch view';
+  }
+  function setBloom(on) { state.bloom = on; persist(); document.getElementById('bloom').classList.toggle('on', on); document.getElementById('bloom').textContent = on ? 'Bloom on' : 'Bloom off'; }
+  function setTI(v) { state.ti = v; persist(); setThrusterIntensity(drone, v); document.getElementById('ti').value = v; document.getElementById('tiVal').textContent = Number(v).toFixed(2); }
+
+  document.getElementById('vExt').onclick = () => setView('external');
+  document.getElementById('vCpt').onclick = () => setView('cockpit');
+  document.getElementById('bloom').onclick = () => setBloom(!state.bloom);
+  document.getElementById('ti').oninput = (e) => setTI(parseFloat(e.target.value));
+  document.querySelectorAll('#presets button').forEach((b) => (b.onclick = () => { setView('external'); setPreset(b.dataset.p); }));
+  window.addEventListener('keydown', (e) => { if (e.key === 'c' || e.key === 'C') setView(state.view === 'external' ? 'cockpit' : 'external'); });
+
+  // cockpit mouse-look
+  let drag = null;
+  renderer.domElement.addEventListener('pointerdown', (e) => { if (state.view === 'cockpit') drag = { x: e.clientX, y: e.clientY, yaw: look.yaw, pitch: look.pitch }; });
+  window.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    look.yaw = THREE.MathUtils.clamp(drag.yaw + (e.clientX - drag.x) * 0.004, -1.2, 1.2);
+    look.pitch = THREE.MathUtils.clamp(drag.pitch + (e.clientY - drag.y) * 0.004, -0.6, 0.6);
+  });
+  window.addEventListener('pointerup', () => (drag = null));
+
+  renderer.setAnimationLoop(() => {
+    const w = stage.clientWidth || 1, h = stage.clientHeight || 1;
+    if (cockpitCam.aspect !== w / h) { cockpitCam.aspect = w / h; cockpitCam.updateProjectionMatrix(); }
+    if (state.view === 'external') controls.update();
+    else { cockpitCam.rotation.set(-look.pitch, -look.yaw, 0, 'YXZ'); }
+    const cam = state.view === 'cockpit' ? cockpitCam : orbitCam;
+    if (state.bloom) bloom.render(scene, cam);
+    else { renderer.setRenderTarget(null); renderer.render(scene, cam); }
+  });
+
+  setPreset('quarter');
+  setView(state.view); setBloom(state.bloom); setTI(state.ti);
+  window.__drone = { drone, setView, setPreset, setBloom, setTI, THREE, scene };
+} catch (err) {
+  const el = document.getElementById('err'); el.style.display = 'grid'; el.textContent = String(err && err.stack || err);
+  console.error(err);
+}
+</script>
+</body>
+</html>

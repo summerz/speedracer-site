@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "noEmitOnError": true,
+    "rootDir": "src",
+    "outDir": "output/test"
+  },
+  "include": ["src/game/driving/createDrivingModel.ts", "src/game/track/createTrack.ts", "src/game/driving/createRaceViews.ts", "src/game/driving/createBoostHaptics.ts"]
+}
