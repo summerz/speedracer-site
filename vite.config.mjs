@@ -2,8 +2,9 @@ import { defineConfig } from 'vite';
 import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import packageInfo from './package.json' with { type: 'json' };
 
-const { version } = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
+const { version } = packageInfo;
 const hash = content => createHash('sha256').update(content).digest('hex');
 export default defineConfig({
   define: { 'import.meta.env.VITE_APP_VERSION': JSON.stringify(version) },

@@ -10,4 +10,4 @@
 .install-dialog { width:min(420px,calc(100% - 40px)); padding:24px; background:#0b1c28; color:#dae9ed; border:1px solid #56dacf70; }
 .install-dialog::backdrop { background:#030b16d9; }
 .install-dialog h2 { font-size:22px; }.install-dialog p { line-height:1.7; font-size:14px; }.install-dialog button { width:100%; }
-@media (max-width:760px) { .masthead { flex-wrap:wrap; }.masthead .app-tools { order:3; flex-basis:100%; margin:0; }.masthead .app-shell-tools { margin-top:12px; } }
+@media (max-width:760px) { .masthead { flex-wrap:wrap; }.masthead .app-tools { order:3; flex-basis:100%; margin:0; }.masthead .app-shell-tools { margin-top:0; } }
