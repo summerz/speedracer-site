@@ -6,11 +6,14 @@ import { steeringYawRate } from './createDrivingModel.js';
 import type { DrivingInput, DrivingState } from './createDrivingModel.js';
 import { createTimeAttack } from './createTimeAttack.js';
 import { createRaceRecords } from './raceRecords.js';
+import { aiDrivingProfile, AI_STYLE_LABELS, selectAiRacer } from './aiRoster.js';
+import type { AiControlMode, AiDrivingProfile } from './aiRoster.js';
 
 export type RaceMode = 'time-attack' | 'competition';
 export interface Standing {
   id: string; name: string; color: string; player: boolean;
   distance: number; completedLaps: number; finishTime: number | null; rank: number;
+  craftName?: string; style?: string; rating?: number;
 }
 export interface CompetitionSnapshot {
   standings: Standing[]; playerRank: number; complete: boolean;
@@ -27,6 +30,16 @@ export function rankParticipants(entries: Omit<Standing, 'rank'>[]): Standing[] 
 }
 
 type ContactPose = Pick<DrivingState, 'distance' | 'offset' | 'altitude'>;
+
+/** Three distinct opponents from all four other models; injected randomness keeps simulations repeatable. */
+export function selectRivalCrafts(configuration: DroneConfiguration, random: () => number = Math.random) {
+  const candidates = DRONE_CATALOG.filter(entry => entry.configuration.modelVariant !== configuration.modelVariant);
+  for (let i = candidates.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+  }
+  return candidates.slice(0, 3);
+}
 /** Swept track-space boxes catch fast overtakes, including racers a lap apart and the start seam. */
 export function craftContact(a0: ContactPose, a1: ContactPose, b0: ContactPose, b1: ContactPose, length: number): boolean {
   const d0 = a0.distance - b0.distance;
@@ -47,24 +60,27 @@ export function craftContact(a0: ContactPose, a1: ContactPose, b0: ContactPose, 
 
 /** AI makes ordinary driving decisions; it never writes speed, distance or lap progress. */
 export function aiDrivingInput(track: Track, configuration: DroneConfiguration, state: DrivingState,
-  index: number, opponents: readonly DrivingState[]): DrivingInput {
+  index: number, opponents: readonly DrivingState[], profile?: AiDrivingProfile): DrivingInput {
   const p = configuration.performance;
   const curvature = track.sample(state.distance).curvature;
   const bend = Math.max(Math.abs(curvature), Math.abs(track.sample(state.distance + 25).curvature), Math.abs(track.sample(state.distance + 55).curvature));
   const difficulty = track.altitudeProfile.levels.length;
-  const pace = difficulty === 2 ? .82 : difficulty === 3 ? .91 : 1;
-  const boost = bend < .0025 && Math.sin(state.elapsed * .28 + index * 1.8) > .12
-    && !state.boostNeedsRelease && (state.boosting ? state.charge > .04 : state.charge > .65);
-  const desiredSpeed = (boost ? p.boostStage2Speed : p.topSpeed) * pace * (1 + .045 * Math.sin(state.elapsed * .09 + index));
-  const goalSpeed = Math.min(desiredSpeed, (.57 + index * .025) / Math.max(.001, bend));
+  const pace = (difficulty === 2 ? .96 : 1) * (profile?.pace ?? 1);
+  const boost = bend < (profile?.boostCurvature ?? .003) && !state.boostNeedsRelease &&
+    (state.boosting ? state.charge > (profile?.boostEndCharge ?? .03) : state.charge > (profile?.boostStartCharge ?? .5));
+  const desiredSpeed = (boost ? p.boostStage2Speed : p.topSpeed) * pace;
+  const goalSpeed = Math.min(desiredSpeed, (profile?.cornerLimit ?? .74) / Math.max(.001, bend));
   const edge = track.halfWidth - 3.5;
-  let lane = (index - 1) * Math.min(4.5, edge * .7) + Math.sin(state.distance / 210 + index * 2) * 1.3;
-  for (const other of opponents) {
+  const laneWidth = Math.min(5.2, edge * .7);
+  const preferredLane = (index - 1) * laneWidth + Math.sin(state.distance / 210 + index * 2) * .65;
+  const traffic = opponents.filter(other => {
     const ahead = ((other.distance - state.distance) % track.length + track.length) % track.length;
-    if (ahead > 0 && ahead < 22 && Math.abs(other.offset - lane) < 3.5 && Math.abs(other.altitude - state.altitude) < 1.5) {
-      lane = other.offset > 0 ? other.offset - 4.5 : other.offset + 4.5; break;
-    }
-  }
+    const lookAhead = Math.max(35, (desiredSpeed - other.speed) * 1.3 + 12);
+    // Start a pass before the speed difference closes the gap; hold clearance until fully past.
+    return (ahead < lookAhead || ahead > track.length - 8) && Math.abs(other.altitude - state.altitude) < 1.5;
+  });
+  let lane = [preferredLane, -laneWidth, laneWidth, 0].find(candidate =>
+    traffic.every(other => Math.abs(other.offset - candidate) >= 4.2)) ?? preferredLane;
   lane = Math.max(-edge, Math.min(edge, lane));
   const next = upcomingHeightObstacle(track, state.distance);
   let lift = 0;
@@ -78,17 +94,27 @@ export function aiDrivingInput(track: Track, configuration: DroneConfiguration, 
 
 /** One clock, countdown and pause lifecycle for both modes; completed pilots become ghosts. */
 export function createRaceSession(track: Track, configuration: DroneConfiguration,
-  records: ReturnType<typeof createRaceRecords>, focusSlots = 0, mode: RaceMode = 'time-attack') {
+  records: ReturnType<typeof createRaceRecords>, focusSlots = 0, mode: RaceMode = 'time-attack',
+  random: () => number = Math.random, controlMode: AiControlMode = 'desktop') {
   const player = createTimeAttack(track, configuration.performance, records, focusSlots);
-  const candidates = DRONE_CATALOG.filter(entry => entry.configuration.modelVariant !== configuration.modelVariant).slice(0, 3);
-  const rivals = mode === 'competition' ? candidates.map((entry, index) => ({
-    id: `ai-${index + 1}`, name: entry.name, color: entry.lineColor, configuration: entry.configuration,
-    controller: createTimeAttack(track, entry.configuration.performance,
-      createRaceRecords({ trackId: 'ai-memory', configurationId: entry.name }), focusSlots),
-  })) : [];
   const craft = DRONE_CATALOG.find(c => c.configuration.modelVariant === configuration.modelVariant);
+  const playerColor = craft?.lineColor ?? configuration.boostStyle.pulseColor;
+  const candidates = mode === 'competition' ? selectRivalCrafts(configuration, random) : [];
+  const rivals = candidates.map(entry => {
+    const racer = selectAiRacer(entry.configuration.modelVariant, playerColor, random);
+    const { color } = racer;
+    const rivalConfiguration = { ...entry.configuration, boostStyle: {
+      core: '#ffffff', body: color, tail: color, afterglow: color, pulseColor: color,
+    } };
+    return {
+      id: `ai-${racer.id}`, name: racer.name, craftName: entry.name, color, racer,
+      style: AI_STYLE_LABELS[racer.style], rating: racer.rating, profile: aiDrivingProfile(racer, controlMode), configuration: rivalConfiguration,
+      controller: createTimeAttack(track, rivalConfiguration.performance,
+        createRaceRecords({ trackId: 'ai-memory', configurationId: racer.id }), focusSlots),
+    };
+  });
   const participants = [{ id: 'player', name: craft?.name ?? 'PLAYER',
-    color: craft?.lineColor ?? configuration.boostStyle.pulseColor, configuration, controller: player }, ...rivals];
+    color: playerColor, craftName: craft?.name ?? 'PLAYER', style: '', rating: 0, configuration, controller: player }, ...rivals];
   const contacts = new Map<string, number>();
   let clock = 0;
   const grid = () => {
@@ -103,13 +129,13 @@ export function createRaceSession(track: Track, configuration: DroneConfiguratio
     if (!rivals.length) return null;
     const standings = rankParticipants(participants.map(p => {
       const s = p.controller.snapshot();
-      return { id: p.id, name: p.name, color: p.color, player: p === participants[0],
+      return { id: p.id, name: p.name, color: p.color, player: p === participants[0], craftName: p.craftName, style: p.style, rating: p.rating,
         distance: p.controller.model.state.distance, completedLaps: s.completedLaps, finishTime: s.finishTime };
     }));
     return { standings, playerRank: standings.find(p => p.player)!.rank, complete: standings.every(p => p.finishTime !== null) };
   };
   return {
-    model: player.model, rivals,
+    model: player.model, rivals, controlMode,
     get phase() { return player.phase; },
     snapshot() { return { ...player.snapshot(), mode, competition: competition() }; },
     start() {
@@ -136,7 +162,7 @@ export function createRaceSession(track: Track, configuration: DroneConfiguratio
         player.step(step, { ...input, lift: firstStep ? input.lift : 0 }); firstStep = false;
         rivals.forEach((rival, index) => {
           const opponents = participants.filter(p => p !== rival && p.controller.phase !== 'finished').map(p => p.controller.model.state);
-          rival.controller.step(step, aiDrivingInput(track, rival.configuration, rival.controller.model.state, index, opponents));
+          rival.controller.step(step, aiDrivingInput(track, rival.configuration, rival.controller.model.state, index, opponents, rival.profile));
         });
         if (participants.some(p => p.controller.phase === 'running')) clock += step;
         for (let a = 0; a < participants.length; a++) for (let b = a + 1; b < participants.length; b++) {

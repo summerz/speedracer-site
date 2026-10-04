@@ -1,19 +1,133 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createRaceSession, rankParticipants, craftContact, aiDrivingInput } from '../output/test/game/driving/createRaceSession.js';
+import { createRaceSession, selectRivalCrafts, rankParticipants, craftContact, aiDrivingInput } from '../output/test/game/driving/createRaceSession.js';
 import { createRaceRecords } from '../output/test/game/driving/raceRecords.js';
 import { createTrack } from '../output/test/game/track/createTrack.js';
 import { DIFFICULTIES } from '../output/test/game/track/difficulty.js';
 import { DEFAULT_DRONE_CONFIGURATION as config } from '../output/test/game/drone/droneConfiguration.js';
+import { DRONE_CATALOG } from '../output/test/game/drone/droneCatalog.js';
+import { createRivalVisuals } from '../output/test/game/driving/createRivalVisuals.js';
+import { createTimeAttack } from '../output/test/game/driving/createTimeAttack.js';
+import { AI_RACERS, AI_STYLE_LABELS, aiDrivingProfile, distinctAiColor, selectAiRacer } from '../output/test/game/driving/aiRoster.js';
+import * as THREE from 'three';
 const course = createTrack();
 const straight = { ...course, length: 500, halfWidth: 14, checkpointSpacing: 25, heightObstacles: [], sample: () => ({ curvature: 0 }) };
 const input = { throttle: true, brake: false, steer: 0, lift: 0, boost: false };
-const session = (track = straight, slots = 0) => createRaceSession(track, config, createRaceRecords({ trackId: 'competition-test', configurationId: 'test' }), slots, 'competition');
+const session = (track = straight, slots = 0) => createRaceSession(track, config, createRaceRecords({ trackId: 'competition-test', configurationId: 'test' }), slots, 'competition', () => .999);
 const advance = (race, seconds, controls = input, fps = 120) => {
   for (let n = 0; n < Math.round(seconds * fps); n++) race.step(1 / fps, controls);
 };
 const entry = (id, distance, finishTime = null) => ({ id, name: id, color: '#ffffff', player: id === 'player', distance, completedLaps: 0, finishTime });
 const pose = (distance, offset = 0, altitude = 2) => ({ distance, offset, altitude });
+
+test('24 named racers have fixed, distinct identities, colors and a wide skill range', () => {
+  assert.equal(AI_RACERS.length, 24);
+  for (const field of ['id', 'name', 'color']) assert.equal(new Set(AI_RACERS.map(p => p[field])).size, 24);
+  assert.deepEqual([...new Set(AI_RACERS.map(p => p.rating))].sort(), [1, 2, 3, 4, 5, 6]);
+  for (const pilot of AI_RACERS) {
+    assert.ok(DRONE_CATALOG.some(p => p.configuration.modelVariant === pilot.modelVariant));
+    assert.ok(DRONE_CATALOG.every(p => p.lineColor !== pilot.color));
+    assert.ok(AI_STYLE_LABELS[pilot.style]);
+    const desktop = aiDrivingProfile(pilot, 'desktop'), mobile = aiDrivingProfile(pilot, 'touch');
+    assert.ok(mobile.pace < desktop.pace);
+    assert.ok(mobile.cornerLimit < desktop.cornerLimit);
+    assert.ok(mobile.boostStartCharge > desktop.boostStartCharge);
+    assert.deepEqual(aiDrivingProfile(pilot, 'desktop'), desktop);
+  }
+  const steady = AI_RACERS.filter(p => p.modelVariant === 'vanguard' && p.style === 'steady');
+  assert.ok(aiDrivingProfile(steady[1], 'desktop').pace / aiDrivingProfile(steady[0], 'desktop').pace > 1.2);
+});
+
+test('every craft matchup has recognizable eligible paint, and roster draws can reach all 24 identities', () => {
+  const seen = new Set();
+  for (const player of DRONE_CATALOG) for (const craft of DRONE_CATALOG) {
+    if (craft === player) continue;
+    for (let i = 0; i < 100; i++) {
+      const pilot = selectAiRacer(craft.configuration.modelVariant, player.lineColor, () => i / 100);
+      assert.equal(pilot.modelVariant, craft.configuration.modelVariant);
+      assert.ok(distinctAiColor(pilot.color, player.lineColor));
+      seen.add(pilot.id);
+    }
+  }
+  assert.equal(seen.size, 24);
+  assert.equal(distinctAiColor('#30e9ff', '#27eaff'), false);
+  assert.equal(distinctAiColor('#eef3ff', '#27eaff'), true);
+});
+
+test('platform changes driver decisions while names, colors, models and retries stay fixed', () => {
+  const make = platform => createRaceSession(straight, config, createRaceRecords({ trackId: 'platform', configurationId: 'fixed' }), 0, 'competition', () => .6, platform);
+  const desktop = make('desktop'), mobile = make('touch');
+  const identities = race => race.rivals.map(p => [p.id, p.name, p.color, p.configuration.modelVariant, p.style, p.rating]);
+  assert.deepEqual(identities(desktop), identities(mobile));
+  assert.equal(mobile.controlMode, 'touch');
+  assert.ok(mobile.rivals.every((p, i) => p.profile.pace < desktop.rivals[i].profile.pace));
+  const before = desktop.rivals.map(p => [p.racer, p.profile]);
+  desktop.start(); advance(desktop, 5); desktop.restart();
+  assert.deepEqual(desktop.rivals.map(p => [p.racer, p.profile]), before);
+  assert.deepEqual(identities(desktop), identities(mobile));
+});
+
+test('the same named driver actually completes the mobile race more slowly', () => {
+  const pilot = AI_RACERS.find(p => p.id === 'aegis');
+  const times = ['desktop', 'touch'].map(platform => {
+    const racer = createTimeAttack(straight, config.performance, createRaceRecords({ trackId: 'platform-pace', configurationId: platform }));
+    racer.start();
+    for (let tick = 0; tick < 12000 && racer.phase !== 'finished'; tick++) {
+      racer.step(1 / 120, aiDrivingInput(straight, config, racer.model.state, 1, [], aiDrivingProfile(pilot, platform)));
+    }
+    assert.equal(racer.phase, 'finished');
+    return racer.snapshot().finishTime;
+  });
+  assert.ok(times[1] > times[0] * 1.08, `${times}`);
+});
+
+test('each player faces three unique other models and all four alternatives can appear', () => {
+  for (const player of DRONE_CATALOG) {
+    const seen = new Set();
+    for (const random of [() => 0, () => .999]) {
+      const entries = selectRivalCrafts(player.configuration, random);
+      assert.equal(entries.length, 3);
+      assert.equal(new Set(entries.map(p => p.configuration.modelVariant)).size, 3);
+      assert.ok(entries.every(p => p.configuration.modelVariant !== player.configuration.modelVariant));
+      entries.forEach(p => seen.add(p.configuration.modelVariant));
+    }
+    assert.equal(seen.size, 4);
+  }
+});
+
+test('AI liveries differ from every player color and keep catalog performance and paint untouched', () => {
+  const original = JSON.stringify(DRONE_CATALOG), race = session();
+  const visuals = createRivalVisuals(new THREE.Scene(), course, race.rivals);
+  assert.equal(new Set(race.rivals.map(p => p.color)).size, 3);
+  for (const rival of race.rivals) {
+    assert.ok(DRONE_CATALOG.every(p => p.lineColor !== rival.color));
+    assert.equal(rival.configuration.boostStyle.pulseColor, rival.color);
+    assert.equal(rival.configuration.boostStyle.body, rival.color);
+    assert.deepEqual(rival.configuration.performance,
+      DRONE_CATALOG.find(p => p.configuration.modelVariant === rival.configuration.modelVariant).configuration.performance);
+    const visual = visuals.entries.find(p => p.rival === rival);
+    assert.equal(visual.color, rival.color);
+    const actual = visual.object.userData.materials.neonMat.color;
+    const expected = new THREE.Color(rival.color);
+    const hueVector = color => new THREE.Vector3(color.r, color.g, color.b).normalize();
+    assert.ok(hueVector(actual).distanceTo(hueVector(expected)) < 1e-12);
+    assert.ok(Math.max(actual.r, actual.g, actual.b) > 1, 'AI neon remains bright enough for bloom');
+    assert.ok(hueVector(visual.object.userData.accentBase).distanceTo(hueVector(expected)) < 1e-12);
+  }
+  visuals.dispose();
+  assert.equal(JSON.stringify(DRONE_CATALOG), original);
+});
+
+test('a fast AI starts overtaking a slower craft before reaching it and holds clearance until fully past', () => {
+  const state = { ...session().model.state, distance: 40, offset: 0, heading: 0, speed: 120 };
+  const other = { ...state, distance: 80, speed: 60 };
+  const free = aiDrivingInput(straight, config, state, 1, []);
+  const pass = aiDrivingInput(straight, config, state, 1, [other]);
+  assert.ok(free.steer > 0);
+  assert.ok(pass.steer < 0, 'change lane while the slower craft is still 40m ahead');
+  assert.ok(aiDrivingInput(straight, config, state, 1, [{ ...other, distance: 35 }]).steer < 0);
+  assert.deepEqual(aiDrivingInput(straight, config, state, 1, [{ ...other, altitude: state.altitude + 3 }]), free);
+});
 
 test('rank uses full lap distance, then exact finish time rather than a frozen finish position', () => {
   const ranks = rankParticipants([entry('player', 520), entry('a', 490), entry('b', 1030), entry('c', 20)]);
@@ -70,17 +184,14 @@ test('focus slows every active racer while every official elapsed clock keeps ru
   race.pause(); const snapshot = race.snapshot(); advance(race, 2); assert.deepEqual(race.snapshot(), snapshot);
 });
 
-test('braking lets AI overtake, boost lets the player pass, and every pilot completes three laps', () => {
+test('braking lets AI overtake and every pilot completes three laps without waiting for the player', () => {
   const race = session(); race.start(); advance(race, 3);
   advance(race, 5, { ...input, brake: true });
   assert.equal(race.snapshot().competition.playerRank, 4);
-  let overtaken = false;
   for (let n = 0; n < 6000; n++) {
     race.step(1 / 120, { ...input, boost: true, lift: n === 0 ? 1 : 0 });
-    if (race.snapshot().competition.playerRank < 4) overtaken = true;
     if (race.snapshot().competition.complete) break;
   }
-  assert.equal(overtaken, true);
   assert.equal(race.phase, 'finished'); assert.equal(race.snapshot().competition.complete, true);
   assert.ok(race.snapshot().competition.standings.every(p => p.completedLaps === 3 && p.finishTime > 0));
   const finished = race.snapshot(); advance(race, 1); assert.deepEqual(race.snapshot(), finished);
@@ -99,7 +210,48 @@ for (const difficulty of Object.values(DIFFICULTIES)) test(`all AI finish the ac
   assert.equal(race.snapshot().competition.complete, true, JSON.stringify(race.snapshot().competition));
   assert.ok(race.snapshot().competition.standings.every(p => p.completedLaps === 3));
   assert.ok(race.rivals.every(p => p.controller.model.state.recoveries === 0));
+  assert.ok(race.rivals.every(p => p.controller.model.state.offTrackExits === 0));
 });
+
+for (const difficulty of Object.values(DIFFICULTIES)) test(`all five models sustain stage 2 and cleanly finish ${difficulty.id} within the racing pace budget`, () => {
+  const track = createTrack(undefined, difficulty);
+  const budget = { beginner: 134, intermediate: 147, advanced: 177 }[difficulty.id];
+  for (const craft of DRONE_CATALOG) {
+    const racer = createTimeAttack(track, craft.configuration.performance,
+      createRaceRecords({ trackId: 'ai-pace', configurationId: craft.name }));
+    racer.start(); let stage2 = 0;
+    for (let tick = 0; tick < 120 * (budget + 4) && racer.phase !== 'finished'; tick++) {
+      racer.step(1 / 120, aiDrivingInput(track, craft.configuration, racer.model.state, 1, []));
+      if (racer.model.state.boostStage === 2) stage2++;
+    }
+    assert.equal(racer.phase, 'finished', craft.name);
+    assert.ok(racer.snapshot().finishTime < budget, `${craft.name}: ${racer.snapshot().finishTime}s`);
+    assert.ok(stage2 > 120, `${craft.name} should hold stage 2 for over one second`);
+    assert.equal(racer.model.state.collisions, 0, craft.name);
+    assert.equal(racer.model.state.offTrackExits, 0, craft.name);
+  }
+});
+
+for (const difficulty of Object.values(DIFFICULTIES)) for (const platform of ['desktop', 'touch']) {
+  test(`all 24 fixed racers finish ${difficulty.id} cleanly on ${platform}`, () => {
+    const track = createTrack(undefined, difficulty), times = new Map();
+    for (const pilot of AI_RACERS) {
+      const craft = DRONE_CATALOG.find(p => p.configuration.modelVariant === pilot.modelVariant);
+      const racer = createTimeAttack(track, craft.configuration.performance,
+        createRaceRecords({ trackId: 'roster', configurationId: pilot.id }));
+      const profile = aiDrivingProfile(pilot, platform);
+      racer.start();
+      for (let tick = 0; tick < 9000 && racer.phase !== 'finished'; tick++) {
+        racer.step(1 / 30, aiDrivingInput(track, craft.configuration, racer.model.state, 1, [], profile));
+      }
+      assert.equal(racer.phase, 'finished', pilot.id);
+      assert.equal(racer.model.state.collisions, 0, pilot.id);
+      assert.equal(racer.model.state.offTrackExits, 0, pilot.id);
+      times.set(pilot.id, racer.snapshot().finishTime);
+    }
+    assert.ok(times.get('aegis') < times.get('glint') * .88, 'strong steady driver noticeably outpaces weak driver in the same craft');
+  });
+}
 
 test('rendering at 30, 60 or 120 Hz preserves AI finish times and the final standings', () => {
   const outcomes = [30, 60, 120].map(fps => {

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { setThrusterIntensity } from './createRacingDrone';
+import { setThrusterIntensity } from './createRacingDrone.js';
 
 export type ThrustMode = 'idle' | 'accelerate' | 'boost' | 'boost-stage2';
 

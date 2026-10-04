@@ -102,7 +102,7 @@ export function createRace(
   let storage: Storage | undefined;
   try { storage = window.localStorage; } catch { /* Private browsing can deny storage. */ }
   const records = createRaceRecords({ trackId: `neon-circuit-v1:${difficulty?.id ?? 'beginner'}`, configurationId: JSON.stringify({ performance: config.performance, altitude: track.altitudeProfile, ...(focusSlots ? { assisted: true } : {}), ...(mode === 'competition' ? { mode } : {}) }) }, storage);
-  const timeAttack = createRaceSession(track, config, records, focusSlots, mode);
+  const timeAttack = createRaceSession(track, config, records, focusSlots, mode, Math.random, coarsePointer.matches ? 'touch' : 'desktop');
   const rivalVisuals = createRivalVisuals(scene, track, timeAttack.rivals);
   const model = timeAttack.model;
   const raceGates = createRaceGates(track, timeAttack.snapshot().gatesPerLap);

@@ -205,6 +205,15 @@ button:focus-visible { outline:2px solid #c9f9f2; outline-offset:3px; }
 .race-standings li.is-player { color:var(--accent); }
 .standing-name { display:flex; align-items:center; gap:6px; }
 .standing-name i { width:6px; height:6px; flex:none; }
+.standing-name small { display:block; color:#9bb4c1; font-size:10px; margin-top:3px; }
+.ai-roster { margin:14px 0; padding:10px 12px; background:#0c202b; border:1px solid #58717d50; }
+.ai-roster ol { margin:6px 0 0; padding:0; list-style:none; }
+.ai-roster li { display:grid; grid-template-columns:5px 1fr auto; align-items:center; gap:9px; padding:7px 0; }
+.ai-roster li+li { border-top:1px solid #58717d30; }
+.ai-roster i { height:25px; width:3px; }
+.ai-roster strong { display:block; color:#d7e9ec; font:600 13px 'Barlow Condensed',sans-serif; letter-spacing:.6px; }
+.ai-roster small { display:block; color:#9bb4c1; font-size:10px; margin-top:2px; }
+.ai-rating { color:#a6c6d0; font:10px 'IBM Plex Mono',monospace; }
 #competition-results #standings-status { color:var(--accent); font:10px 'IBM Plex Mono',monospace; margin:12px 0 4px; }
 @media(max-width:600px) { .telemetry-row { gap:12px; }.rank-readout { font-size:13px; } }
 .race-map-legend { position:absolute; left:7px; bottom:7px; color:#d0e8eb; }

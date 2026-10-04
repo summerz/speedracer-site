@@ -45,6 +45,7 @@ export function mountRace(root: HTMLDivElement, onHangar: () => void, configurat
           <section id="race-result" class="race-result" aria-label="경기 결과" hidden><p id="result-status" class="result-status"></p><time id="result-total" class="result-total"></time><ol id="result-laps" class="result-laps"></ol><p id="result-best"></p><div id="competition-results" hidden><p id="standings-status"></p><ol id="race-standings" class="race-standings" aria-label="참가자 순위"></ol></div><p id="result-penalties"></p><div id="result-reward" class="reward-summary" role="status" aria-live="polite"></div><button id="reward-retry" type="button" hidden>보상 저장 다시 시도</button><button id="result-shop" type="button" hidden>상점으로 ↗</button><p id="record-warning" class="record-warning" hidden>기록을 저장하지 못했습니다. 이번 화면에서 확인할 수 있습니다.</p></section>
           <fieldset id="race-mode-picker" class="difficulty-picker mode-picker"><legend>경기 방식</legend><div><label><input type="radio" name="race-mode" value="time-attack" checked /><span>타임어택</span></label><label><input type="radio" name="race-mode" value="competition" /><span>AI 레이스 · 4대</span></label></div></fieldset>
           <fieldset id="difficulty-picker" class="difficulty-picker"><legend>난이도</legend><div><label><input type="radio" name="difficulty" value="beginner" checked /><span>초급</span></label><label><input type="radio" name="difficulty" value="intermediate" /><span>중급</span></label><label><input type="radio" name="difficulty" value="advanced" /><span>고급</span></label></div></fieldset><p id="difficulty-description" class="difficulty-description"></p>
+          <section id="ai-roster" class="ai-roster" aria-label="이번 경기 AI 선수" hidden><p class="eyebrow">이번 경기 상대</p><ol id="ai-roster-list"></ol></section>
           <p id="ready-best" class="ready-best"></p><p class="shop-hint" id="race-loadout"></p><button type="button" id="drive-start" class="primary-action">레이스 시작 <span aria-hidden="true">↗</span></button>
           <button type="button" id="race-hangar" class="race-exit">격납고로</button>
           <div class="menu-preview"><span>화면 미리보기</span><div class="race-actions"><button type="button" id="race-view">콕핏 보기 <kbd>C</kbd></button><button type="button" id="race-track">트랙 PIP 보기 <kbd>X</kbd></button></div></div>
@@ -160,12 +161,21 @@ export function mountRace(root: HTMLDivElement, onHangar: () => void, configurat
     get('race-rank').textContent = competition ? `${competition.playerRank} / 4` : '';
     get('race-rank').setAttribute('aria-label', competition ? `4대 중 ${competition.playerRank}위` : '');
     get('competition-results').hidden = !competition;
+    get('ai-roster').hidden = !competition || state.phase !== 'ready';
+    if (competition && state.phase === 'ready') {
+      const opponents = competition.standings.filter(p => !p.player);
+      const key = opponents.map(p => p.id).join('/');
+      if (get('ai-roster-list').dataset.roster !== key) {
+        get('ai-roster-list').dataset.roster = key;
+        get('ai-roster-list').innerHTML = opponents.map(p => `<li><i style="background:${p.color}" aria-hidden="true"></i><span><strong>${p.name}</strong><small>${p.craftName} · ${p.style}</small></span><span class="ai-rating" aria-label="실력 6단계 중 ${p.rating}">실력 ${p.rating}/6</span></li>`).join('');
+      }
+    }
     if (competition && state.phase === 'finished') {
       const key = JSON.stringify(competition.standings.map(p => [p.id, p.rank, p.finishTime, p.completedLaps]));
       if (key !== standingsKey) {
         standingsKey = key;
         get('standings-status').textContent = competition.complete ? 'FINAL STANDINGS · 최종 순위' : '내 순위 확정 · 나머지 기체 주행 중';
-        get('race-standings').innerHTML = competition.standings.map(p => `<li class="${p.player ? 'is-player' : ''}"><strong>${p.rank}</strong><span class="standing-name"><i style="background:${p.color}"></i>${p.name}${p.player ? ' · 나' : ''}</span><time>${p.finishTime === null ? `LAP ${Math.min(3, p.completedLaps + 1)}/3` : formatTime(p.finishTime)}</time></li>`).join('');
+        get('race-standings').innerHTML = competition.standings.map(p => `<li class="${p.player ? 'is-player' : ''}"><strong>${p.rank}</strong><span class="standing-name"><i style="background:${p.color}"></i><span>${p.name}${p.player ? ' · 나' : `<small>${p.craftName} · ${p.style}</small>`}</span></span><time>${p.finishTime === null ? `LAP ${Math.min(3, p.completedLaps + 1)}/3` : formatTime(p.finishTime)}</time></li>`).join('');
       }
     }
     activeRaceId = attack.raceId; canFocus = attack.canFocus;

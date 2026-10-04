@@ -5,10 +5,11 @@ import { createTrackFrame } from '../track/createTrack.js';
 import type { Track } from '../track/createTrack.js';
 import type { createRaceSession } from './createRaceSession.js';
 
-/** Three visible opponents share the player's materials and thruster effects. */
+/** Opponent silhouettes keep their catalog geometry with distinct AI neon liveries. */
 export function createRivalVisuals(scene: THREE.Scene, track: Track, rivals: ReturnType<typeof createRaceSession>['rivals']) {
   const entries = rivals.map(rival => {
-    const object = createRacingDrone({ variant: rival.configuration.modelVariant, neonBoost: 1.7, thrusterIntensity: .35 });
+    const object = createRacingDrone({ variant: rival.configuration.modelVariant,
+      neonColor: rival.color, accentColor: rival.color, neonBoost: 1.7, thrusterIntensity: .35 });
     object.name = `rival-${rival.id}`; scene.add(object);
     return { object, color: rival.color, thrusters: createThrusterEffect(object, scene, rival.configuration.boostStyle), rival };
   });
