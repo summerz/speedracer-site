@@ -18,6 +18,16 @@ export interface DronePerformance {
   highSpeedSteeringLoss: number;
   boostDrain: number;
   boostRecovery: number;
+  /** Gravity response: lower values retain more speed uphill. */
+  slopeSensitivity: number;
+  /** Speed loss per m/s² of curvature load. Lower values preserve corner speed. */
+  corneringDrag: number;
+  /** Extra acceleration loss at full steering and cruise speed (m/s²). */
+  steeringDrag: number;
+  /** Acceleration loss per m/s of altitude switching. */
+  altitudeDrag: number;
+  /** Fraction above nominal speed allowed through downhill momentum. */
+  downhillOverspeed: number;
 }
 
 export interface SpeedEffects {
@@ -64,6 +74,7 @@ export const DEFAULT_DRONE_CONFIGURATION: DroneConfiguration = {
   performance: {
     topSpeed: 85, boostSpeed: 125, boostStage2Speed: 155, boostStage2Threshold: 0.6, acceleration: 46, braking: 70, collisionSpeedLoss: 0.38, crawlSpeed: 12,
     boostAcceleration: 68, boostStage2Acceleration: 90, maxYawRate: 2.2, corneringReferenceSpeed: 60, highSpeedSteeringLoss: 0.2, boostDrain: 0.20, boostRecovery: 0.16,
+    slopeSensitivity: 1, corneringDrag: .12, steeringDrag: 4.5, altitudeDrag: .5, downhillOverspeed: .12,
   },
   speedEffects: {
     baseFov: 65, referenceSpeed: 85, cruiseFovGain: 5, boostFovGain: 8,
@@ -97,6 +108,7 @@ export function resolveDroneConfiguration(base: DroneConfiguration, modifiers: r
   performance.boostStage2Speed = Math.max(performance.boostSpeed, performance.boostStage2Speed);
   if (performance.boostStage2Threshold >= 1) throw new RangeError('Stage 2 threshold must be between 0 and 1');
   if (performance.collisionSpeedLoss >= 1) throw new RangeError('Collision speed loss must be between 0 and 1');
+  if (performance.downhillOverspeed > .3) throw new RangeError('Downhill overspeed must be at most 30%');
   for (const color of Object.values(boostStyle)) {
     if (!/^#[0-9a-f]{6}$/i.test(color)) throw new RangeError('Boost colors must use six-digit hex');
   }

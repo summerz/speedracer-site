@@ -18,8 +18,8 @@ test('difficulty changes physical layout and reachable obstacle demands, preserv
       assert.ok(track.altitudeProfile.levels.some(h => h >= obstacle.minAltitude && h <= obstacle.maxAltitude));
     }
     const model = createDrivingModel({ ...track, heightObstacles: [], sample: () => ({ curvature: 0 }) });
-    for (let n = 0; n < 300; n++) model.step(1 / 60, { ...NEUTRAL_INPUT, throttle: true });
-    assert.equal(model.state.speed, DEFAULT_DRONE_CONFIGURATION.performance.topSpeed);
+    for (let n = 0; n < 600; n++) model.step(1 / 60, { ...NEUTRAL_INPUT, throttle: true });
+    assert.ok(Math.abs(model.state.speed - DEFAULT_DRONE_CONFIGURATION.performance.topSpeed) < .001);
   }
   assert.equal(tracks[0].heightObstacles.some(o => o.kind === 'middle'), false);
   assert.ok(tracks[1].heightObstacles.some(o => o.kind === 'middle'));

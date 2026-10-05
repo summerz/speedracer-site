@@ -215,7 +215,7 @@ for (const difficulty of Object.values(DIFFICULTIES)) test(`all AI finish the ac
 
 for (const difficulty of Object.values(DIFFICULTIES)) test(`all five models sustain stage 2 and cleanly finish ${difficulty.id} within the racing pace budget`, () => {
   const track = createTrack(undefined, difficulty);
-  const budget = { beginner: 134, intermediate: 147, advanced: 177 }[difficulty.id];
+  const budget = { beginner: 134, intermediate: 155, advanced: 190 }[difficulty.id];
   for (const craft of DRONE_CATALOG) {
     const racer = createTimeAttack(track, craft.configuration.performance,
       createRaceRecords({ trackId: 'ai-pace', configurationId: craft.name }));

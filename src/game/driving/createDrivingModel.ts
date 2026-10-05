@@ -1,6 +1,8 @@
 import { DEFAULT_DRONE_CONFIGURATION } from '../drone/droneConfiguration.js';
 import type { DronePerformance } from '../drone/droneConfiguration.js';
 import type { Track } from '../track/createTrack';
+import { createTrackFrame } from '../track/createTrack.js';
+import { flightAcceleration } from './flightDynamics.js';
 import { ALTITUDE_PROFILES, resolveAltitudeProfile } from '../track/altitudeProfile.js';
 import type { TravelSegment } from './raceProgress.js';
 
@@ -57,6 +59,7 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
   };
   const initial = { ...state };
   const frame = track.sample(0);
+  const aheadFrame = createTrackFrame();
   let rechargeDelay = 0;
   let impactCooldown = 0;
   let noticeRemaining = 0;
@@ -131,17 +134,24 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
           if (rechargeDelay === 0) state.charge = Math.min(1, state.charge + tuning.boostRecovery * dt);
         }
         const oldSpeed = state.speed;
+        const sampled = track.sample(state.distance, frame);
+        const curvature = sampled.curvature;
+        const bend = sampled.tangent ? sampled.tangent.distanceTo(track.sample(state.distance + 2, aheadFrame).tangent) / 2 : Math.abs(curvature);
+        const grade = clamp((sampled.tangent?.y ?? 0) * Math.cos(state.heading) + (sampled.right?.y ?? 0) * Math.sin(state.heading), -1, 1);
+        const steer = clamp(input.steer, -1, 1);
+        const altitudeSpeed = Math.min(heightSwitchSpeed, Math.abs(state.targetAltitude - state.altitude) / dt);
         const speedScale = Number.isFinite(input.targetSpeedScale) ? clamp(input.targetSpeedScale!, .1, 1) : 1;
         const limit = (state.boostStage === 2 ? tuning.boostStage2Speed : state.boosting ? tuning.boostSpeed : tuning.topSpeed) * speedScale;
+        const thrust = state.boostStage === 2 ? tuning.boostStage2Acceleration : state.boosting ? tuning.boostAcceleration : input.throttle ? tuning.acceleration : 0;
         const acceleration = input.brake ? (state.speed < tuning.crawlSpeed ? tuning.acceleration : -tuning.braking)
-          : state.boostStage === 2 ? tuning.boostStage2Acceleration : state.boosting ? tuning.boostAcceleration : input.throttle ? tuning.acceleration : -tuning.drag;
-        state.speed = clamp(state.speed + acceleration * dt, 0, Math.max(limit, state.speed));
+          : flightAcceleration(state.speed, limit, thrust, tuning, { grade, curvature: bend, steer, altitudeSpeed });
+        const ceiling = limit * (1 + tuning.downhillOverspeed);
+        state.speed = clamp(state.speed + acceleration * dt, 0, Math.max(ceiling, state.speed));
         if (input.brake) state.speed = oldSpeed >= tuning.crawlSpeed ? Math.max(tuning.crawlSpeed, state.speed) : Math.min(tuning.crawlSpeed, state.speed);
-        if (state.speed > limit) state.speed = Math.max(limit, state.speed - 18 * dt);
+        if (state.speed > ceiling) state.speed = Math.max(ceiling, state.speed - 18 * dt);
         const speed = (oldSpeed + state.speed) * 0.5;
-        const curvature = track.sample(state.distance, frame).curvature;
         const travel = speed * Math.cos(state.heading) / Math.max(0.5, 1 - curvature * state.offset);
-        const turnRate = clamp(input.steer, -1, 1) * steeringYawRate(speed, tuning);
+        const turnRate = steer * steeringYawRate(speed, tuning);
         const oldHeading = state.heading;
         state.heading = clamp(state.heading + (turnRate - curvature * travel) * dt, -1.1, 1.1);
         state.offset += speed * Math.sin((oldHeading + state.heading) * 0.5) * dt;

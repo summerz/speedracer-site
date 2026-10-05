@@ -69,14 +69,16 @@ v0.6.0에서는 타임어택과 AI 레이스에 같은 완주 보상을 지급�
 
 | 강화 | 단계당 효과 초안 | 연결할 성능 |
 | --- | --- | --- |
-| 추진기 | 일반·부스트 최고 속도 +4%, 가속 +3% | topSpeed, boostSpeed, boostStage2Speed, acceleration |
+| 추진기 | 일반·부스트 최고 속도 +4%, 가속 +3%, 등판 저항 -4% | topSpeed, boostSpeed, boostStage2Speed, acceleration, slopeSensitivity |
 | 브레이크 | 제동력 +12% | braking |
-| 자세 제어 | 조향 반응 +5%, 고속 조향 손실 감소 | maxYawRate, highSpeedSteeringLoss |
+| 자세 제어 | 조향 반응 +5%, 고속 조향 손실 -8%, 선회 저항 -6%, 조향 저항 -8% | maxYawRate, highSpeedSteeringLoss, corneringDrag, steeringDrag |
 | 부스트 배터리 | 소모량 -5%, 회복 +4% | boostDrain, boostRecovery |
 
 효과는 단계 합계로 계산해 최종 배율 하나를 적용한다. 3단계 추진기의 최고 속도는 +12%다. 브레이크 강화는 최저 전진 속도를 낮추지 않고 목표 속도에 더 빨리 도달하게 한다. 강화된 기체도 고속의 급커브에서 감속이 필요하도록 조정한다.
 
 현재의 DroneConfiguration과 resolveDroneConfiguration에 구매·장착 결과를 연결한다. 경기 도중 구매나 장착 변경은 하지 않는다. 속도 연출과 불꽃 스타일은 실제 성능과 별도 설정을 유지해 이후 외형 아이템을 지원한다.
+
+v0.12.0부터 평지 직선의 기준 속도와 실제 속도를 구분한다. 오르막·코너·조향·고도 이동의 저항이 기체별로 다르며 기존 강화에도 연결한다. 계수와 후속 상품 후보는 [주행 속도 계산](DRIVING_DYNAMICS.md)에 기록한다.
 
 ## 소모 아이템
 

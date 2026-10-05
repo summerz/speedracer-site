@@ -23,19 +23,19 @@ test('resolved equipment affects actual acceleration, top speed and steering', (
   const upgraded = resolveDroneConfiguration(base, [{ performanceMultiplier: { topSpeed: 1.2, acceleration: 1.5, maxYawRate: 1.5 } }]);
   const normal = createDrivingModel(track, base.performance);
   const faster = createDrivingModel(track, upgraded.performance);
-  for (let i = 0; i < 240; i++) {
+  for (let i = 0; i < 600; i++) {
     normal.step(1 / 60, { ...NEUTRAL_INPUT, throttle: true });
     faster.step(1 / 60, { ...NEUTRAL_INPUT, throttle: true });
   }
-  assert.equal(faster.state.speed, upgraded.performance.topSpeed);
+  assert.ok(Math.abs(faster.state.speed - upgraded.performance.topSpeed) < .001);
   assert.ok(faster.state.distance > normal.state.distance);
   normal.state.speed = faster.state.speed = 45; // Compare steering upgrades at equal speed.
   normal.step(.1, { ...NEUTRAL_INPUT, steer: 1 });
   faster.step(.1, { ...NEUTRAL_INPUT, steer: 1 });
   assert.ok(faster.state.heading > normal.state.heading);
   faster.reset();
-  for (let i = 0; i < 240; i++) faster.step(1 / 60, { ...NEUTRAL_INPUT, throttle: true });
-  assert.equal(faster.state.speed, upgraded.performance.topSpeed, 'restart retains the equipped configuration');
+  for (let i = 0; i < 600; i++) faster.step(1 / 60, { ...NEUTRAL_INPUT, throttle: true });
+  assert.ok(Math.abs(faster.state.speed - upgraded.performance.topSpeed) < .001, 'restart retains the equipped configuration');
 });
 
 test('invalid modifiers are rejected and boost never becomes slower than upgraded cruise speed', () => {

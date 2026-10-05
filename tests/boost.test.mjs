@@ -14,13 +14,13 @@ test('continuous boost enters stage 2 at three seconds with consistent 30/60/120
     const model = createDrivingModel(track);
     advance(model, 2.9, boost, fps);
     assert.equal(model.state.boostStage, 1);
-    assert.equal(model.state.speed, base.performance.boostSpeed);
+    assert.ok(model.state.speed > base.performance.boostSpeed * .985 && model.state.speed < base.performance.boostSpeed);
     assert.ok(model.state.boostStageProgress > .96 && model.state.boostStageProgress < 1);
     advance(model, .1, boost, fps);
     assert.equal(model.state.boostStage, 2);
     assert.ok(Math.abs(model.state.charge - .4) < 1e-8);
     advance(model, .5, boost, fps);
-    assert.equal(model.state.speed, base.performance.boostStage2Speed);
+    assert.ok(model.state.speed > base.performance.boostSpeed && model.state.speed > base.performance.boostStage2Speed * .93 && model.state.speed < base.performance.boostStage2Speed);
     return { ...model.state };
   });
   for (const state of states.slice(1)) {
@@ -82,7 +82,7 @@ test('equipment controls stage 2 timing, actual speed and palette without changi
   assert.ok(Math.abs(model.boostStage2Seconds - 3) < 1e-8);
   advance(model, 4);
   assert.equal(model.state.boostStage, 2);
-  assert.equal(model.state.speed, config.performance.boostStage2Speed);
+  assert.ok(model.state.speed > config.performance.boostSpeed && model.state.speed > config.performance.boostStage2Speed * .95 && model.state.speed < config.performance.boostStage2Speed);
   assert.ok(Math.abs(model.state.charge - .6) < 1e-8);
   assert.equal(config.boostStyle.pulseColor, '#ff99cc');
   assert.equal(config.boostStyle.tail, '#9988ff');

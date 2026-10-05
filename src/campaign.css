@@ -73,6 +73,21 @@
 .course-condition .eyebrow, .course-clear-record .eyebrow { margin: 0; }
 .campaign-detail-copy > p { margin-block: 8px; }
 .course-condition { padding: 12px 14px; margin-top: 12px; }
+.course-objective-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.course-passed { color:#b3ffe4; font-size:11px; }
+.course-comparison { width:100%; border-collapse:collapse; font-size:12px; font-variant-numeric:tabular-nums; }
+.course-comparison th, .course-comparison td { padding:9px 4px; border-bottom:1px solid #7ca59938; text-align:right; }
+.course-comparison th:first-child { width:42px; text-align:left; }
+.course-comparison thead th { color:#a7c5bb; font-size:11px; font-weight:400; }
+.course-comparison tbody th { color:#c4dcd3; font-weight:400; }
+.course-comparison td { color:#abc3bd; font-family:'IBM Plex Mono',monospace; white-space:nowrap; }
+.course-comparison td strong { display:block; color:inherit; font:inherit; font-weight:500; }
+.course-comparison td small { display:block; margin-top:4px; font-size:10px; }
+.course-comparison td[data-met='yes'] { color:#9effd0; }
+.course-comparison td[data-met='no'] { color:#ffc48b; }
+.course-clear-summary { color:#b3cbc2; font-size:11px; line-height:1.6; }
+.course-clear-summary small { display:block; color:#93aaa3; font-size:10px; }
+.course-record .course-best-record { margin-top:0; }
 .course-record { padding-block: 12px; }
 .course-record > p { margin: 4px 0; }
 .course-clear-record { gap: 6px; }

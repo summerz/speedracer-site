@@ -25,7 +25,7 @@ test('30, 60 and 120 Hz produce the same acceleration, travel and boost charge',
 test('coasting loses speed and a held brake keeps crawling forward', () => {
   const model = createDrivingModel(straight);
   advance(model, 3, input({ throttle: true }));
-  assert.equal(model.state.speed, tuning.topSpeed);
+  assert.ok(model.state.speed > tuning.topSpeed * .99 && model.state.speed < tuning.topSpeed);
   advance(model, 1, input());
   assert.ok(model.state.speed < tuning.topSpeed && model.state.speed > 0);
   advance(model, 3, input({ brake: true }));
@@ -38,7 +38,7 @@ test('coasting loses speed and a held brake keeps crawling forward', () => {
 test('holding boost after depletion cannot repeatedly trigger recharged boost', () => {
   const model = createDrivingModel(straight);
   advance(model, 4.5, input({ boost: true }));
-  assert.equal(model.state.speed, tuning.boostStage2Speed);
+  assert.ok(model.state.speed > tuning.boostStage2Speed * .99 && model.state.speed < tuning.boostStage2Speed);
   assert.ok(model.state.boosting && model.state.charge < 0.11);
   advance(model, 9, input({ boost: true }));
   assert.equal(model.state.boosting, false);
