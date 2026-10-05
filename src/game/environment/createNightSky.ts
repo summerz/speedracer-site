@@ -32,7 +32,12 @@ export function createNightSky(environment: NightEnvironment, forward: THREE.Vec
         return mix(mix(mix(hash(i),hash(i+vec3(1,0,0)),f.x),mix(hash(i+vec3(0,1,0)),hash(i+vec3(1,1,0)),f.x),f.y),
           mix(mix(hash(i+vec3(0,0,1)),hash(i+vec3(1,0,1)),f.x),mix(hash(i+vec3(0,1,1)),hash(i+vec3(1,1,1)),f.x),f.y),f.z);
       }
-      float terrain(vec3 p){return noise(p)*.55+noise(p*2.03)*.28+noise(p*4.11)*.17;}
+      // Pixel-width transitions keep graphic shapes crisp without jagged moving edges.
+      float edge(float threshold,float value){
+        float width=max(fwidth(value),.0001);
+        return smoothstep(threshold-width,threshold+width,value);
+      }
+      float terrain(vec3 p){return noise(p)*.72+noise(p*2.03)*.28;}
       void main(){
         vec3 d=normalize(direction);
         float altitude=max(d.y,0.);
@@ -41,54 +46,59 @@ export function createNightSky(environment: NightEnvironment, forward: THREE.Vec
         float bearing=dot(d,center);
         vec2 uv=vec2(dot(d,celestialRight),dot(d,celestialUp))/(max(bearing,.001)*diskRadius);
         float r=length(uv);
-        // A broad, faint atmosphere merges the limb into the night instead of outlining a prop.
-        float haze=smoothstep(-.04,.22,d.y)*step(0.,bearing);
-        float disk=(1.-smoothstep(.987,1.008,r))*haze;
-        float atmosphere=exp(-abs(r-1.)*19.)*haze;
-        color+=mix(tint,horizon,.45)*atmosphere*.13;
+        // A clear silhouette and a thin atmospheric rim match the city's sharp lines.
+        float silhouette=(1.-edge(1.,r))*step(0.,bearing);
+        float disk=silhouette;
+        float atmosphere=exp(-abs(r-1.)*180.)*step(0.,bearing);
+        color+=mix(tint,horizon,.25)*atmosphere*.075;
         float ringMask=0.;
         vec3 ringColor=vec3(0.);
         if(ringed>.5 && bearing>0.){
           vec2 tilted=mat2(.94,-.342,.342,.94)*uv;
           float rr=length(vec2(tilted.x,tilted.y/.32));
-          ringMask=smoothstep(1.13,1.2,rr)*(1.-smoothstep(1.84,1.95,rr))*haze;
+          ringMask=edge(1.16,rr)*(1.-edge(1.92,rr));
           // The upper arc passes behind the planet, the lower arc passes in front.
-          ringMask*=mix(1.-disk,1.,step(tilted.y,0.));
-          float bands=.66+.14*sin(rr*135.)+.1*sin(rr*49.);
-          ringColor=mix(tint,vec3(.72,.66,.55),.48)*bands*.35;
+          ringMask*=mix(1.-silhouette,1.,step(tilted.y,0.));
+          float stripe=sin((rr-1.16)*92.);
+          float bands=mix(.25,.72,edge(-.1,stripe));
+          // A pair of dark divisions break up the concentric, sharply separated ring bands.
+          bands*=1.-.8*edge(1.48,rr)*(1.-edge(1.51,rr));
+          bands*=1.-.8*edge(1.73,rr)*(1.-edge(1.77,rr));
+          ringColor=mix(tint,vec3(.72,.66,.55),.48)*bands*.45;
         }
         if(r<1.008 && bearing>0.){
           vec3 n=normalize(vec3(uv,sqrt(max(0.,1.-r*r))));
           vec3 sun=normalize(mix(vec3(-.62,.52,.65),vec3(.94,.16,-.26),crescent));
-          float light=smoothstep(-.10,.75,dot(n,sun));
+          float sunward=dot(n,sun);
+          // Three broad lighting tones retain volume without a soft photographic gradient.
+          float light=.055+.34*smoothstep(-.035,.005,sunward)+.43*smoothstep(.42,.46,sunward);
           float surface;
           if(ringed>.5){
-            float turbulence=terrain(n*8.);
-            surface=.52+.26*sin(n.y*47.+turbulence*5.)+.18*turbulence;
+            float stripe=sin(n.y*30.+(terrain(n*4.)-.5)*1.5);
+            surface=.34+.22*edge(-.3,stripe)+.25*edge(.5,stripe);
           }else{
-            float maria=smoothstep(.33,.7,terrain(n*5.));
-            float fine=noise(n*42.);
-            surface=.35+.48*maria+.16*fine;
-            // Irregular circular basins and rims, softened by surface relief.
-            for(int i=0;i<3;i++){
-              vec2 c=vec2(-.32+float(i)*.34,.30-float(i)*.29);
-              float crater=length(uv-c)/(.09+float(i)*.025);
-              surface-=.14*(1.-smoothstep(.4,1.,crater));
-              surface+=.10*exp(-pow((crater-1.)*9.,2.));
+            float relief=terrain(n*4.);
+            surface=.36+.22*edge(.43,relief)+.22*edge(.59,relief);
+            // Large basins and narrow rims read as terrain rather than blurred clouds.
+            for(int i=0;i<4;i++){
+              vec2 c=vec2(-.42+float(i)*.29,.38+.17*sin(float(i)*2.4));
+              float crater=length(uv-c)/(.085+float(i)*.018);
+              float basin=1.-edge(.87,crater);
+              float rim=edge(.87,crater)*(1.-edge(1.,crater));
+              surface=mix(surface,surface*.48,basin);
+              surface+=.16*rim;
             }
           }
-          vec3 surfaceColor=tint*surface*(.035+light*.83);
-          // The night side shares the sky color; low altitude is veiled by distant atmosphere.
-          surfaceColor=mix(sky*.8,surfaceColor,smoothstep(.01,.20,light));
-          surfaceColor+=tint*pow(1.-max(n.z,0.),3.)*.035;
+          vec3 surfaceColor=tint*surface*light;
+          surfaceColor+=sky*.35*(1.-smoothstep(-.035,.005,sunward));
           color=mix(color,surfaceColor,disk);
         }
         color=mix(color,ringColor,ringMask*.75);
         vec3 cell=floor(d*440.), local=fract(d*440.)-.5;
         float star=step(.9975,hash(cell))*pow(max(0.,1.-length(local)*2.),4.);
         color+=vec3(.8,.88,1.)*star*starStrength*smoothstep(.04,.3,altitude)*(1.-disk)*(1.-ringMask);
-        // Opaque lower sky and a wide horizon veil bury the lower half behind the distant city.
-        color=mix(horizon*.65,color,smoothstep(-.035,.12,d.y));
+        // Only the low horizon is veiled; the upper surface and limb stay legible.
+        color=mix(horizon*.65,color,smoothstep(-.025,.065,d.y));
         gl_FragColor=vec4(color,1.);
       }`,
     side: THREE.BackSide, depthWrite: false, fog: false, toneMapped: false,
