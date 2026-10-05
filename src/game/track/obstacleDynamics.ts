@@ -1,6 +1,6 @@
 import type { CorridorObstacle, HeightObstacle, Track } from './createTrack.js';
 import type { RaceChallengeId } from './raceChallenge.js';
-import { physicalDistance } from './trackBranches.js';
+import { physicalDistance, roadPaths } from './trackBranches.js';
 
 export const EXTRA_OBSTACLES = {
   normal: { every: 6, safeWidth: .84, depth: 44, stepSeconds: 1.6, clearance: .7 },
@@ -61,10 +61,27 @@ export function configureExtraObstacles(track: Track, challenge: RaceChallengeId
   if (challenge === 'easy') return track;
   const tuning = EXTRA_OBSTACLES[challenge];
   const heights: HeightObstacle[] = [], corridors: CorridorObstacle[] = [];
-  const eligible = track.heightObstacles.filter(obstacle => [-60, -30, 0, 30, 60].every(offset => {
+  const safePlacement = (obstacle: HeightObstacle) => [-60, -30, 0, 30, 60].every(offset => {
       const frame = track.sample(obstacle.distance + offset, undefined, obstacle.routeId);
       return frame.section === 'course' && Math.abs(frame.curvature) < .008 && Math.abs(frame.tangent.y) < .55;
-    }));
+    });
+  const eligible = track.heightObstacles.filter(safePlacement);
+  // A fork can replace the original gentle fields. Reserve separate, readable sites
+  // for both mechanics instead of putting a moving opening in a tight branch bend.
+  const template = track.heightObstacles[0];
+  if (template && eligible.length < 2) {
+    for (const path of roadPaths(track)) {
+      for (let distance = path.start + 80; distance < path.end - 80 && eligible.length < 2; distance += 20) {
+        const obstacle = { ...template, distance, routeId: path.routeId ?? undefined };
+        if (!safePlacement(obstacle) || track.heightObstacles.some(other =>
+          (!other.routeId || !obstacle.routeId || other.routeId === obstacle.routeId) && Math.abs(other.distance - distance) < 140)) continue;
+        (track.heightObstacles as HeightObstacle[]).push(obstacle); eligible.push(obstacle);
+      }
+      if (eligible.length >= 2) break;
+    }
+    (track.heightObstacles as HeightObstacle[]).sort((a, b) => a.distance - b.distance);
+    eligible.sort((a, b) => a.distance - b.distance);
+  }
   // Distribute across the whole lap, including short courses, with both mechanics introduced.
   const count = Math.min(eligible.length, Math.max(2, Math.ceil(eligible.length / tuning.every)));
   const chosen = new Set(Array.from({ length: count }, (_, i) => eligible[Math.round(i * (eligible.length - 1) / Math.max(1, count - 1))]));

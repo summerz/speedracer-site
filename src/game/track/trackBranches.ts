@@ -11,6 +11,8 @@ export interface BranchRecipe {
 export interface BranchRoute {
   readonly id: string; readonly name: string; readonly description: string;
   readonly length: number; readonly features: readonly string[];
+  /** Shared-progress boundaries of the dedicated entry/merge mouths. */
+  readonly mouthEnd: number; readonly mergeStart: number;
 }
 export interface TrackFork {
   readonly id: string; readonly kind: BranchRecipe['kind'];
@@ -22,6 +24,12 @@ export interface TrackFork {
 export interface RoadPath { start: number; end: number; routeId: string | null }
 const localDistance = (track: Track, distance: number) => { const d = distance % track.length; return d < 0 ? d + track.length : d; };
 const smooth = (u: number) => { const t = THREE.MathUtils.clamp(u, 0, 1); return t * t * t * (10 + t * (-15 + t * 6)); };
+/** Ease angular speed at either end, with an even sweep through the middle. */
+const sweep = (u: number) => {
+  const t = THREE.MathUtils.clamp(u, 0, 1), ramp = .15;
+  const edge = (x: number) => x ** 3 / ramp ** 2 - x ** 4 / (2 * ramp ** 3);
+  return (t < ramp ? edge(t) : t > 1 - ramp ? 1 - ramp - edge(1 - t) : t - ramp / 2) / (1 - ramp);
+};
 
 /** Shared progress is used for laps/rank; each route advances at its own physical arc length. */
 export function forkAt(track: Track, distance: number) {
@@ -83,12 +91,37 @@ export function branchChoiceOpen(track: Track, distance: number) {
 export function roadPaths(track: Track): RoadPath[] {
   const paths: RoadPath[] = []; let start = 0;
   for (const fork of track.branches ?? []) {
-    if (start < fork.start) paths.push({ start, end: fork.start, routeId: null });
-    for (const route of fork.routes) paths.push({ start: fork.start, end: fork.end, routeId: route.id });
-    start = fork.end;
+    const entrance = fork.start + fork.junctionLength, exit = fork.end - fork.junctionLength;
+    if (start < entrance) paths.push({ start, end: entrance, routeId: null });
+    for (const route of fork.routes) paths.push({ start: entrance, end: exit, routeId: route.id });
+    start = exit;
   }
   paths.push({ start, end: track.length, routeId: null });
   return paths;
+}
+
+/** Trim overlapping horizontal mouths to a shared seam; only exposed edges glow. */
+export function roadBoundary(track: Track, distance: number, frame: TrackFrame, routeId?: string | null) {
+  const edges = [frame.position.clone().addScaledVector(frame.right, -track.halfWidth),
+    frame.position.clone().addScaledVector(frame.right, track.halfWidth)];
+  const visible = [true, true];
+  const fork = forkAt(track, distance);
+  if (!fork || fork.kind !== 'horizontal' || !routeId) return { edges, visible };
+  const side = fork.routes.findIndex(r => r.id === routeId);
+  if (side < 0) return { edges, visible };
+  const route = fork.routes[side], d = localDistance(track, distance);
+  // Never trim a later crossing, coil or rolling road.
+  if (d > route.mouthEnd && d < route.mergeStart) return { edges, visible };
+  const other = track.sample(distance, undefined, fork.routes[1 - side].id);
+  const inner = side ? 0 : 1;
+  const otherInner = other.position.clone().addScaledVector(other.right, side ? track.halfWidth : -track.halfWidth);
+  const axis = frame.right.clone().add(other.right).normalize();
+  const gap = side ? edges[inner].clone().sub(otherInner).dot(axis) : otherInner.clone().sub(edges[inner]).dot(axis);
+  if (gap <= 0 && Math.abs(edges[inner].clone().sub(otherInner).dot(frame.up)) < track.halfWidth) {
+    edges[inner].lerp(otherInner, .5);
+    visible[inner] = false;
+  }
+  return { edges, visible };
 }
 export function roadPoints(track: Track, step = 8) {
   return roadPaths(track).flatMap(path => {
@@ -127,12 +160,21 @@ export function withTrackBranches(track: Track, recipes: readonly BranchRecipe[]
     // An early first fork makes the feature immediately discoverable.
     const available = eligible.filter(e => (!recipe.intertwined || e.end - e.start - 20 >= 450)
       && !forks.some(f => e.start < f.end + 60 && e.end > f.start - 60));
-    available.sort((a, b) => recipeIndex === 0 ? a.start - b.start : (b.end - b.start) - (a.end - a.start));
+    available.sort((a, b) => {
+      // Leave enough room for the Y mouths before a full coil.
+      const minimum = recipe.intertwined ? 620 : 350;
+      const spacious = Number(b.end - b.start >= minimum) - Number(a.end - a.start >= minimum);
+      if (spacious) return spacious;
+      return recipeIndex === 0 ? a.start - b.start : (b.end - b.start) - (a.end - a.start);
+    });
     const interval = available[0];
     if (!interval) throw new Error(`No safe fork interval: ${recipe.id}`);
     const span = Math.min(680, interval.end - interval.start - 20);
     const start = interval.start + 10, end = start + span;
     const junctionLength = 35;
+    // A dedicated, symmetric Y comes before any route-specific experience.
+    const mouthFraction = Math.min(100 / (span - junctionLength * 2), recipe.intertwined ? .18 : .25);
+    const bodySpan = (span - junctionLength * 2) * (1 - mouthFraction * 2);
     let technicalLength = 0;
     const makeRoute = (side: 0 | 1): BranchRoute => {
       const id = `${recipe.id}:${side}`;
@@ -145,22 +187,26 @@ export function withTrackBranches(track: Track, recipes: readonly BranchRecipe[]
         positions.length = 0; frames.length = 0; cumulative.splice(0, cumulative.length, 0);
         for (let i = 0; i <= count; i++) {
           const u = THREE.MathUtils.clamp((i / count * span - junctionLength) / (span - junctionLength * 2), 0, 1);
-          // C2 joins: the road's position, direction and curvature meet the trunk.
-          const envelope = Math.sin(Math.PI * u) ** 3;
+          const mouth = smooth(u / mouthFraction) * smooth((1 - u) / mouthFraction);
+          const body = THREE.MathUtils.clamp((u - mouthFraction) / (1 - mouthFraction * 2), 0, 1);
+          let envelope = Math.sin(Math.PI * body) ** (side ? 2 : 3);
           const base = baseSample(start + span * i / count);
           const sign = side ? 1 : -1;
-          const weave = side ? 0 : 10 * Math.sin(4 * Math.PI * u);
+          const weave = side ? 0 : 10 * Math.min(1, bodySpan / 240) ** 2 * Math.sin(4 * Math.PI * body);
           let sideways = sign * (side ? 52 : 34) + weave;
           let rise = side ? 18 : 7;
           if (recipe.kind === 'vertical') { sideways = sign * 18 + weave * .5; rise = side ? 76 : 2; }
           if (recipe.intertwined) {
             // Opposite points on an ellipse cross in plan while remaining separated in 3D.
-            const phase = smooth((u - .18) / .64) * Math.PI * 2;
-            sideways = sign * 55 * Math.cos(phase);
-            rise = 65 + sign * 50 * Math.sin(phase);
+            envelope = smooth(body / .15) * smooth((1 - body) / .15);
+            const phase = smooth((body - .15) / .7) * Math.PI * 2;
+            sideways = sign * 52 * Math.cos(phase);
+            rise = 28 + sign * 52 * Math.sin(phase);
           }
-          const position = base.position.clone().addScaledVector(base.right, sideways * envelope)
-            .addScaledVector(base.up, (rise + extraRise) * envelope);
+          const mouthSide = recipe.kind === 'horizontal' ? sign * (track.halfWidth + 11) : 0;
+          const mouthRise = recipe.kind === 'vertical' ? sign * 28 : 0;
+          const position = base.position.clone().addScaledVector(base.right, mouthSide * mouth + (sideways - mouthSide) * envelope)
+            .addScaledVector(base.up, mouthRise * mouth + (rise + extraRise - mouthRise) * envelope);
           positions.push(position); frames.push(base);
           if (i) cumulative.push(cumulative[i - 1] + position.distanceTo(positions[i - 1]));
         }
@@ -170,6 +216,9 @@ export function withTrackBranches(track: Track, recipes: readonly BranchRecipe[]
       const entryIndex = Math.round(junctionLength / span * count), exitIndex = count - entryIndex;
       const entryArc = cumulative[entryIndex], exitArc = cumulative[exitIndex];
       const innerLength = exitArc - entryArc, length = innerLength + junctionLength * 2;
+      const mouthIndex = Math.round((junctionLength + mouthFraction * (span - junctionLength * 2)) / span * count);
+      const sharedAt = (index: number) => start + junctionLength + (cumulative[index] - entryArc) / innerLength * (span - junctionLength * 2);
+      const mouthEnd = sharedAt(mouthIndex), mergeStart = sharedAt(count - mouthIndex);
       if (!side) technicalLength = length;
       const orientations: THREE.Quaternion[] = [];
       const tangents: THREE.Vector3[] = [];
@@ -186,11 +235,13 @@ export function withTrackBranches(track: Track, recipes: readonly BranchRecipe[]
       const seamRoll = Math.atan2(tangents[exitIndex].dot(transported[exitIndex].clone().cross(frames[exitIndex].up)),
         transported[exitIndex].dot(frames[exitIndex].up));
       for (let i = 0; i <= count; i++) {
-        const tangent = tangents[i], fraction = THREE.MathUtils.clamp((cumulative[i] - entryArc) / innerLength, 0, 1);
-        const up = transported[i].clone().applyAxisAngle(tangent, seamRoll * smooth(fraction));
-        // Technical paths offer a full road roll, wide paths retain a stable horizon.
+        const tangent = tangents[i];
+        const u = (i / count * span - junctionLength) / (span - junctionLength * 2);
+        const body = (u - mouthFraction) / (1 - mouthFraction * 2);
+        const up = transported[i].clone().applyAxisAngle(tangent, seamRoll * smooth(body));
+        // Technical paths offer a full road roll only after leaving the Y.
         const roll = side === 0 && recipe.experience !== 'city' && recipe.experience !== 'arena'
-          ? smooth((fraction - .1) / .8) * Math.PI * 2 * (recipe.direction ?? 1) : 0;
+          ? sweep(body) * Math.PI * 2 * (recipe.direction ?? 1) : 0;
         up.applyAxisAngle(tangent, roll);
         const right = new THREE.Vector3().crossVectors(tangent, up).normalize();
         up.crossVectors(right, tangent).normalize();
@@ -218,7 +269,7 @@ export function withTrackBranches(track: Track, recipes: readonly BranchRecipe[]
       const features = recipe.intertwined ? ['입체 교차', '코일', ...(technical ? ['노면 회전'] : [])] :
         technical ? ['연속 굽이', ...(recipe.experience !== 'city' && recipe.experience !== 'arena' ? ['노면 회전'] : []), '고도 장애물'] :
           [recipe.kind === 'vertical' ? '큰 상승·하강' : '넓은 커브', '연속 가속'];
-      return { id, name: names[recipe.experience][side], length, features,
+      return { id, name: names[recipe.experience][side], length, features, mouthEnd, mergeStart,
         description: technical ? '가까운 구조물 · 굽이와 고도 대응' : '트인 전망 · 긴 부스트 기회' };
     };
     const routes: [BranchRoute, BranchRoute] = [makeRoute(0), makeRoute(1)];

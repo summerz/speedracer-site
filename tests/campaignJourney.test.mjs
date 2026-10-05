@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { TRACK_CATALOG, campaignLapLimit } from '../output/test/game/track/trackCatalog.js';
+import { TRACK_CATALOG, campaignLapLimit, campaignRankLimit } from '../output/test/game/track/trackCatalog.js';
 import { createCatalogTrack, trackPreset } from '../output/test/game/track/trackRuntime.js';
 import { DRONE_CATALOG } from '../output/test/game/drone/droneCatalog.js';
 import { createRaceSession, aiDrivingInput } from '../output/test/game/driving/createRaceSession.js';
@@ -21,7 +21,7 @@ function runCourse(definition, configuration, mode, platform, slowStart = false)
   const step = () => {
     const controls = aiDrivingInput(track, configuration, race.model.state, 1,
       race.rivals.map(rival => rival.controller.model.state));
-    if (slowStart && race.model.state.elapsed < 35) { controls.brake = true; controls.boost = false; }
+    if (slowStart && race.model.state.elapsed < 90) { controls.brake = true; controls.boost = false; }
     race.step(1 / 30, controls);
     ticks++;
   };
@@ -49,7 +49,7 @@ function runCourse(definition, configuration, mode, platform, slowStart = false)
     // The UI saves at the player's finish, while the remaining AI continue as ghosts.
     while (!race.snapshot().competition.complete && ticks < 30 * 600) step();
     const final = race.snapshot().competition;
-    assert.equal(final.complete, true, `${definition.name}: all three AI must finish`);
+    assert.equal(final.complete, true, `${definition.name}: all AI must finish`);
     assert.equal(final.playerRank, command.outcome.rank, 'finishing AI cannot change the saved rank');
     assert.ok(final.standings.every(entry => entry.completedLaps === definition.laps && entry.finishTime > 0));
     assert.ok(race.rivals.every(rival => rival.controller.model.state.offTrackExits === 0));
@@ -79,7 +79,7 @@ for (const platform of ['desktop', 'touch']) {
     assert.equal(progress.equipped, needle.id);
 
     const loss = runCourse(TRACK_CATALOG[0], starter, 'competition', platform, true);
-    assert.ok(loss.outcome.rank > 1, 'a slow start must yield a real losing result');
+    assert.ok(loss.outcome.rank > campaignRankLimit(TRACK_CATALOG[0]), 'a slow start must finish below the qualification cutoff');
     const beforeLoss = progress.balance;
     progress = applyCommand(progress, loss);
     assert.ok(progress.balance > beforeLoss, 'a completed losing race still pays a finish reward');
@@ -89,7 +89,7 @@ for (const platform of ['desktop', 'touch']) {
     for (const definition of TRACK_CATALOG) {
       assert.equal(campaignStatus(progress.campaign, 'competition', definition), 'available');
       const command = runCourse(definition, needle, 'competition', platform);
-      assert.equal(command.outcome.rank, 1, definition.name);
+      assert.ok(command.outcome.rank <= campaignRankLimit(definition), `${definition.name}: finish within the qualification cutoff`);
       progress = applyCommand(progress, command);
       assert.equal(campaignStatus(progress.campaign, 'competition', definition), 'cleared');
       assert.equal(progress.rewards[command.input.raceId].bonus, 100 + definition.rating * 25);

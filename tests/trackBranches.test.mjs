@@ -2,15 +2,50 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { TRACK_CATALOG } from '../output/test/game/track/trackCatalog.js';
 import { createCatalogTrack, trackMetrics } from '../output/test/game/track/trackRuntime.js';
-import { forkAt, selectBranch, roadPaths, physicalDistance, branchChoiceOpen, advanceTrackDistance } from '../output/test/game/track/trackBranches.js';
+import { forkAt, selectBranch, roadPaths, roadBoundary, withTrackBranches, physicalDistance, branchChoiceOpen, advanceTrackDistance } from '../output/test/game/track/trackBranches.js';
 import { createDrivingModel, NEUTRAL_INPUT } from '../output/test/game/driving/createDrivingModel.js';
-import { upcomingHeightObstacle } from '../output/test/game/track/createTrack.js';
+import { createTrackFrame, upcomingHeightObstacle } from '../output/test/game/track/createTrack.js';
 import { createTimeAttack } from '../output/test/game/driving/createTimeAttack.js';
 import { createRaceRecords } from '../output/test/game/driving/raceRecords.js';
 import { aiDrivingInput } from '../output/test/game/driving/createRaceSession.js';
 import { DRONE_CATALOG } from '../output/test/game/drone/droneCatalog.js';
 
 const definitions = TRACK_CATALOG.filter(d => d.branches?.length);
+for (const kind of ['horizontal', 'vertical']) for (const intertwined of [false, true]) {
+  test(`${kind} ${intertwined ? 'coil' : 'ordinary'} route begins and ends with a symmetric Y before its own curves`, () => {
+    const track = createCatalogTrack(TRACK_CATALOG[0], 'easy');
+    Object.assign(track, { length: 1000, branches: [], sample: (d, frame = createTrackFrame()) => {
+      frame.position.set(0, 0, -d); frame.tangent.set(0, 0, -1); frame.right.set(1, 0, 0); frame.up.set(0, 1, 0);
+      frame.section = 'course'; frame.curvature = 0; frame.distanceScale = 1; return frame;
+    } });
+    withTrackBranches(track, [{ id: 'test-y', kind, experience: 'reactor', intertwined }]);
+    const fork = track.branches[0];
+    for (const exit of [false, true]) {
+      let separation = 0;
+      for (const metres of [10, 25, 45, 70]) {
+        const frames = fork.routes.map(route => {
+          const travel = exit ? route.length - fork.junctionLength - metres : fork.junctionLength + metres;
+          return track.sample(advanceTrackDistance(track, fork.start, travel, route.id), undefined, route.id);
+        });
+        const axis = kind === 'horizontal' ? 'x' : 'y', otherAxis = kind === 'horizontal' ? 'y' : 'x';
+        assert.ok(frames[0].position[axis] < 0 && frames[1].position[axis] > 0);
+        assert.ok(Math.abs(frames[0].position[axis] + frames[1].position[axis]) < .002, 'both Y arms match');
+        assert.ok(Math.abs(frames[0].position[otherAxis]) < .002 && Math.abs(frames[1].position[otherAxis]) < .002, 'no body curve inside Y');
+        assert.ok(Math.abs(frames[0].up.x) < .002 && frames[0].up.y > .7, 'no early road roll');
+        const gap = frames[1].position[axis] - frames[0].position[axis];
+        assert.ok(gap > separation, 'arms open progressively'); separation = gap;
+      }
+    }
+    if (kind === 'horizontal') {
+      const d = fork.start + fork.junctionLength + 3;
+      const boundaries = fork.routes.map(r => roadBoundary(track, d, track.sample(d, undefined, r.id), r.id));
+      assert.deepEqual(boundaries.map(b => b.visible), [[true, false], [false, true]]);
+      assert.ok(boundaries[0].edges[1].distanceTo(boundaries[1].edges[0]) < 1e-8, 'joined surfaces share one seam');
+      const separated = fork.start + fork.junctionLength + 100;
+      for (const r of fork.routes) assert.deepEqual(roadBoundary(track, separated, track.sample(separated, undefined, r.id), r.id).visible, [true, true]);
+    }
+  });
+}
 test('first two courses introduce both choices and all six districts have branches', () => {
   assert.equal(TRACK_CATALOG[0].branches[0].kind, 'horizontal');
   assert.equal(TRACK_CATALOG[1].branches[0].kind, 'vertical');
@@ -23,8 +58,10 @@ for (const definition of definitions) test(`${definition.name}: continuous fork 
   assert.ok(metrics.lengthMin > 2300 && metrics.lengthMax < 5800);
   for (const fork of track.branches) {
     assert.notDeepEqual(fork.routes[0].features, fork.routes[1].features);
-    const paths = roadPaths(track).filter(p => p.start === fork.start && p.end === fork.end);
+    const paths = roadPaths(track).filter(p => p.start === fork.start + fork.junctionLength && p.end === fork.end - fork.junctionLength);
     assert.equal(paths.length, 2); assert.ok(paths.every(p => p.routeId));
+    assert.equal(roadPaths(track).filter(p => p.start <= fork.start + 10 && p.end >= fork.start + 10).length, 1, 'shared entrance drawn once');
+    assert.equal(roadPaths(track).filter(p => p.start <= fork.end - 10 && p.end >= fork.end - 10).length, 1, 'shared exit drawn once');
     for (const route of fork.routes) {
       for (const seam of [fork.start, fork.start + fork.junctionLength, fork.end - fork.junctionLength, fork.end]) {
         const before = track.sample(seam-.0001, undefined, route.id), after = track.sample(seam+.0001, undefined, route.id);

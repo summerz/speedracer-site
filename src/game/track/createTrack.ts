@@ -6,7 +6,7 @@ import type { DifficultyPreset } from './difficulty.js';
 import type { AltitudeProfile } from './altitudeProfile.js';
 import { resolveHeightObstacle, obstacleArrivalTime, corridorCanPass, upcomingCorridor } from './obstacleDynamics.js';
 import { createCorridorVisual } from './createCorridorVisual.js';
-import { roadPaths, routeDistanceScale, type TrackFork } from './trackBranches.js';
+import { roadBoundary, roadPaths, routeDistanceScale, type TrackFork } from './trackBranches.js';
 
 export interface TrackFrame {
   position: THREE.Vector3;
@@ -214,21 +214,26 @@ export function createTrackVisual(track: Track, lineColor?: string) {
   const orient = (object: THREE.Object3D) => object.quaternion.setFromRotationMatrix(basis.makeBasis(frame.right, frame.up, back.copy(frame.tangent).negate()));
   for (const path of paths) {
     const count = Math.ceil((path.end - path.start) / 1.2);
-    const edges: [THREE.Vector3[], THREE.Vector3[]] = [[], []];
+    const edges: THREE.Vector3[][][] = [[[]], [[]]];
     const first = vertices.length / 3;
     for (let i = 0; i <= count; i++) {
-      track.sample(path.start + i / count * (path.end - path.start), frame, path.routeId);
-      const a = frame.position.clone().addScaledVector(frame.right, -track.halfWidth);
-      const b = frame.position.clone().addScaledVector(frame.right, track.halfWidth);
-      vertices.push(...a.toArray(), ...b.toArray()); left.push(a); right.push(b);
-      edges[0].push(a.clone().addScaledVector(frame.up, .12));
-      edges[1].push(b.clone().addScaledVector(frame.up, .12));
+      const distance = path.start + i / count * (path.end - path.start);
+      track.sample(distance, frame, path.routeId);
+      const boundary = roadBoundary(track, distance, frame, path.routeId);
+      vertices.push(...boundary.edges[0].toArray(), ...boundary.edges[1].toArray());
+      left.push(boundary.edges[0]); right.push(boundary.edges[1]);
+      for (let side = 0; side < 2; side++) {
+        const runs = edges[side], run = runs[runs.length - 1];
+        if (boundary.visible[side]) run.push(boundary.edges[side].clone().addScaledVector(frame.up, .12));
+        else if (run.length) runs.push([]);
+      }
       if (i < count) { const n = first + i * 2; indices.push(n, n + 2, n + 1, n + 1, n + 2, n + 3); }
     }
     const closed = paths.length === 1;
-    for (const edge of edges) {
+    for (const edge of edges.flat()) {
+      if (edge.length < 2) continue;
       if (closed) edge.pop();
-      group.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(edge, closed, 'centripetal'), count, .12, 5, closed), edgeMaterial));
+      group.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(edge, closed, 'centripetal'), edge.length - 1, .12, 5, closed), edgeMaterial));
     }
   }
   const roadGeometry = new THREE.BufferGeometry();

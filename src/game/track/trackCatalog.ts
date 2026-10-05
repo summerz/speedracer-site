@@ -54,7 +54,7 @@ export const TRACK_CATALOG: readonly TrackDefinition[] = Object.freeze(recipes.m
   const branches: readonly BranchRecipe[] = branchCourses.includes(i) ? Object.freeze([Object.freeze({ id: `${id}-fork`,
     kind: i % 4 === 1 ? 'vertical' as const : 'horizontal' as const, experience, direction: i % 2 ? -1 as const : 1 as const,
     intertwined: [6, 13, 17, 23].includes(i) })]) : [];
-  return Object.freeze({ id, name: r[0], revision: (r[4] ? (r[4].stunts.some(s => s.direction === -1) ? 3 : 2) : 1) + (branches.length ? 1 : 0), order: i + 1, district: r[1], rating: r[2], branches,
+  return Object.freeze({ id, name: r[0], revision: (r[4] ? (r[4].stunts.some(s => s.direction === -1) ? 3 : 2) : 1) + (branches.length ? 2 : 0), order: i + 1, district: r[1], rating: r[2], branches,
     predecessor: i ? recipes[i - 1][0].toLowerCase().replaceAll(' ', '-') : null,
     laps: 3, lapLimit: lapLimits[i], halfWidth: r[2] <= 3 ? 14 : 13,
     altitudeLevels: levels, obstacleLevels: Object.freeze(pattern), layout: r[4] ? Object.freeze({ ...r[4], stunts: Object.freeze(r[4].stunts.map(s => Object.freeze(s))) }) : null, features: r[3] + (branches.length ? ` · ${branches[0].intertwined ? '입체 교차 분기' : branches[0].kind === 'horizontal' ? '좌우 갈림길' : '상하 갈림길'}` : '') });
