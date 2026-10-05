@@ -13,6 +13,8 @@ export interface DronePerformance {
   boostAcceleration: number;
   boostStage2Acceleration: number;
   maxYawRate: number;
+  /** Side-slip decay per second on released/reversed steering. Higher values stop lateral drift sooner. */
+  lateralBraking: number;
   /** Steering becomes progressively wider above this speed (m/s). */
   corneringReferenceSpeed: number;
   highSpeedSteeringLoss: number;
@@ -73,7 +75,7 @@ export const DEFAULT_DRONE_CONFIGURATION: DroneConfiguration = {
   modelVariant: 'vanguard',
   performance: {
     topSpeed: 85, boostSpeed: 125, boostStage2Speed: 155, boostStage2Threshold: 0.6, acceleration: 46, braking: 70, collisionSpeedLoss: 0.38, crawlSpeed: 12,
-    boostAcceleration: 68, boostStage2Acceleration: 90, maxYawRate: 2.2, corneringReferenceSpeed: 60, highSpeedSteeringLoss: 0.2, boostDrain: 0.20, boostRecovery: 0.16,
+    boostAcceleration: 68, boostStage2Acceleration: 90, maxYawRate: 2.2, lateralBraking: 7, corneringReferenceSpeed: 60, highSpeedSteeringLoss: 0.2, boostDrain: 0.20, boostRecovery: 0.16,
     slopeSensitivity: 1, corneringDrag: .12, steeringDrag: 4.5, altitudeDrag: .5, downhillOverspeed: .12,
   },
   speedEffects: {

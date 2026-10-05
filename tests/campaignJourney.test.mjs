@@ -35,7 +35,7 @@ function runCourse(definition, configuration, mode, platform, slowStart = false)
     input: {
       raceId: snapshot.raceId, difficulty: trackPreset(definition).id,
       collisions: race.model.state.collisions, offTrackExits: race.model.state.offTrackExits,
-      recoveries: race.model.state.recoveries, penaltyPoints: race.model.state.penaltyPoints,
+      recoveries: race.model.state.recoveries, penaltyPoints: race.model.state.penaltyPoints, cleanHalfLaps: snapshot.cleanHalfLaps,
       improvedExistingBest: !!snapshot.result?.improvedExistingBest, assisted: snapshot.assisted,
     },
     outcome: {

@@ -57,7 +57,7 @@ test('a sharp real track corner requires slowing down from boost speed, even wit
   };
   const fast = driveCorner(125);
   assert.equal(fast.offTrackExits, 1, 'boost speed leaves the track');
-  assert.equal(fast.penaltyPoints, 5);
+  assert.equal(fast.penaltyPoints, 7);
   assert.equal(fast.recoveries, 0, 'departure never rewinds progress');
   const slowed = driveCorner(45); assert.equal(slowed.recoveries, 0); assert.equal(slowed.collisions, 0);
   assert.ok(slowed.distance >= 1100, 'braking allows the corner to be completed');

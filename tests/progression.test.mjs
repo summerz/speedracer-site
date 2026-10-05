@@ -3,16 +3,16 @@ import assert from 'node:assert/strict';
 import { initialProgress, applyCommand, validateProgress, calculateReward } from '../output/test/game/progression/progress.js';
 import { upgradedConfiguration, STARTER_ID, emptyLevels } from '../output/test/game/progression/catalog.js';
 import { createProgressStore } from '../output/test/game/progression/progressStore.js';
-const input = { raceId: 'race-1', difficulty: 'beginner', collisions: 0, offTrackExits: 0, recoveries: 0, penaltyPoints: 0, improvedExistingBest: false, assisted: false };
+const input = { raceId: 'race-1', difficulty: 'beginner', collisions: 0, offTrackExits: 0, recoveries: 0, penaltyPoints: 0, cleanHalfLaps: 6, improvedExistingBest: false, assisted: false };
 const funded = balance => ({ ...initialProgress(), balance });
 test('tier rewards, clean bonus, real best bonus and off-course deductions share one idempotent ledger', () => {
-  for (const [difficulty, base] of [['beginner',100],['intermediate',150],['advanced',220]]) assert.equal(calculateReward({...input,difficulty}).total,base+20);
-  assert.equal(calculateReward({...input,improvedExistingBest:true}).total,140);
-  assert.equal(calculateReward({...input,offTrackExits:1,penaltyPoints:5}).total,95);
+  for (const [difficulty, base] of [['beginner',100],['intermediate',150],['advanced',220]]) assert.equal(calculateReward({...input,difficulty}).total,base+18);
+  assert.equal(calculateReward({...input,improvedExistingBest:true}).total,148);
+  assert.equal(calculateReward({...input,offTrackExits:1,penaltyPoints:7,cleanHalfLaps:5}).total,108);
   assert.equal(calculateReward({...input,penaltyPoints:1000}).total,0);
-  assert.equal(calculateReward({...input,assisted:true,improvedExistingBest:true}).total,100);
+  assert.equal(calculateReward({...input,assisted:true,improvedExistingBest:true}).total,98);
   const before=initialProgress(); const paid=applyCommand(before,{kind:'reward',input});
-  assert.equal(before.balance,0); assert.equal(paid.balance,120);
+  assert.equal(before.balance,0); assert.equal(paid.balance,118);
   assert.deepEqual(applyCommand(paid,{kind:'reward',input:{...input,difficulty:'advanced'}}),paid);
 });
 test('ownership, affordability and three upgrade levels are enforced without mutating the profile', () => {
@@ -27,14 +27,37 @@ test('ownership, affordability and three upgrade levels are enforced without mut
   assert.deepEqual(p,funded(3000));
 });
 test('upgrades are derived once from each base craft and affect boost, handling, brakes and battery', () => {
-  const base=upgradedConfiguration(STARTER_ID,emptyLevels()); const upgraded=upgradedConfiguration(STARTER_ID,{engine:3,brakes:3,steering:3,battery:3});
+  const base=upgradedConfiguration(STARTER_ID,emptyLevels()); const upgraded=upgradedConfiguration(STARTER_ID,{engine:3,brakes:3,steering:3,stabilizer:3,battery:3});
   assert.equal(upgraded.performance.topSpeed,base.performance.topSpeed*1.12);
   assert.ok(Math.abs(upgraded.performance.boostStage2Speed-base.performance.boostStage2Speed*1.12)<1e-10);
   assert.ok(Math.abs(upgraded.performance.braking-base.performance.braking*1.36)<1e-10);
   assert.ok(upgraded.performance.maxYawRate>base.performance.maxYawRate);
+  assert.equal(upgraded.performance.lateralBraking,base.performance.lateralBraking*1.75);
   assert.ok(upgraded.performance.highSpeedSteeringLoss<base.performance.highSpeedSteeringLoss);
   assert.ok(upgraded.performance.boostDrain<base.performance.boostDrain);
-  assert.deepEqual(upgradedConfiguration(STARTER_ID,{engine:3,brakes:3,steering:3,battery:3}),upgraded);
+  assert.deepEqual(upgradedConfiguration(STARTER_ID,{engine:3,brakes:3,steering:3,stabilizer:3,battery:3}),upgraded);
+});
+test('old four-upgrade profiles gain a separate stabilizer without losing purchased levels or progress', () => {
+  const old = applyCommand(funded(5000), {kind:'craft',id:'needle'});
+  old.upgrades[STARTER_ID].engine = 2;
+  old.upgrades.needle.steering = 3;
+  for (const levels of Object.values(old.upgrades)) delete levels.stabilizer;
+  const migrated = validateProgress(old);
+  assert.equal(old.upgrades.needle.stabilizer, undefined, 'migration does not mutate the saved input');
+  assert.equal(migrated.balance, old.balance);
+  assert.deepEqual(migrated.campaign, old.campaign);
+  assert.equal(migrated.upgrades[STARTER_ID].engine, 2);
+  assert.equal(migrated.upgrades.needle.steering, 3);
+  assert.equal(migrated.upgrades.needle.stabilizer, 0);
+  let purchased = migrated;
+  for (let i = 0; i < 3; i++) purchased = applyCommand(purchased, {kind:'upgrade',id:'needle',upgrade:'stabilizer'});
+  assert.equal(purchased.balance, migrated.balance - 1600);
+  assert.equal(purchased.upgrades.needle.stabilizer, 3);
+  assert.equal(purchased.upgrades.needle.steering, 3);
+  assert.throws(() => applyCommand(purchased, {kind:'upgrade',id:'needle',upgrade:'stabilizer'}));
+  assert.deepEqual(validateProgress(JSON.parse(JSON.stringify(purchased))), purchased);
+  delete old.upgrades.needle.engine;
+  assert.throws(() => validateProgress(old), 'an incomplete old record still fails');
 });
 test('focus reserve/confirm/refund receipts prevent duplicate consumption and protect stock capacity',()=>{
   let p=applyCommand(funded(600),{kind:'focus'}); p=applyCommand(p,{kind:'slots',count:1});
@@ -60,9 +83,9 @@ test('serialized purchases and rewards always read the committed profile; failur
     await Promise.all([a.refresh(),b.refresh()]);
     const purchases=await Promise.allSettled([a.command({kind:'craft',id:'needle'}),b.command({kind:'craft',id:'hammerhead'})]);
     assert.equal(purchases.filter(x=>x.status==='fulfilled').length,1);assert.equal(saved.balance,200);assert.equal(saved.owned.length,2);
-    await Promise.all([a.command({kind:'reward',input}),b.command({kind:'reward',input})]); assert.equal(saved.balance,320);
-    await b.refresh();assert.equal(b.snapshot().balance,320);
-    fail=true;await assert.rejects(b.command({kind:'focus'}));assert.equal(b.snapshot().balance,320);assert.match(b.issue,/quota/);
+    await Promise.all([a.command({kind:'reward',input}),b.command({kind:'reward',input})]); assert.equal(saved.balance,318);
+    await b.refresh();assert.equal(b.snapshot().balance,318);
+    fail=true;await assert.rejects(b.command({kind:'focus'}));assert.equal(b.snapshot().balance,318);assert.match(b.issue,/quota/);
   }finally{a.close();b.close();}
 });
 

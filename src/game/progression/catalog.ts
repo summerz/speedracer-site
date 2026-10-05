@@ -13,11 +13,12 @@ export const UPGRADES = [
   { id: 'engine', name: '추진기', description: '단계당 최고 속도 +4% · 가속 +3% · 등판 저항 -4%' },
   { id: 'brakes', name: '브레이크', description: '단계당 제동력 +12%' },
   { id: 'steering', name: '자세 제어', description: '단계당 조향 +5% · 선회 저항 -6% · 조향 저항 -8%' },
+  { id: 'stabilizer', name: '횡방향 안정기', description: '단계당 좌우 제동력 +25% · 입력 해제·반대 조향 시 미끄러짐 감소' },
   { id: 'battery', name: '부스트 배터리', description: '단계당 소모 -5% · 회복 +4%' },
 ] as const;
 export type UpgradeId = typeof UPGRADES[number]['id'];
 export type UpgradeLevels = Record<UpgradeId, number>;
-export const emptyLevels = (): UpgradeLevels => ({ engine: 0, brakes: 0, steering: 0, battery: 0 });
+export const emptyLevels = (): UpgradeLevels => ({ engine: 0, brakes: 0, steering: 0, stabilizer: 0, battery: 0 });
 export const FOCUS_PRICE = 60;
 export const INVENTORY_LIMIT = 99;
 export const RIVAL_ITEMS = [
@@ -36,6 +37,7 @@ export function upgradedConfiguration(craftId: string, levels: UpgradeLevels): D
     topSpeed: 1 + levels.engine * .04, boostSpeed: 1 + levels.engine * .04, boostStage2Speed: 1 + levels.engine * .04,
     acceleration: 1 + levels.engine * .03, boostAcceleration: 1 + levels.engine * .03, boostStage2Acceleration: 1 + levels.engine * .03,
     braking: 1 + levels.brakes * .12, maxYawRate: 1 + levels.steering * .05,
+    lateralBraking: 1 + levels.stabilizer * .25,
     highSpeedSteeringLoss: 1 - levels.steering * .08,
     slopeSensitivity: 1 - levels.engine * .04, corneringDrag: 1 - levels.steering * .06, steeringDrag: 1 - levels.steering * .08,
     boostDrain: 1 - levels.battery * .05, boostRecovery: 1 + levels.battery * .04,

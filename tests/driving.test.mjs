@@ -99,19 +99,19 @@ test('a departure preserves forward progress and charges one penalty per excursi
   assert.ok(model.state.speed > 0 && model.state.speed < 64);
   assert.equal(model.state.altitude, 4.8);
   assert.equal(model.state.offTrackExits, 1);
-  assert.equal(model.state.penaltyPoints, 5);
+  assert.equal(model.state.penaltyPoints, 7);
   assert.equal(model.state.notice, 'off-track');
   for (let n = 0; n < 5; n++) {
     model.state.offset = 15;
     model.step(1 / 120, input());
   }
-  assert.equal(model.state.penaltyPoints, 5, 'remaining outside cannot charge every frame');
+  assert.equal(model.state.penaltyPoints, 7, 'remaining outside cannot charge every frame');
   model.state.offset = 0;
   model.step(1 / 120, input());
   model.state.offset = -15;
   model.step(1 / 120, input());
   assert.equal(model.state.offTrackExits, 2);
-  assert.equal(model.state.penaltyPoints, 10);
+  assert.equal(model.state.penaltyPoints, 14);
   model.reset();
   assert.equal(model.state.penaltyPoints, 0);
   assert.equal(model.state.offTrackExits, 0);

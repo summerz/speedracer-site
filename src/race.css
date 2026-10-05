@@ -21,6 +21,7 @@
 .race-pause { position:absolute; z-index:4; top:max(16px,env(safe-area-inset-top)); right:max(20px,env(safe-area-inset-right)); width:56px; height:56px; border:1px solid #73b7bb80; border-radius:50%; background:#071724df; color:#d9faf2; font-size:25px; pointer-events:auto; touch-action:manipulation; }
 .race-pause:hover { background:#1b414b; }
 .race-pause:disabled { opacity:.4; }
+.race-pause.on-pip { width:44px; height:44px; font-size:21px; background:#102c38; }
 .hud-label { color:#a0bcc6; font-size:10px; letter-spacing:1px; }
 .driving-overlay { position:absolute; pointer-events:none; overflow:hidden; }
 .height-guide { position:absolute; left:-32px; top:0; display:flex; flex-direction:column; align-items:center; gap:4px; pointer-events:none; text-shadow:0 2px 6px #000; }
@@ -126,7 +127,7 @@
 .drive-keys { display:grid; gap:12px; margin:8px 0; font-size:12px; color:#adc1cc; }
 .touch-help { display:none; font-size:12px; line-height:1.8; color:#adc1cc; }
 button:focus-visible { outline:2px solid #c9f9f2; outline-offset:3px; }
-.race-pip-frame { position:absolute; pointer-events:none; border:1px solid #57d9cc80; display:flex; align-items:flex-start; padding:7px; color:#c4ece8; font:10px 'IBM Plex Mono',monospace; background:linear-gradient(#020406d9,transparent 28%); }
+.race-pip-frame { position:absolute; pointer-events:none; border:1px solid #57d9cc80; display:flex; align-items:flex-start; padding:7px 58px 7px 7px; color:#c4ece8; font:10px 'IBM Plex Mono',monospace; background:linear-gradient(#020406d9,transparent 28%); }
 .drive-screen[data-phase='ready'] .height-guide,.drive-screen[data-phase='paused'] .height-guide,.drive-screen[data-phase='ready'] .drive-hud,.drive-screen[data-phase='paused'] .drive-hud,.drive-screen[data-phase='ready'] .race-notice,.drive-screen[data-phase='paused'] .race-notice { visibility:hidden; }
 .touch-controls { position:absolute; inset:auto 0 0; z-index:2; display:flex; justify-content:space-between; align-items:flex-end; padding:14px max(18px,env(safe-area-inset-right)) max(16px,env(safe-area-inset-bottom)) max(18px,env(safe-area-inset-left)); pointer-events:none; }
 .touch-controls,.touch-controls * { touch-action:none; }
@@ -192,6 +193,8 @@ button:focus-visible { outline:2px solid #c9f9f2; outline-offset:3px; }
 .race-announcement { position:absolute; top:28%; left:50%; transform:translateX(-50%); width:max-content; max-width:calc(100% - 32px); display:grid; gap:7px; text-align:center; color:#d9fff5; text-shadow:0 2px 10px #000,0 0 18px #45d8b766; opacity:0; }
 .race-announcement strong { font:600 clamp(30px,4.5vw,48px)/1 'Barlow Condensed',sans-serif; letter-spacing:2px; }
 .race-announcement span { font-size:11px; color:#d0e9eb; }
+.race-announcement em { justify-self:center; padding:5px 10px; border:1px solid #64e9ae70; background:#0a2927e6; color:#8affc7; font:600 12px 'IBM Plex Mono',monospace; font-style:normal; }
+.driving-overlay.is-inset .race-announcement em { padding:2px 4px; font-size:8px; }
 .race-announcement[data-kind='final-lap'] { color:#ffafcc; text-shadow:0 2px 10px #000,0 0 20px #ff4f9270; }
 .race-announcement[data-kind='final-lap'] strong { font-size:clamp(40px,5.5vw,60px); }
 .drive-screen:not([data-phase='running']) .race-announcement { visibility:hidden; }
@@ -223,3 +226,15 @@ button:focus-visible { outline:2px solid #c9f9f2; outline-offset:3px; }
 #competition-results #standings-status { color:var(--accent); font:10px 'IBM Plex Mono',monospace; margin:12px 0 4px; }
 @media(max-width:600px) { .telemetry-row { gap:12px; }.rank-readout { font-size:13px; } }
 .race-map-legend { position:absolute; left:7px; bottom:7px; color:#d0e8eb; }
+
+.restart-confirm p { color:#a8bdc8; font-size:14px; line-height:1.7; }
+.restart-actions { display:flex; gap:10px; margin-top:24px; }
+.restart-actions button { flex:1; min-height:48px; padding:12px; border:1px solid #58717d70; background:#0b1c28; color:#c9dadf; }
+.restart-actions .primary-action { background:var(--accent); color:#041117; border-color:var(--accent); }
+
+.race-flow-actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin:18px 0 12px; }
+.drive-dialog .race-flow-actions .primary-action { grid-column:1/-1; width:100%; margin:0; }
+.race-flow-actions .race-exit { margin:0; width:100%; min-height:44px; }
+.race-flow-actions:has(#campaign-next:not([hidden])) #drive-start { grid-column:auto; min-height:48px; padding:10px; border:1px solid #58717d70; background:#0b1c28; color:#c9dadf; font-size:13px; }
+.race-flow-actions:has(#campaign-next:not([hidden])) #race-hangar { grid-column:auto; }
+.race-flow-actions:has(#campaign-next:not([hidden])) #result-shop { grid-column:1/-1; }

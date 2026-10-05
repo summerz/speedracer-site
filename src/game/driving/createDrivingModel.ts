@@ -5,6 +5,8 @@ import { createTrackFrame } from '../track/createTrack.js';
 import { flightAcceleration } from './flightDynamics.js';
 import { ALTITUDE_PROFILES, resolveAltitudeProfile } from '../track/altitudeProfile.js';
 import type { TravelSegment } from './raceProgress.js';
+import { OFF_TRACK_PENALTY_POINTS, COLLISION_PENALTY_POINTS } from './raceScoring.js';
+export { OFF_TRACK_PENALTY_POINTS, COLLISION_PENALTY_POINTS } from './raceScoring.js';
 
 /** lift is a single tap impulse (-1 / 0 / 1), never a held key. */
 export interface DrivingInput { throttle: boolean; brake: boolean; steer: number; lift: number; boost: boolean; targetSpeedScale?: number }
@@ -30,8 +32,6 @@ export interface DrivingState {
   penaltyPoints: number;
   notice: 'collision' | 'craft-collision' | 'height-collision' | 'off-track' | 'recovery' | null;
 }
-
-export const OFF_TRACK_PENALTY_POINTS = 5;
 
 export const DRIVING_TUNING = {
   ...DEFAULT_DRONE_CONFIGURATION.performance, drag: 5,
@@ -89,6 +89,7 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
     contact() {
       state.speed *= 1 - tuning.collisionSpeedLoss * 0.7;
       state.collisions++;
+      state.penaltyPoints += COLLISION_PENALTY_POINTS;
       state.notice = 'craft-collision'; noticeRemaining = 0.8;
     },
     reset() {
@@ -151,9 +152,21 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
         if (state.speed > ceiling) state.speed = Math.max(ceiling, state.speed - 18 * dt);
         const speed = (oldSpeed + state.speed) * 0.5;
         const travel = speed * Math.cos(state.heading) / Math.max(0.5, 1 - curvature * state.offset);
-        const turnRate = steer * steeringYawRate(speed, tuning);
+        const yawCapacity = steeringYawRate(speed, tuning);
+        const turnRate = steer * yawCapacity;
         const oldHeading = state.heading;
-        state.heading = clamp(state.heading + (turnRate - curvature * travel) * dt, -1.1, 1.1);
+        // The heading is also the side-slip angle used for lateral travel. Released
+        // or opposing input engages the craft's stabilizer; holding a turn keeps
+        // its full yaw response. Feathered sticks blend smoothly into braking.
+        const stabilization = steer * oldHeading < 0 ? 1 : Math.max(0, 1 - Math.abs(steer) / .15);
+        const damping = tuning.lateralBraking * stabilization;
+        const decay = Math.exp(-damping * dt);
+        const angularTravel = damping > 1e-8 ? (1 - decay) / damping : dt;
+        const dampedHeading = oldHeading * decay + (turnRate - curvature * travel) * angularTravel;
+        // Stabilizing side-slip consumes the same yaw capacity as steering. It
+        // cannot turn an over-speed craft around a corner beyond that capacity.
+        const yaw = clamp((dampedHeading - oldHeading) / dt + curvature * travel, -yawCapacity, yawCapacity);
+        state.heading = clamp(oldHeading + (yaw - curvature * travel) * dt, -1.1, 1.1);
         state.offset += speed * Math.sin((oldHeading + state.heading) * 0.5) * dt;
         const oldDistance = state.distance;
         state.distance += travel * dt;
@@ -172,6 +185,7 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
             const severity = (1 - obstacle.speedRetention) / DEFAULT_DRONE_CONFIGURATION.performance.collisionSpeedLoss;
             state.speed *= Math.max(0.05, 1 - severity * tuning.collisionSpeedLoss);
             state.collisions++;
+            state.penaltyPoints += COLLISION_PENALTY_POINTS;
             state.notice = 'height-collision'; noticeRemaining = 1.2;
           }
         }
@@ -190,13 +204,14 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
             state.notice = 'off-track'; noticeRemaining = 1.8;
           }
         }
-        if (Math.abs(state.offset) > boundary && state.altitude <= 3.2) {
+        if (Math.abs(state.offset) > boundary && state.altitude <= 3.2 && !offTrackEpisode) {
           const side = Math.sign(state.offset);
           state.offset = side * boundary;
           if (state.heading * side > 0) state.heading = -side * 0.12;
           if (impactCooldown === 0) {
             state.speed *= 1 - tuning.collisionSpeedLoss; state.collisions++; impactCooldown = 0.5;
-            if (state.notice !== 'off-track') { state.notice = 'collision'; noticeRemaining = 0.8; }
+            state.penaltyPoints += COLLISION_PENALTY_POINTS;
+            state.notice = 'collision'; noticeRemaining = 0.8;
           }
         }
         if (!Number.isFinite(state.distance + state.offset)) {

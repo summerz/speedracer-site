@@ -229,7 +229,7 @@ export function createRace(
     if (lost || disposed) return;
     views.cycleTrack(); resize(); notify();
   };
-  const controlCodes = new Set(['KeyS', 'KeyA', 'KeyD', 'ArrowDown', 'ArrowUp', 'Space', 'KeyR', 'KeyF', 'KeyC', 'KeyX', 'Escape']);
+  const controlCodes = new Set(['KeyS', 'KeyA', 'KeyD', 'ArrowDown', 'ArrowUp', 'Space', 'KeyR', 'KeyC', 'KeyX', 'Escape']);
   window.addEventListener('speedracer:pad-action', (event) => {
     if (lost || document.querySelector('dialog[open]')) return;
     const action = (event as CustomEvent<string>).detail;
@@ -252,9 +252,6 @@ export function createRace(
     if (!event.repeat && event.code === 'KeyR') { window.dispatchEvent(new CustomEvent('speedracer:restart-request')); return; }
     if (timeAttack.phase !== 'running') return;
     raceAudio.activate();
-    if (!event.repeat && event.code === 'KeyF') {
-      recover(); return;
-    }
     if (event.code === 'ArrowDown' || event.code === 'ArrowUp') {
       if (!event.repeat) heightRequests.push(event.code === 'ArrowUp' ? 1 : -1);
       return;

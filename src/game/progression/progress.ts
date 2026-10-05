@@ -4,10 +4,11 @@ import { trackDefinition } from '../track/trackCatalog.js';
 import { CRAFT_PRICES, craftResaleValue, emptyLevels, FOCUS_PRICE, INVENTORY_LIMIT, STARTER_ID, UPGRADES, UPGRADE_COSTS, RIVAL_ITEMS, isRivalItem } from './catalog.js';
 import type { UpgradeId, UpgradeLevels, RivalItemId } from './catalog.js';
 import type { DifficultyId } from '../track/difficulty.js';
+import { CLEAN_HALF_LAP_POINTS, RECORD_BONUS_POINTS } from '../driving/raceScoring.js';
 
 export interface RewardInput {
   raceId: string; difficulty: DifficultyId; collisions: number; offTrackExits: number; recoveries: number;
-  penaltyPoints: number; improvedExistingBest: boolean; assisted: boolean;
+  penaltyPoints: number; cleanHalfLaps: number; improvedExistingBest: boolean; assisted: boolean;
 }
 export interface Reward { base: number; clean: number; best: number; penalty: number; total: number; assisted: boolean; bonus?: number }
 export interface Progress {
@@ -31,6 +32,14 @@ export function validateProgress(value: unknown): Progress {
   if (record(value) && value.focusUses === undefined) value = { ...value, focusUses: {} };
   if (record(value) && value.rivalInventory === undefined && value.rivalSlots === undefined && value.rivalUses === undefined)
     value = { ...value, rivalInventory: { 'time-stop': 0, interference: 0 }, rivalSlots: [], rivalUses: {} };
+  // v0.12 profiles have four upgrades. Add only the new stabilizer, preserving
+  // all purchased levels; incomplete or unknown upgrade records still fail below.
+  if (record(value) && record(value.upgrades)) {
+    value = { ...value, upgrades: Object.fromEntries(Object.entries(value.upgrades).map(([id, levels]) => [id,
+      record(levels) && !own(levels, 'stabilizer') && Object.keys(levels).length === UPGRADES.length - 1
+        && UPGRADES.filter(upgrade => upgrade.id !== 'stabilizer').every(upgrade => own(levels, upgrade.id))
+        ? { ...levels, stabilizer: 0 } : levels])) };
+  }
   if (!record(value) || value.version !== 1 || !integer(value.revision) || !integer(value.balance)
     || !Array.isArray(value.owned) || !value.owned.length || new Set(value.owned).size !== value.owned.length
     || !value.owned.every(id => typeof id === 'string' && own(CRAFT_PRICES, id)) || !value.owned.includes(STARTER_ID)
@@ -64,10 +73,11 @@ export function validateProgress(value: unknown): Progress {
 export function calculateReward(input: RewardInput): Reward {
   if (!input.raceId || input.raceId.length > 160 || !own({ beginner: 1, intermediate: 1, advanced: 1 }, input.difficulty)
     || typeof input.assisted !== 'boolean' || typeof input.improvedExistingBest !== 'boolean'
-    || ![input.collisions, input.offTrackExits, input.recoveries, input.penaltyPoints].every(n => integer(n))) throw new Error('Invalid race reward');
+    || ![input.collisions, input.offTrackExits, input.recoveries, input.penaltyPoints].every(n => integer(n))
+    || !integer(input.cleanHalfLaps, 20)) throw new Error('Invalid race reward');
   const base = { beginner: 100, intermediate: 150, advanced: 220 }[input.difficulty] * (input.assisted ? .8 : 1);
-  const clean = input.collisions + input.offTrackExits + input.recoveries === 0 ? 20 : 0;
-  const best = !input.assisted && input.improvedExistingBest ? 20 : 0;
+  const clean = input.cleanHalfLaps * CLEAN_HALF_LAP_POINTS;
+  const best = !input.assisted && input.improvedExistingBest ? RECORD_BONUS_POINTS : 0;
   return { base, clean, best, penalty: input.penaltyPoints, total: Math.max(0, base + clean + best - input.penaltyPoints), assisted: input.assisted };
 }
 export type ProgressCommand = { kind: 'campaign-select'; mode: CampaignOutcome['mode']; trackId: string }

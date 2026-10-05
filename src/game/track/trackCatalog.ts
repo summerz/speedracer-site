@@ -55,6 +55,8 @@ export const TRACK_CATALOG: readonly TrackDefinition[] = Object.freeze(recipes.m
 export function trackDefinition(id: string) { return TRACK_CATALOG.find(t => t.id === id); }
 /** Explicit authored deadlines keep campaign rules independent of 3D geometry loading. */
 export function campaignLapLimit(definition: TrackDefinition) { return definition.lapLimit; }
+/** Easier courses allow a wider qualifying pack; ratings 5–6 reserve the top two. */
+export function campaignRankLimit(definition: Pick<TrackDefinition, 'rating'>) { return definition.rating <= 2 ? 4 : definition.rating <= 4 ? 3 : 2; }
 export function validateTrackCatalog(catalog: readonly TrackDefinition[]) {
   const ids = new Set(catalog.map(t => t.id));
   if (ids.size !== catalog.length) throw new Error('Duplicate track ID');

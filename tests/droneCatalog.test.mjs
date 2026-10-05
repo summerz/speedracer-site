@@ -44,7 +44,7 @@ test('wall loss matches the display and electric-field severity respects craft r
     assert.equal(model.state.collisions, 1);
     const acceleration = flightAcceleration(60, p.topSpeed, 0, p, { grade: 0, curvature: 0, steer: 1, altitudeSpeed: 0 });
     assert.ok(Math.abs(model.state.speed / (60 + acceleration / 120) - (1 - p.collisionSpeedLoss)) < 1e-8);
-    assert.equal(droneStats(craft.configuration)[3].value, (p.collisionSpeedLoss * 100).toFixed(0));
+    assert.equal(droneStats(craft.configuration).find(stat => stat.label === '충돌 감속').value, (p.collisionSpeedLoss * 100).toFixed(0));
     const field = createDrivingModel(electric, p); field.state.speed = 60; field.step(.1, NEUTRAL_INPUT);
     assert.equal(field.state.collisions, 1);
     losses.push([craft.name, field.state.speed]);
@@ -52,5 +52,5 @@ test('wall loss matches the display and electric-field severity respects craft r
   assert.ok(losses.find(([name]) => name === 'Hammerhead')[1] > losses.find(([name]) => name === 'Needle')[1]);
   assert.throws(() => resolveDroneConfiguration(get('Vanguard'), [{ performanceMultiplier: { collisionSpeedLoss: 3 } }]), RangeError);
   const upgraded = resolveDroneConfiguration(get('Hammerhead'), [{ performanceMultiplier: { collisionSpeedLoss: .9 } }]);
-  assert.ok(Number(droneStats(upgraded)[3].value) < Number(droneStats(get('Hammerhead'))[3].value));
+  assert.ok(Number(droneStats(upgraded).find(stat => stat.label === '충돌 감속').value) < Number(droneStats(get('Hammerhead')).find(stat => stat.label === '충돌 감속').value));
 });

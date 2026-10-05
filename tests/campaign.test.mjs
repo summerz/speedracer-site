@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { TRACK_CATALOG, campaignLapLimit, validateTrackCatalog } from '../output/test/game/track/trackCatalog.js';
+import { TRACK_CATALOG, campaignLapLimit, campaignRankLimit, validateTrackCatalog } from '../output/test/game/track/trackCatalog.js';
 import { createCatalogTrack, trackMetrics } from '../output/test/game/track/trackRuntime.js';
 import { initialProgress, validateProgress, applyCommand } from '../output/test/game/progression/progress.js';
 import { initialCampaign, campaignStatus, nextCampaignTrack, validateCampaign, campaignClearRecord, completeCampaign } from '../output/test/game/progression/campaign.js';
@@ -13,7 +13,7 @@ import { createDistrictScenery } from '../output/test/game/track/createDistrictS
 import { disposeScenery } from '../output/test/game/track/createTrackLandmark.js';
 
 const first = TRACK_CATALOG[0], second = TRACK_CATALOG[1];
-const reward = id => ({ raceId: id, difficulty: 'beginner', collisions: 0, offTrackExits: 0, recoveries: 0, penaltyPoints: 0, improvedExistingBest: false, assisted: false });
+const reward = id => ({ raceId: id, difficulty: 'beginner', collisions: 0, offTrackExits: 0, recoveries: 0, penaltyPoints: 0, cleanHalfLaps: 6, improvedExistingBest: false, assisted: false });
 const outcome = (track = first, mode = 'time-attack', changes = {}) => ({ mode, trackId: track.id, revision: track.revision, total: 120, laps: [40,40,40], rank: 1, disqualified: false, assisted: false, lapLimit: campaignLapLimit(track), ...changes });
 const complete = (p, id, result = outcome()) => applyCommand(p, { kind: 'campaign-result', input: reward(id), outcome: result });
 
@@ -33,7 +33,7 @@ test('modes unlock independently, replays remain available and the first-clear b
   const replayed = complete(cleared, 'b'); assert.equal(replayed.rewards.b.bonus, 0); assert.ok(replayed.rewards.b.total > 0);
   assert.equal(replayed.campaign.modes['time-attack'][first.id].attempts, 2);
   assert.equal(initial.campaign.modes['time-attack'][first.id], undefined);
-  const lost = complete(replayed, 'c', outcome(first, 'competition', { rank: 2 }));
+  const lost = complete(replayed, 'c', outcome(first, 'competition', { rank: 5 }));
   assert.equal(campaignStatus(lost.campaign, 'competition', second), 'locked');
   const won = complete(lost, 'd', outcome(first, 'competition'));
   assert.equal(campaignStatus(won.campaign, 'competition', second), 'available');
@@ -168,10 +168,10 @@ test('a faster defeat or replay cannot overwrite the saved campaign passing resu
   const progress = initialCampaign();
   const result = { mode: 'competition', trackId: first.id, revision: first.revision, total: 150, laps: [50,50,50], rank: 1, disqualified: false, assisted: true, lapLimit: campaignLapLimit(first) };
   completeCampaign(progress, result);
-  completeCampaign(progress, { ...result, total: 120, laps: [40,40,40], rank: 2 });
+  completeCampaign(progress, { ...result, total: 120, laps: [40,40,40], rank: 5 });
   completeCampaign(progress, { ...result, total: 135, laps: [45,45,45] });
   const saved = validateCampaign(JSON.parse(JSON.stringify(progress)));
-  assert.equal(saved.modes.competition[first.id].records[`${first.revision}:assisted`].rank, 2);
+  assert.equal(saved.modes.competition[first.id].records[`${first.revision}:assisted`].rank, 5);
   assert.deepEqual(campaignClearRecord(saved, 'competition', first), { revision: first.revision, total: 150, laps: [50,50,50], rank: 1, assisted: true });
 });
 
@@ -200,8 +200,33 @@ test('a recoverable legacy winning record survives a faster losing replay', () =
   const progress = initialCampaign();
   const old = { total: 150, laps: [50,50,50], rank: 1, assisted: false };
   progress.modes.competition[first.id] = { cleared: true, attempts: 1, records: { [`${first.revision}:normal`]: old } };
-  completeCampaign(progress, { mode: 'competition', trackId: first.id, revision: first.revision, total: 120, laps: [40,40,40], rank: 2, disqualified: false, assisted: false, lapLimit: campaignLapLimit(first) });
+  completeCampaign(progress, { mode: 'competition', trackId: first.id, revision: first.revision, total: 120, laps: [40,40,40], rank: 5, disqualified: false, assisted: false, lapLimit: campaignLapLimit(first) });
   const saved = validateCampaign(JSON.parse(JSON.stringify(progress)));
-  assert.equal(saved.modes.competition[first.id].records[`${first.revision}:normal`].rank, 2);
+  assert.equal(saved.modes.competition[first.id].records[`${first.revision}:normal`].rank, 5);
   assert.deepEqual(campaignClearRecord(saved, 'competition', first), { ...old, revision: first.revision });
+});
+
+
+test('AI qualifying ranks follow difficulty and persist without losing first-clear history', () => {
+  assert.deepEqual([1,2,3,4,5,6].map(rating => campaignRankLimit({ rating })), [4,4,3,3,2,2]);
+  for (const rating of [1,2,3,4]) {
+    const track = TRACK_CATALOG.find(t => t.rating === rating);
+    const progress = initialCampaign();
+    if (track.predecessor) progress.modes.competition[track.predecessor] = { cleared: true, attempts: 1, records: {} };
+    const limit = campaignRankLimit(track);
+    assert.equal(completeCampaign(progress, outcome(track, 'competition', { rank: limit, disqualified: true })).passed, false);
+    assert.throws(() => completeCampaign(progress, outcome(track, 'competition', { rank: limit, total: 80, laps: [40,40] })), /랩 합계/);
+    assert.equal(completeCampaign(progress, outcome(track, 'competition', { rank: limit + 1 })).passed, false);
+    const result = completeCampaign(progress, outcome(track, 'competition', { rank: limit }));
+    assert.equal(result.passed, true);
+    assert.equal(result.firstClear, true);
+    const next = TRACK_CATALOG.find(t => t.predecessor === track.id);
+    assert.equal(campaignStatus(progress, 'competition', next), 'available');
+    const saved = validateCampaign(JSON.parse(JSON.stringify(progress)));
+    assert.equal(campaignClearRecord(saved, 'competition', track).rank, limit);
+    const replay = completeCampaign(saved, outcome(track, 'competition'));
+    assert.equal(replay.passed, true);
+    assert.equal(replay.bonus, 0);
+    assert.equal(campaignClearRecord(saved, 'competition', track).rank, limit);
+  }
 });

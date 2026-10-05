@@ -1,4 +1,5 @@
 import type { RacePhase } from './createTimeAttack.js';
+import type { CleanHalfLap } from './raceScoring.js';
 
 export type RaceCue = 'countdown' | 'start' | 'half-lap' | 'lap' | 'final-lap' | 'finish';
 export interface RaceAnnouncement {
@@ -8,6 +9,7 @@ export interface RaceAnnouncement {
   detail: string;
   startedAt: number;
   duration: number;
+  clean?: boolean;
 }
 interface Progress {
   phase: RacePhase;
@@ -17,18 +19,20 @@ interface Progress {
   gatesPassed: number;
   gatesPerLap: number;
   totalLaps: number;
+  cleanSegments?: readonly CleanHalfLap[];
 }
 
 /** Checkpoint progress, not position: recovery and pause cannot replay lap cues. */
 export function createRaceFeedback() {
   let passed = 0;
+  let completedHalves = 0;
   let previousPhase: RacePhase = 'ready';
   let countdown = 0;
   let sequence = 0;
   let announcement: RaceAnnouncement | null = null;
   let expires = 0;
   const reset = () => {
-    passed = 0; previousPhase = 'ready'; countdown = 0;
+    passed = 0; completedHalves = 0; previousPhase = 'ready'; countdown = 0;
     announcement = null; expires = 0;
   };
   return {
@@ -46,20 +50,24 @@ export function createRaceFeedback() {
       const nowPassed = progress.completedLaps * progress.gatesPerLap + progress.gatesPassed;
       for (let lap = 1; lap <= progress.totalLaps; lap++) {
         const half = (lap - 1) * progress.gatesPerLap + Math.ceil(progress.gatesPerLap / 2);
-        if (passed < half && nowPassed >= half && half < lap * progress.gatesPerLap) {
+        const halfSegment = progress.cleanSegments?.find(segment => segment.lap === lap && segment.half === 1);
+        const crossedHalf = progress.cleanSegments ? completedHalves < lap * 2 - 1 && !!halfSegment
+          : passed < half && nowPassed >= half && half < lap * progress.gatesPerLap;
+        if (crossedHalf) {
           cues.push('half-lap');
-          announcement = { id: ++sequence, kind: 'half-lap', title: `LAP ${lap} · 50%`, detail: lap === progress.totalLaps ? '마지막 반 랩, 끝까지!' : '반 랩 통과', startedAt: progress.elapsed, duration: 2.4 };
+          announcement = { id: ++sequence, kind: 'half-lap', title: `LAP ${lap} · 50%`, detail: lap === progress.totalLaps ? '마지막 반 랩, 끝까지!' : '반 랩 통과', clean: halfSegment?.clean, startedAt: progress.elapsed, duration: 2.4 };
           expires = progress.elapsed + 2.4;
         }
         const end = lap * progress.gatesPerLap;
         if (passed < end && nowPassed >= end && lap < progress.totalLaps) {
           const final = lap + 1 === progress.totalLaps;
           cues.push(final ? 'final-lap' : 'lap');
-          announcement = { id: ++sequence, kind: final ? 'final-lap' : 'lap', title: final ? 'FINAL LAP' : `LAP ${lap} COMPLETE`, detail: final ? `${lap}랩 완료 · 마지막 랩 시작!` : `${lap + 1} / ${progress.totalLaps} 랩 시작`, startedAt: progress.elapsed, duration: final ? 3.4 : 2.8 };
+          announcement = { id: ++sequence, kind: final ? 'final-lap' : 'lap', title: final ? 'FINAL LAP' : `LAP ${lap} COMPLETE`, detail: final ? `${lap}랩 완료 · 마지막 랩 시작!` : `${lap + 1} / ${progress.totalLaps} 랩 시작`, clean: progress.cleanSegments?.find(segment => segment.lap === lap && segment.half === 2)?.clean, startedAt: progress.elapsed, duration: final ? 3.4 : 2.8 };
           expires = progress.elapsed + (final ? 3.4 : 2.8);
         }
       }
       passed = Math.max(passed, nowPassed);
+      completedHalves = Math.max(completedHalves, progress.cleanSegments?.length ?? 0);
       if (progress.elapsed >= expires || progress.phase === 'finished') announcement = null;
       return cues;
     },

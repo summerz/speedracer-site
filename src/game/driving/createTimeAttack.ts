@@ -5,6 +5,7 @@ import type { Track } from '../track/createTrack.js';
 import { createRaceProgress, RACE_LAPS } from './raceProgress.js';
 import { createRaceRecords } from './raceRecords.js';
 import type { RecordResult } from './raceRecords.js';
+import { createCleanHalfLaps } from './raceScoring.js';
 
 export type RacePhase = 'ready' | 'countdown' | 'running' | 'paused' | 'finished';
 
@@ -19,6 +20,7 @@ export function createTimeAttack(track: Track, performance: DronePerformance, re
   let disqualified = false;
   const model = createDrivingModel(track, performance);
   const progress = createRaceProgress(track.length, Math.ceil(track.length / track.checkpointSpacing), track.halfWidth, totalLaps);
+  const clean = createCleanHalfLaps(track.length, totalLaps);
   let phase: RacePhase = 'ready';
   let resumePhase: 'countdown' | 'running' = 'running';
   let countdownRemaining = 3;
@@ -26,7 +28,7 @@ export function createTimeAttack(track: Track, performance: DronePerformance, re
   let raceId = '';
   let focusRemaining = 0; let focusUsed = 0; let focusCooldown = 0;
   const reset = () => {
-    model.reset(); progress.reset(); disqualified = false; countdownRemaining = 3; result = null;
+    model.reset(); progress.reset(); clean.reset(); disqualified = false; countdownRemaining = 3; result = null;
     raceId = globalThis.crypto?.randomUUID() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     focusRemaining = 0; focusUsed = 0; focusCooldown = 0;
   };
@@ -39,7 +41,9 @@ export function createTimeAttack(track: Track, performance: DronePerformance, re
     get phase() { return phase; },
     snapshot() {
       const p = progress.snapshot();
+      const cleanSegments = clean.snapshot();
       return { ...p, phase, totalLaps, disqualified, lapLimit, countdown: Math.max(1, Math.ceil(countdownRemaining - 1e-8)),
+        cleanSegments, cleanHalfLaps: cleanSegments.filter(segment => segment.clean).length,
         lapElapsed: model.state.elapsed - p.lapTimes.reduce((sum, time) => sum + time, 0),
         offTrackExits: model.state.offTrackExits, penaltyPoints: model.state.penaltyPoints,
         bestRecord: records.read(), result, raceId, assisted: focusSlots > 0, focusRemaining, focusUsed,
@@ -88,12 +92,14 @@ export function createTimeAttack(track: Track, performance: DronePerformance, re
             const fraction = Math.max(0, Math.min(1, (deadline - segment.timeFrom) / (segment.timeTo - segment.timeFrom)));
             const distance = segment.from + (segment.to - segment.from) * fraction;
             progress.cross({ ...segment, to: distance, timeTo: deadline });
+            clean.cross(distance, model.state);
             model.state.distance = distance; model.state.elapsed = deadline;
             model.state.speed = 0; model.interruptBoost(); phase = 'finished'; disqualified = true;
             return true;
           }
         }
         const finish = progress.cross(segment);
+        clean.cross(Math.min(segment.to, track.length * totalLaps), model.state);
         model.state.checkpoint = progress.checkpoint;
         if (finish === null) return false;
         // Interpolate the final gate within the physics step; no extra frame is charged.

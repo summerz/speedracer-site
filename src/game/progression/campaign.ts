@@ -1,4 +1,4 @@
-import { TRACK_CATALOG, campaignLapLimit } from '../track/trackCatalog.js';
+import { TRACK_CATALOG, campaignLapLimit, campaignRankLimit } from '../track/trackCatalog.js';
 import type { TrackDefinition } from '../track/trackCatalog.js';
 import { RACE_PARTICIPANT_COUNT } from '../driving/aiRoster.js';
 import type { RaceMode } from '../driving/createRaceSession.js';
@@ -36,7 +36,7 @@ export function validateCampaign(value: unknown): CampaignProgress {
     // Keep unknown/retired track IDs: later releases may restore them.
     for (const [id, entry] of Object.entries(data)) {
       if (!/^[a-z][a-z0-9-]*$/.test(id) || !entry || typeof entry.cleared !== 'boolean' || !Number.isSafeInteger(entry.attempts) || entry.attempts < 0 || !entry.records || typeof entry.records !== 'object' || Array.isArray(entry.records)) throw new Error('잘못된 캠페인 트랙 기록');
-      if (entry.clearRecord !== undefined && (!entry.cleared || !Number.isSafeInteger(entry.clearRecord?.revision) || entry.clearRecord.revision < 1 || (mode === 'competition' && entry.clearRecord.rank !== 1))) throw new Error('잘못된 통과 기록');
+      if (entry.clearRecord !== undefined && (!entry.cleared || !Number.isSafeInteger(entry.clearRecord?.revision) || entry.clearRecord.revision < 1)) throw new Error('잘못된 통과 기록');
       if (entry.clearedAt !== undefined && (!Number.isFinite(entry.clearedAt) || entry.clearedAt < 0)) throw new Error('잘못된 클리어 시간');
       for (const r of [...Object.values(entry.records), ...(entry.clearRecord ? [entry.clearRecord] : [])]) if (!r || !Number.isFinite(r.total) || r.total <= 0 || !Array.isArray(r.laps) || !r.laps.length || r.laps.some(n => !Number.isFinite(n) || n <= 0) || !Number.isInteger(r.rank) || r.rank < 1 || r.rank > RACE_PARTICIPANT_COUNT || typeof r.assisted !== 'boolean') throw new Error('잘못된 캠페인 랩 기록');
     }
@@ -62,7 +62,7 @@ export function completeCampaign(progress: CampaignProgress, outcome: CampaignOu
   // Preserve a recoverable legacy winning result before a faster replay replaces it.
   entry.clearRecord ??= campaignClearRecord(progress, outcome.mode, track);
   entry.attempts++;
-  const passed = !outcome.disqualified && outcome.laps.length === track.laps && (outcome.mode === 'competition' ? outcome.rank === 1 : outcome.laps.every(lap => lap <= allowedLimit));
+  const passed = !outcome.disqualified && outcome.laps.length === track.laps && (outcome.mode === 'competition' ? outcome.rank <= campaignRankLimit(track) : outcome.laps.every(lap => lap <= allowedLimit));
   const firstClear = passed && !entry.cleared;
   if (passed) {
     entry.cleared = true; entry.clearedAt ??= Date.now();

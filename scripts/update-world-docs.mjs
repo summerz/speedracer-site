@@ -1,5 +1,5 @@
 import { readFile, writeFile } from 'node:fs/promises';
-import { TRACK_CATALOG, DISTRICTS } from '../output/test/game/track/trackCatalog.js';
+import { TRACK_CATALOG, DISTRICTS, campaignRankLimit } from '../output/test/game/track/trackCatalog.js';
 import { createCatalogTrack } from '../output/test/game/track/trackRuntime.js';
 import { describeTrackLandmarks } from '../output/test/game/track/createTrackLandmark.js';
 import { LANDMARK_TYPES, LANDMARK_DISTRICTS, LANDMARK_ENCOUNTERS } from '../output/test/game/track/landmarkCatalog.js';
@@ -27,8 +27,8 @@ const documents = {
   'TRACK_CATALOG.md': prefix('트랙 카탈로그') +
     '캠페인 규칙과 저장/해금은 [트랙 제작과 캠페인](TRACK_CAMPAIGN.md), 주변 구조물은 [랜드마크 카탈로그](LANDMARK_CATALOG.md), 하늘·안개·천체는 [월드 환경](WORLD_ENVIRONMENTS.md)을 참조합니다.\n\n' +
     '## 제작 원칙\n\n24개 코스는 각각 닫힌 경로와 최소 1개 특수 구간을 갖습니다. 길이와 난이도는 별도로 조정하며 새 구역 입구에서 난이도가 낮아집니다. 아래 거리와 시간은 1랩 기준이고 모든 경기는 3랩입니다. 기체에 따른 트랙 주색, 구역별 배경색, 난이도에 따른 고도 단계를 사용합니다. 환경 연출 변경만으로 기록 제작 버전을 올리지 않습니다.\n\n' +
-    table(['번호 / ID', '이름', '구역', '길이 km', '난이도 /6', '고도 단계', '랩 제한 초', '전체 형태 / 특수 구간'], courses.map(({ definition: d, track }) => [
-      `${number(d.order)} / \`${d.id}\``, d.name, DISTRICTS[d.district].name, (track.length / 1000).toFixed(1), d.rating, d.altitudeLevels, d.lapLimit, d.features,
+    table(['번호 / ID', '이름', '구역', '길이 km', '난이도 /6', '고도 단계', '랩 제한 초', 'AI 통과 순위', '전체 형태 / 특수 구간'], courses.map(({ definition: d, track }) => [
+      `${number(d.order)} / \`${d.id}\``, d.name, DISTRICTS[d.district].name, (track.length / 1000).toFixed(1), d.rating, d.altitudeLevels, d.lapLimit, `${campaignRankLimit(d)}위 이내`, d.features,
     ])) +
     '\n## 추가 코스\n\n`trackCatalog.ts`에 고유 ID·선행 ID·구역·경로·고도·제한시간을 추가합니다. 기존 ID는 보존합니다. 구역이 늘어나면 `landmarkCatalog.ts`의 대표 형태·동반 형태·발광색도 지정합니다. 문서 갱신과 접근 시야·경로 간격·기본 기체 완주 검증을 실행합니다.\n',
   'LANDMARK_CATALOG.md': prefix('랜드마크 카탈로그') +

@@ -103,13 +103,13 @@ test('departure penalties survive pause and finish, while restart clears them', 
   assert.ok(session.model.state.distance > 25);
   assert.equal(session.model.state.checkpoint, 25);
   assert.equal(session.model.state.recoveries, 0);
-  assert.equal(session.snapshot().penaltyPoints, 5);
+  assert.equal(session.snapshot().penaltyPoints, 7);
   session.pause(); const paused = session.snapshot(); advance(session, 10);
   assert.deepEqual(session.snapshot(), paused);
   session.start(); session.model.state.offset = 0; advance(session, 30);
   assert.equal(session.phase, 'finished');
   assert.equal(session.snapshot().offTrackExits, 1);
-  assert.equal(session.snapshot().penaltyPoints, 5);
+  assert.equal(session.snapshot().penaltyPoints, 7);
   session.restart();
   assert.equal(session.snapshot().offTrackExits, 0);
   assert.equal(session.snapshot().penaltyPoints, 0);
