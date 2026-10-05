@@ -97,8 +97,10 @@ export function createNightSky(environment: NightEnvironment, forward: THREE.Vec
         vec3 cell=floor(d*440.), local=fract(d*440.)-.5;
         float star=step(.9975,hash(cell))*pow(max(0.,1.-length(local)*2.),4.);
         color+=vec3(.8,.88,1.)*star*starStrength*smoothstep(.04,.3,altitude)*(1.-disk)*(1.-ringMask);
-        // Only the low horizon is veiled; the upper surface and limb stay legible.
-        color=mix(horizon*.65,color,smoothstep(-.025,.065,d.y));
+        // Tint a narrow horizon band without deleting the lower hemisphere.
+        // Actual ground/buildings occlude the complete body as the camera moves.
+        float horizonHaze=.18*exp(-pow(d.y/.055,2.));
+        color=mix(color,horizon*.65,horizonHaze);
         gl_FragColor=vec4(color,1.);
       }`,
     side: THREE.BackSide, depthWrite: false, fog: false, toneMapped: false,
