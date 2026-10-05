@@ -1,3 +1,5 @@
+import { RIVAL_ITEMS } from './game/progression/catalog';
+import type { RivalItemId } from './game/progression/catalog';
 import { soundtrack } from './game/audio/soundtrack';
 import { OFF_TRACK_PENALTY_POINTS } from './game/driving/createDrivingModel';
 import { RENDER_QUALITIES } from './platform/renderQuality';
@@ -27,7 +29,7 @@ const formatTime = (seconds: number) => {
 };
 
 export function mountRace(root: HTMLDivElement, onHangar: () => void, configuration: DroneConfiguration = DEFAULT_DRONE_CONFIGURATION, store?: ProgressStore, onShop?: () => void, campaign?: { track: TrackDefinition; mode: RaceMode }): () => void {
-  const focusSlots = store ? Math.min(store.snapshot().focusSlots, store.snapshot().focus) : 0;
+  let focusSlots = store ? Math.min(store.snapshot().focusSlots, store.snapshot().focus) : 0;
   document.title = 'Speedracer — 타임어택';
   root.innerHTML = `
     <main class="drive-screen">
@@ -39,7 +41,7 @@ export function mountRace(root: HTMLDivElement, onHangar: () => void, configurat
       </header>
       <button type="button" id="race-pause" class="race-pause" aria-label="일시정지 메뉴" aria-keyshortcuts="Escape" aria-controls="drive-overlay" aria-expanded="false"><span aria-hidden="true">Ⅱ</span></button>
       <div class="driving-overlay"><div id="race-announcement" class="race-announcement" role="status" aria-live="polite" hidden><strong></strong><span></span></div><p id="race-notice" class="race-notice" role="status" aria-live="polite"></p><div id="race-countdown" class="race-countdown" role="status" aria-live="assertive" hidden><span>READY</span><strong>3</strong></div>
-      <button id="race-focus" type="button" class="race-focus" aria-keyshortcuts="V" hidden>집중 모드</button><p id="focus-feedback" class="focus-feedback" role="status" aria-live="polite"></p><footer class="drive-hud" aria-label="고도와 부스트 계기판">
+      <div class="race-items"><button id="race-focus" type="button" class="race-focus" aria-keyshortcuts="V" hidden>집중 모드</button>${RIVAL_ITEMS.map(item => `<button type="button" id="race-${item.id}" class="race-focus" data-use-item="${item.id}" hidden>${item.name}</button>`).join('')}</div><p id="focus-feedback" class="focus-feedback" role="status" aria-live="polite"></p><footer class="drive-hud" aria-label="고도와 부스트 계기판">
         <aside class="height-guide" aria-label="고도 안내: 선택 단계, 민트색 통과 가능, 빨강 통과 불가, 주황 전환 중"><div id="height-level" class="height-bars"></div><strong id="height-instruction"></strong></aside>
         <div class="boost-readout"><div class="hud-pair"><span class="hud-label">BOOST</span><span id="boost-value" class="mono">100%</span></div><div id="boost-meter" class="boost-meter" role="progressbar" aria-label="부스트 잔량" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"><span></span></div><div id="boost-stage-meter" class="boost-stage-meter" role="progressbar" aria-label="부스트 2단계 축적" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span></span></div><span id="boost-status">Space 유지 · 3초 후 2단계</span></div>
       </footer></div>
@@ -71,8 +73,8 @@ export function mountRace(root: HTMLDivElement, onHangar: () => void, configurat
         <div class="preference-options"><button type="button" id="race-haze" aria-pressed="false"><span>배기 아지랑이 <small>추적 시점</small></span></button></div>
         <p class="quality-hint">아지랑이는 배기 주변에만 적용합니다. 성능이 낮으면 끄거나 ‘성능 우선’을 선택하세요.</p>
         <details class="control-help"><summary>조작 안내</summary>
-          <p class="touch-help">메뉴: 화살표로 이동 · Enter로 선택. 게임패드: 방향 패드/스틱으로 이동 · A 선택 · B 돌아가기.<br />주행: 왼쪽 스틱 조향 · 방향 패드 ↑/↓ 고도 · LT 감속 · RT/RB 부스트 · X 콕핏 · Y 트랙 뷰 · LB 집중 모드 · Start 일시정지/계속.</p>
-          <div class="drive-keys"><span>자동 가속 · <kbd>S</kbd> 감속</span><span><kbd>A</kbd> <kbd>D</kbd> 좌우 조향</span><span><kbd>↓</kbd> <kbd>↑</kbd> 고도 한 단계 전환</span><span><kbd>Space</kbd> 길게 눌러 부스트</span><span><kbd>C</kbd> 기체·콕핏 전환</span><span><kbd>X</kbd> 트랙 PIP·자리 교환·닫기</span><span><kbd>F</kbd> 체크포인트 복귀</span><span><kbd>Esc</kbd> 일시정지·계속하기</span></div>
+          <p class="touch-help">메뉴: 화살표로 이동 · Enter로 선택. 게임패드: 방향 패드/스틱으로 이동 · A 선택 · B 돌아가기.<br />주행: 왼쪽 스틱 조향 · 방향 패드 ↑/↓ 고도 · LT 감속 · RT/RB 부스트 · X 콕핏 · Y 트랙 뷰 · LB 아이템 · Start 일시정지/계속.</p>
+          <div class="drive-keys"><span>자동 가속 · <kbd>S</kbd> 감속</span><span><kbd>A</kbd> <kbd>D</kbd> 좌우 조향</span><span><kbd>↓</kbd> <kbd>↑</kbd> 고도 한 단계 전환</span><span><kbd>Space</kbd> 길게 눌러 부스트</span><span><kbd>C</kbd> 기체·콕핏 전환</span><span><kbd>X</kbd> 트랙 PIP·자리 교환·닫기</span><span><kbd>V</kbd> 아이템 사용</span><span><kbd>Esc</kbd> 일시정지·계속하기</span></div>
           <p class="touch-help">자동으로 가속합니다. 왼쪽 조이스틱은 좌우 조향, 아래로 당기면 감속합니다. 대각선으로 두 조작을 함께 할 수 있습니다.<br />오른쪽 ↑/↓ 버튼은 고도를 한 단계 바꾸고, BOOST는 길게 눌러 사용합니다. ${(configuration.performance.boostStage2Threshold / configuration.performance.boostDrain).toFixed(1)}초 연속 부스트 시 2단계에 진입합니다.<br />시점은 일시정지 메뉴의 화면 미리보기에서 바꿀 수 있습니다.</p>
         </details>
       </dialog>
@@ -112,6 +114,8 @@ export function mountRace(root: HTMLDivElement, onHangar: () => void, configurat
   const heightGuide = root.querySelector<HTMLElement>('.height-guide')!;
   let selectedDifficulty: DifficultyId = campaign ? trackPreset(campaign.track).id : 'beginner';
   let selectedMode: RaceMode = campaign?.mode ?? 'time-attack';
+  let itemStates: RaceSnapshot['timeAttack']['items'] = [];
+  let equippedRivalSlots: RivalItemId[] = [];
   let campaignOutcome: CampaignOutcome | undefined;
   let standingsKey = '';
   let lastPhase = '';
@@ -192,11 +196,18 @@ export function mountRace(root: HTMLDivElement, onHangar: () => void, configurat
         get('race-standings').innerHTML = competition.standings.map(p => `<li class="${p.player ? 'is-player' : ''}"><strong>${p.rank}</strong><span class="standing-name"><i style="background:${p.color}"></i><span>${p.name}${p.player ? ' · 나' : `<small>${p.craftName} · ${p.style}</small>`}</span></span><time>${p.finishTime === null ? `LAP ${Math.min(attack.totalLaps, p.completedLaps + 1)}/${attack.totalLaps}` : formatTime(p.finishTime)}</time></li>`).join('');
       }
     }
-    activeRaceId = attack.raceId; canFocus = attack.canFocus;
+    activeRaceId = attack.raceId; canFocus = attack.canFocus; itemStates = attack.items;
     const focus = get<HTMLButtonElement>('race-focus');
     focus.hidden = !focusSlots || state.phase !== 'running'; focus.disabled = !canFocus || focusPending;
     focus.textContent = attack.focusRemaining > 0 ? `집중 ${attack.focusRemaining.toFixed(1)}s` : `집중 ${focusSlots - attack.focusUsed} · V`;
-    get('focus-feedback').hidden = attack.focusRemaining === 0 && !focusPending && performance.now() >= focusMessageUntil;
+    for (const item of RIVAL_ITEMS) {
+      const status = attack.items.find(entry => entry.id === item.id)!;
+      const button = get<HTMLButtonElement>(`race-${item.id}`);
+      button.hidden = !equippedRivalSlots.includes(item.id) || state.phase !== 'running';
+      button.disabled = !status.canUse || focusPending;
+      button.textContent = status.active > 1e-8 ? `${item.name} ${status.active.toFixed(1)}s` : `${item.name} ${status.remaining}${attack.itemCooldown > 0 ? ` · ${attack.itemCooldown.toFixed(1)}s` : status.remaining > 0 && !status.targets.length ? ' · 대상 없음' : ''}`;
+    }
+    get('focus-feedback').hidden = !focusPending && performance.now() >= focusMessageUntil;
     screen.classList.toggle('is-focused', attack.focusRemaining > 0 && state.phase === 'running');
     const deadline = get('lap-deadline'); deadline.hidden = !campaign || selectedMode !== 'time-attack';
     if (attack.lapLimit) deadline.textContent = `남은 시간 ${Math.max(0, attack.lapLimit - (state.elapsed - attack.lapTimes.reduce((a, b) => a + b, 0))).toFixed(1)}s`;
@@ -367,27 +378,51 @@ export function mountRace(root: HTMLDivElement, onHangar: () => void, configurat
     try {
       await store.command({ kind: 'consume-focus', id: receipt });
       if (screenDisposed || activeRaceId !== requestedRaceId || !race?.useFocus()) await store.command({ kind: 'refund-focus', id: receipt });
-      else { get('focus-feedback').textContent = '집중 모드 · 2초'; await store.command({ kind: 'confirm-focus', id: receipt }); }
+      else { get('focus-feedback').textContent = '집중 모드 · 2초'; focusMessageUntil = performance.now() + 2200; await store.command({ kind: 'confirm-focus', id: receipt }); }
     } catch (error) { if (!screenDisposed) { get('focus-feedback').textContent = error instanceof Error ? error.message : '아이템을 사용할 수 없습니다.'; focusMessageUntil = performance.now() + 2500; } }
     finally { focusPending = false; }
   };
+  const useRival = async (item: RivalItemId) => {
+    if (!store || focusPending || lastPhase !== 'running' || !itemStates.find(entry => entry.id === item)?.canUse) return;
+    focusPending = true;
+    const requestedRaceId = activeRaceId; const receipt = `${requestedRaceId}:${++focusSerial}`;
+    try {
+      await store.command({ kind: 'consume-rival', item, id: receipt, mode: selectedMode });
+      if (screenDisposed || activeRaceId !== requestedRaceId || !race?.useRivalItem(item)) await store.command({ kind: 'refund-rival', id: receipt });
+      else {
+        const definition = RIVAL_ITEMS.find(entry => entry.id === item)!;
+        get('focus-feedback').textContent = `${definition.name} · ${definition.duration}초`;
+        focusMessageUntil = performance.now() + 2500;
+        await store.command({ kind: 'confirm-rival', id: receipt });
+      }
+    } catch (error) { if (!screenDisposed) { get('focus-feedback').textContent = error instanceof Error ? error.message : '아이템을 사용할 수 없습니다.'; focusMessageUntil = performance.now() + 2500; } }
+    finally { focusPending = false; }
+  };
+  const useNextItem = () => {
+    if (canFocus) void useFocus();
+    else { const next = itemStates.find(item => item.canUse); if (next) void useRival(next.id); }
+  };
   get('race-focus').addEventListener('click', () => { void useFocus(); }, listen);
-  window.addEventListener('speedracer:focus-request', () => { if (!preferences.open) void useFocus(); }, listen);
+  for (const item of RIVAL_ITEMS) get(`race-${item.id}`).addEventListener('click', () => { void useRival(item.id); }, listen);
+  window.addEventListener('speedracer:focus-request', () => { if (!preferences.open) useNextItem(); }, listen);
   window.addEventListener('keydown', event => {
     if (event.code !== 'KeyV' || event.repeat || event.ctrlKey || event.metaKey || event.altKey || document.querySelector('dialog[open]') || event.target instanceof HTMLElement && event.target.closest('input, select, textarea, [contenteditable]')) return;
-    event.preventDefault(); void useFocus();
+    event.preventDefault(); useNextItem();
   }, listen);
   get('drive-retry').addEventListener('click', () => location.reload(), listen);
   const prepareRace = () => {
     standingsKey = '';
+    const profile = store?.snapshot();
+    focusSlots = profile ? Math.min(profile.focusSlots, profile.focus) : 0;
+    equippedRivalSlots = selectedMode === 'competition' && profile ? profile.rivalSlots.filter((item, index, slots) => slots.slice(0, index + 1).filter(id => id === item).length <= profile.rivalInventory[item]) : [];
     document.title = `Speedracer — ${selectedMode === 'competition' ? 'AI 레이스' : '타임어택'}`;
     get('race-mode-title').textContent = `${campaign?.track.name ?? 'NEON CIRCUIT'} · ${selectedMode === 'competition' ? 'AI RACE' : 'TIME ATTACK'}`;
-    get('race-loadout').textContent = `${selectedMode === 'competition' ? 'AI 3대와 경쟁' : '타임어택'} · ${focusSlots ? `집중 모드 ${focusSlots}개 · 기본 보상 80%` : '아이템 없음'}`;
+    get('race-loadout').textContent = `${selectedMode === 'competition' ? 'AI 3대와 경쟁' : '타임어택'} · ${focusSlots || equippedRivalSlots.length ? `아이템 ${focusSlots + equippedRivalSlots.length}개 · 기본 보상 80%` : '아이템 없음'}`;
     rewardInput = undefined; campaignOutcome = undefined; get('result-reward').textContent = ''; get('reward-retry').hidden = true; get('result-shop').hidden = true;
     race?.dispose(); lastPhase = ''; lastViewKey = ''; previewing = false; lastCollisions = 0; lastBoostStage = 0; lastAnnouncement = 0; impactAnimation?.cancel(); boostFlashAnimation?.cancel();
     get('difficulty-description').textContent = campaign?.track.features ?? DIFFICULTIES[selectedDifficulty].description;
     try {
-      race = createRace(get<HTMLDivElement>('race-scene'), update, showError, configuration, undefined, campaign ? trackPreset(campaign.track) : DIFFICULTIES[selectedDifficulty], focusSlots, selectedMode, campaign?.track);
+      race = createRace(get<HTMLDivElement>('race-scene'), update, showError, configuration, undefined, campaign ? trackPreset(campaign.track) : DIFFICULTIES[selectedDifficulty], focusSlots, selectedMode, campaign?.track, equippedRivalSlots);
       race.setQuality(qualitySelect.value as RenderQuality);
       race.setExhaustHaze(hazeButton.getAttribute('aria-pressed') === 'true');
       race.setBloom(bloomButton.getAttribute('aria-pressed') === 'true');
@@ -426,9 +461,11 @@ export function mountRace(root: HTMLDivElement, onHangar: () => void, configurat
     if (event.code !== 'Escape' || !previewing || preferences.open) return;
     event.preventDefault(); event.stopImmediatePropagation(); leavePreview();
   }, { ...listen, capture: true });
-  startButton.addEventListener('click', () => { startButton.blur(); race?.start(); }, listen);
+  startButton.addEventListener('click', () => { startButton.blur(); if (lastPhase === 'finished') prepareRace(); race?.start(); }, listen);
   pauseButton.addEventListener('click', () => { pauseButton.blur(); if (previewing) leavePreview(); else race?.togglePause(); }, listen);
-  get('race-restart').addEventListener('click', () => race?.restart(), listen);
+  const restartRace = () => { prepareRace(); race?.start(); };
+  get('race-restart').addEventListener('click', restartRace, listen);
+  window.addEventListener('speedracer:restart-request', restartRace, listen);
   get('race-recover').addEventListener('click', () => race?.recover(), listen);
   qualitySelect.addEventListener('change', () => race?.setQuality(qualitySelect.value as RenderQuality), listen);
   hazeButton.addEventListener('click', () => {

@@ -5,7 +5,7 @@ import { ALTITUDE_PROFILES, resolveAltitudeProfile } from '../track/altitudeProf
 import type { TravelSegment } from './raceProgress.js';
 
 /** lift is a single tap impulse (-1 / 0 / 1), never a held key. */
-export interface DrivingInput { throttle: boolean; brake: boolean; steer: number; lift: number; boost: boolean }
+export interface DrivingInput { throttle: boolean; brake: boolean; steer: number; lift: number; boost: boolean; targetSpeedScale?: number }
 export interface DrivingState {
   distance: number;
   offset: number;
@@ -131,7 +131,8 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
           if (rechargeDelay === 0) state.charge = Math.min(1, state.charge + tuning.boostRecovery * dt);
         }
         const oldSpeed = state.speed;
-        const limit = state.boostStage === 2 ? tuning.boostStage2Speed : state.boosting ? tuning.boostSpeed : tuning.topSpeed;
+        const speedScale = Number.isFinite(input.targetSpeedScale) ? clamp(input.targetSpeedScale!, .1, 1) : 1;
+        const limit = (state.boostStage === 2 ? tuning.boostStage2Speed : state.boosting ? tuning.boostSpeed : tuning.topSpeed) * speedScale;
         const acceleration = input.brake ? (state.speed < tuning.crawlSpeed ? tuning.acceleration : -tuning.braking)
           : state.boostStage === 2 ? tuning.boostStage2Acceleration : state.boosting ? tuning.boostAcceleration : input.throttle ? tuning.acceleration : -tuning.drag;
         state.speed = clamp(state.speed + acceleration * dt, 0, Math.max(limit, state.speed));

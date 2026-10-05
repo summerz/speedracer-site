@@ -1,8 +1,8 @@
 import { initialCampaign, validateCampaign, completeCampaign } from './campaign.js';
 import type { CampaignProgress, CampaignOutcome } from './campaign.js';
 import { trackDefinition } from '../track/trackCatalog.js';
-import { CRAFT_PRICES, craftResaleValue, emptyLevels, FOCUS_PRICE, INVENTORY_LIMIT, STARTER_ID, UPGRADES, UPGRADE_COSTS } from './catalog.js';
-import type { UpgradeId, UpgradeLevels } from './catalog.js';
+import { CRAFT_PRICES, craftResaleValue, emptyLevels, FOCUS_PRICE, INVENTORY_LIMIT, STARTER_ID, UPGRADES, UPGRADE_COSTS, RIVAL_ITEMS, isRivalItem } from './catalog.js';
+import type { UpgradeId, UpgradeLevels, RivalItemId } from './catalog.js';
 import type { DifficultyId } from '../track/difficulty.js';
 
 export interface RewardInput {
@@ -16,20 +16,36 @@ export interface Progress {
   rewards: Record<string, Reward>;
   campaign: CampaignProgress;
   focusUses: Record<string, 'pending' | 'used' | 'refunded'>;
+  rivalInventory: Record<RivalItemId, number>;
+  rivalSlots: RivalItemId[];
+  rivalUses: Record<string, { item: RivalItemId; state: 'pending' | 'used' | 'refunded' }>;
 }
 export const initialProgress = (): Progress => ({ version: 1, revision: 0, balance: 0, owned: [STARTER_ID], equipped: STARTER_ID,
-  upgrades: { [STARTER_ID]: emptyLevels() }, focus: 0, focusSlots: 0, rewards: {}, focusUses: {}, campaign: initialCampaign() });
+  upgrades: { [STARTER_ID]: emptyLevels() }, focus: 0, focusSlots: 0, rewards: {}, focusUses: {}, campaign: initialCampaign(),
+  rivalInventory: { 'time-stop': 0, interference: 0 }, rivalSlots: [], rivalUses: {} });
 const integer = (n: unknown, max = Number.MAX_SAFE_INTEGER): n is number => Number.isSafeInteger(n) && (n as number) >= 0 && (n as number) <= max;
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
 const own = (object: object, key: string) => Object.hasOwn(object, key);
 export function validateProgress(value: unknown): Progress {
   if (record(value) && value.campaign === undefined) value = { ...value, campaign: initialCampaign() };
   if (record(value) && value.focusUses === undefined) value = { ...value, focusUses: {} };
+  if (record(value) && value.rivalInventory === undefined && value.rivalSlots === undefined && value.rivalUses === undefined)
+    value = { ...value, rivalInventory: { 'time-stop': 0, interference: 0 }, rivalSlots: [], rivalUses: {} };
   if (!record(value) || value.version !== 1 || !integer(value.revision) || !integer(value.balance)
     || !Array.isArray(value.owned) || !value.owned.length || new Set(value.owned).size !== value.owned.length
     || !value.owned.every(id => typeof id === 'string' && own(CRAFT_PRICES, id)) || !value.owned.includes(STARTER_ID)
     || !value.owned.includes(value.equipped) || !record(value.upgrades) || !record(value.rewards)
     || !record(value.focusUses) || !integer(value.focus, INVENTORY_LIMIT) || !integer(value.focusSlots, 2)) throw new Error('진행 저장 데이터가 올바르지 않습니다.');
+  if (!record(value.rivalInventory) || Object.keys(value.rivalInventory).length !== RIVAL_ITEMS.length
+    || !RIVAL_ITEMS.every(item => integer((value.rivalInventory as Record<string, unknown>)[item.id], INVENTORY_LIMIT))
+    || !Array.isArray(value.rivalSlots) || !value.rivalSlots.every(isRivalItem) || value.rivalSlots.length + Number(value.focusSlots) > 2
+    || !record(value.rivalUses)) throw new Error('잘못된 상대 아이템 데이터');
+  for (const [id, use] of Object.entries(value.rivalUses))
+    if (!id || id.length > 200 || !record(use) || !isRivalItem(use.item) || !['pending', 'used', 'refunded'].includes(use.state as string)) throw new Error('잘못된 아이템 사용 데이터');
+  for (const item of RIVAL_ITEMS) {
+    const pending = Object.values(value.rivalUses).filter(use => (use as { item: string; state: string }).item === item.id && (use as { state: string }).state === 'pending').length;
+    if (Number(value.rivalInventory[item.id]) + pending > INVENTORY_LIMIT) throw new Error('아이템 보유 한도 초과');
+  }
   if (Object.keys(value.upgrades).length !== value.owned.length) throw new Error('잘못된 강화 데이터');
   for (const id of value.owned) {
     const levels = value.upgrades[id];
@@ -57,7 +73,11 @@ export function calculateReward(input: RewardInput): Reward {
 export type ProgressCommand = { kind: 'campaign-select'; mode: CampaignOutcome['mode']; trackId: string }
   | { kind: 'campaign-result'; input: RewardInput; outcome: CampaignOutcome } | { kind: 'reward'; input: RewardInput } | { kind: 'craft'; id: string }
   | { kind: 'equip'; id: string } | { kind: 'sell-craft'; id: string } | { kind: 'upgrade'; id: string; upgrade: UpgradeId }
-  | { kind: 'focus' } | { kind: 'slots'; count: number } | { kind: 'consume-focus'; id: string } | { kind: 'refund-focus'; id: string } | { kind: 'confirm-focus'; id: string };
+  | { kind: 'focus' } | { kind: 'slots'; count: number } | { kind: 'consume-focus'; id: string } | { kind: 'refund-focus'; id: string } | { kind: 'confirm-focus'; id: string }
+  | { kind: 'rival-buy'; item: RivalItemId; mode: CampaignOutcome['mode'] }
+  | { kind: 'rival-slots'; slots: RivalItemId[]; mode: CampaignOutcome['mode'] }
+  | { kind: 'consume-rival'; item: RivalItemId; id: string; mode: CampaignOutcome['mode'] }
+  | { kind: 'refund-rival' | 'confirm-rival'; id: string };
 export function applyCommand(current: Progress, command: ProgressCommand): Progress {
   const next = validateProgress(current);
   const charge = (cost: number) => { if (next.balance < cost) throw new Error(`${cost - next.balance}P가 부족합니다.`); next.balance -= cost; };
@@ -112,7 +132,7 @@ export function applyCommand(current: Progress, command: ProgressCommand): Progr
       if (next.focus + Object.values(next.focusUses).filter(state => state === 'pending').length >= INVENTORY_LIMIT) throw new Error('보유 한도에 도달했습니다.');
       charge(FOCUS_PRICE); next.focus++; break;
     case 'slots':
-      if (!integer(command.count, 2)) throw new Error('최대 2개를 장착할 수 있습니다.');
+      if (!integer(command.count, 2) || command.count + next.rivalSlots.length > 2) throw new Error('최대 2개를 장착할 수 있습니다.');
       if (command.count > next.focus) throw new Error('아이템 수량이 부족합니다.');
       next.focusSlots = command.count; break;
     case 'consume-focus':
@@ -126,6 +146,35 @@ export function applyCommand(current: Progress, command: ProgressCommand): Progr
     case 'confirm-focus':
       if (next.focusUses[command.id] !== 'pending') return next;
       next.focusUses[command.id] = 'used'; break;
+    case 'rival-buy': {
+      if (command.mode !== 'competition' || !isRivalItem(command.item)) throw new Error('AI 경주 전용 아이템입니다.');
+      const item = RIVAL_ITEMS.find(item => item.id === command.item)!;
+      const pending = Object.values(next.rivalUses).filter(use => use.item === command.item && use.state === 'pending').length;
+      if (next.rivalInventory[command.item] + pending >= INVENTORY_LIMIT) throw new Error('보유 한도에 도달했습니다.');
+      charge(item.price); next.rivalInventory[command.item]++; break;
+    }
+    case 'rival-slots': {
+      if (command.mode !== 'competition' || !Array.isArray(command.slots) || !command.slots.every(isRivalItem)) throw new Error('AI 경주 전용 아이템입니다.');
+      if (command.slots.length + next.focusSlots > 2) throw new Error('최대 2개를 장착할 수 있습니다.');
+      for (const item of RIVAL_ITEMS) if (command.slots.filter(id => id === item.id).length > next.rivalInventory[item.id]) throw new Error('아이템 수량이 부족합니다.');
+      next.rivalSlots = [...command.slots]; break;
+    }
+    case 'consume-rival': {
+      if (command.mode !== 'competition' || !isRivalItem(command.item)) throw new Error('AI 경주 전용 아이템입니다.');
+      if (!command.id || command.id.length > 200) throw new Error('Invalid item receipt');
+      if (own(next.rivalUses, command.id)) {
+        if (next.rivalUses[command.id].item !== command.item) throw new Error('잘못된 아이템 영수증');
+        return next;
+      }
+      if (!next.rivalInventory[command.item]) throw new Error('아이템 수량이 부족합니다.');
+      next.rivalInventory[command.item]--; next.rivalUses[command.id] = { item: command.item, state: 'pending' }; break;
+    }
+    case 'refund-rival': case 'confirm-rival': {
+      const use = next.rivalUses[command.id];
+      if (use?.state !== 'pending') return next;
+      if (command.kind === 'refund-rival') next.rivalInventory[use.item]++;
+      use.state = command.kind === 'refund-rival' ? 'refunded' : 'used'; break;
+    }
   }
   next.revision++; return validateProgress(next);
 }

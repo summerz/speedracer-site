@@ -27,7 +27,7 @@ import { createRaceFeedback } from './createRaceFeedback';
 import type { RaceAnnouncement } from './createRaceFeedback';
 import { createBoostHaptics } from './createBoostHaptics';
 import { createBoostWarp } from './createBoostWarp';
-import { createTimeAttack } from './createTimeAttack';
+import type { RivalItemId } from '../progression/catalog';
 import { createRaceSession } from './createRaceSession';
 import type { RaceMode, CompetitionSnapshot } from './createRaceSession';
 import { createRivalVisuals } from './createRivalVisuals';
@@ -51,13 +51,14 @@ export interface RaceSnapshot extends DrivingState {
   upcomingCurvature: number;
   upcomingSection: TrackFrame['section'];
   heightObstacle: { kind: 'rise' | 'descend' | 'middle'; distance: number; minAltitude: number; maxAltitude: number } | null;
-  timeAttack: ReturnType<ReturnType<typeof createTimeAttack>['snapshot']>;
+  timeAttack: ReturnType<ReturnType<typeof createRaceSession>['snapshot']>;
 }
 export interface Race {
   start(): void;
   togglePause(): void;
   restart(): void;
   useFocus(): boolean;
+  useRivalItem(item: RivalItemId): boolean;
   recover(): void;
   toggleCockpit(): void;
   cycleTrack(): void;
@@ -78,6 +79,7 @@ export function createRace(
   focusSlots = 0,
   mode: RaceMode = 'time-attack',
   course?: TrackDefinition,
+  rivalSlots: readonly RivalItemId[] = [],
 ): Race {
   const config = resolveDroneConfiguration(configuration);
   const visuals = config.speedEffects;
@@ -109,8 +111,8 @@ export function createRace(
   const coarsePointer = window.matchMedia('(any-pointer: coarse)');
   let storage: Storage | undefined;
   try { storage = window.localStorage; } catch { /* Private browsing can deny storage. */ }
-  const records = createRaceRecords({ laps: course?.laps, trackId: course ? `${course.id}:v${course.revision}` : `neon-circuit-v1:${difficulty?.id ?? 'beginner'}`, configurationId: JSON.stringify({ performance: config.performance, altitude: track.altitudeProfile, ...(focusSlots ? { assisted: true } : {}), ...(mode === 'competition' ? { mode } : {}) }) }, storage);
-  const timeAttack = createRaceSession(track, config, records, focusSlots, mode, Math.random, coarsePointer.matches ? 'touch' : 'desktop', course ? { laps: course.laps, ...(mode === 'time-attack' ? { lapLimit: campaignLapLimit(course) } : {}) } : {}, course?.rating);
+  const records = createRaceRecords({ laps: course?.laps, trackId: course ? `${course.id}:v${course.revision}` : `neon-circuit-v1:${difficulty?.id ?? 'beginner'}`, configurationId: JSON.stringify({ performance: config.performance, altitude: track.altitudeProfile, ...(focusSlots || rivalSlots.length ? { assisted: true } : {}), ...(mode === 'competition' ? { mode } : {}) }) }, storage);
+  const timeAttack = createRaceSession(track, config, records, focusSlots, mode, Math.random, coarsePointer.matches ? 'touch' : 'desktop', course ? { laps: course.laps, ...(mode === 'time-attack' ? { lapLimit: campaignLapLimit(course) } : {}) } : {}, course?.rating, rivalSlots);
   const rivalVisuals = createRivalVisuals(scene, track, timeAttack.rivals);
   const model = timeAttack.model;
   const raceGates = createRaceGates(track, timeAttack.snapshot().gatesPerLap);
@@ -241,7 +243,7 @@ export function createRace(
     if (!event.repeat && event.code === 'KeyC') { toggleCockpit(); return; }
     if (!event.repeat && event.code === 'KeyX') { cycleTrack(); return; }
     if (!event.repeat && event.code === 'Escape') { togglePause(); return; }
-    if (!event.repeat && event.code === 'KeyR') { restart(); return; }
+    if (!event.repeat && event.code === 'KeyR') { window.dispatchEvent(new CustomEvent('speedracer:restart-request')); return; }
     if (timeAttack.phase !== 'running') return;
     raceAudio.activate();
     if (!event.repeat && event.code === 'KeyF') {
@@ -419,7 +421,7 @@ export function createRace(
   }, listen);
   notify(); animation = requestAnimationFrame(tick);
   return {
-    start, togglePause, restart, useFocus() { const used = timeAttack.useFocus(); if (used) notify(); return used; }, recover, toggleCockpit, cycleTrack,
+    start, togglePause, restart, useFocus() { const used = timeAttack.useFocus(); if (used) notify(); return used; }, useRivalItem(item) { const used = timeAttack.useRivalItem(item); if (used) notify(); return used; }, recover, toggleCockpit, cycleTrack,
     setBloom(enabled) { bloom.enabled = enabled; },
     setQuality(quality) { scenery?.setQuality(quality); renderQuality = quality; resize(); },
     setExhaustHaze(enabled) { exhaustHaze.setEnabled(enabled); },

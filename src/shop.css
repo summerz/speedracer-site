@@ -37,3 +37,12 @@
 .sale-confirm p { margin: 0 0 12px; color: #cbbdb1; font-size: 12px; line-height: 1.6; }
 .sale-confirm > div { display: flex; gap: 8px; }
 .sale-confirm button { flex: 1; }
+
+/* Item controls share the established neon button palette and follow the driving view into PIP. */
+.shop-item-modes { display: flex; gap: 8px; margin: 16px 0; }
+.shop-item-modes button { flex: 1; min-height: 44px; padding: 10px 16px; }
+.race-items { position: absolute; right: max(24px, env(safe-area-inset-right)); top: 42%; z-index: 5; display: grid; gap: 8px; pointer-events: none; }
+.race-items .race-focus { position: static; pointer-events: auto; }
+.driving-overlay.is-inset .race-items { right: 6px; top: 34%; gap: 3px; }
+.driving-overlay.is-inset .race-items .race-focus { min-height: 26px; padding: 4px 6px; font-size: 9px; }
+@media (any-pointer: coarse) { .race-items { right: max(16px, env(safe-area-inset-right)); top: 36%; } }

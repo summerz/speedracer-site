@@ -1,8 +1,8 @@
 import { createHangar } from './game/createHangar';
 import { menuHeader } from './menuHeader';
 import { DRONE_CATALOG, droneStats } from './game/drone/droneCatalog';
-import { CRAFT_PRICES, craftResaleValue, STARTER_ID, emptyLevels, FOCUS_PRICE, INVENTORY_LIMIT, UPGRADES, UPGRADE_COSTS, upgradedConfiguration } from './game/progression/catalog';
-import type { UpgradeId } from './game/progression/catalog';
+import { CRAFT_PRICES, craftResaleValue, STARTER_ID, emptyLevels, FOCUS_PRICE, RIVAL_ITEMS, INVENTORY_LIMIT, UPGRADES, UPGRADE_COSTS, upgradedConfiguration } from './game/progression/catalog';
+import type { UpgradeId, RivalItemId } from './game/progression/catalog';
 import type { ProgressCommand } from './game/progression/progress';
 import type { ProgressStore } from './game/progression/progressStore';
 import './shop.css';
@@ -20,6 +20,7 @@ export function mountShop(root: HTMLDivElement, store: ProgressStore, onBack: ()
   let tab: 'craft' | 'upgrade' | 'item' = 'craft'; let busy = false; let disposed = false;
   const hangar = createHangar(get<HTMLDivElement>('shop-scene'), () => { get('shop-message').textContent = '3D 미리보기 연결이 끊겼습니다. 다시 불러와주세요.'; }, upgradedConfiguration(selected, store.snapshot().upgrades[selected]), true);
   let shown = '';
+  let itemMode: 'competition' | 'time-attack' = store.snapshot().campaign.last?.mode ?? 'time-attack';
   let salePending = false;
   const insufficient = (cost: number, balance: number) => cost > balance ? `<small>${cost - balance}P 부족</small>` : '';
   const render = () => {
@@ -46,7 +47,12 @@ export function mountShop(root: HTMLDivElement, store: ProgressStore, onBack: ()
         return `<article class="shop-upgrade"><div><h3>${upgrade.name} <small>${level}/3</small></h3><p>${upgrade.description}</p><p class="mono">${value(config.performance)}${level < 3 ? ` → ${value(after.performance)}` : ''}</p></div><div class="shop-action"><button type="button" class="primary-action" data-upgrade="${upgrade.id}" ${busy || level === 3 || cost > profile.balance ? 'disabled' : ''}>${level === 3 ? '최대 단계' : `${cost} P · 강화`}</button>${level < 3 ? insufficient(cost, profile.balance) : ''}</div></article>`;
       }).join('') : '<p class="shop-hint">기체를 먼저 구매하면 강화할 수 있습니다.</p>'}</div>`;
     } else {
-      get('shop-products').innerHTML = `<div class="shop-detail"><p class="eyebrow">TIME ATTACK ASSIST</p><h2>집중 모드</h2><p>2초 동안 주행을 45% 속도로 늦춰 조향과 고도 전환을 돕습니다. 경기 시계는 정상적으로 흐릅니다.</p><p>보유 <strong>${profile.focus}개</strong> · 경기당 최대 2개 장착</p><p class="shop-hint">장착하면 보조 타임어택으로 출발합니다. 기록은 별도로 저장하며 기본 보상은 80%, 기록 갱신 보너스는 없습니다. 사용하지 않은 아이템은 남습니다.</p><div class="shop-action"><button type="button" data-action="focus" class="primary-action" ${busy || profile.balance < FOCUS_PRICE || profile.focus >= INVENTORY_LIMIT ? 'disabled' : ''}>${FOCUS_PRICE} P · 1개 구매</button>${insufficient(FOCUS_PRICE, profile.balance)}</div><fieldset class="shop-slots"><legend>다음 경기 장착</legend>${[0, 1, 2].map(count => `<button type="button" data-slots="${count}" aria-pressed="${profile.focusSlots === count}" ${busy || count > profile.focus ? 'disabled' : ''}>${count === 0 ? '사용 안 함' : `${count}개`}</button>`).join('')}</fieldset><p class="shop-hint">시간 정지·전파 교란은 AI 레이스가 추가된 뒤 판매합니다.</p></div>`;
+      const total = profile.focusSlots + profile.rivalSlots.length;
+      const choices = (id: 'focus' | RivalItemId, stock: number, selectedCount: number) => `<fieldset class="shop-slots"><legend>다음 경기 장착</legend>${[0, 1, 2].map(count => `<button type="button" ${id === 'focus' ? `data-slots="${count}"` : `data-rival-slots="${count}" data-item="${id}"`} aria-pressed="${selectedCount === count}" ${busy || count > stock || total - selectedCount + count > 2 || id !== 'focus' && itemMode !== 'competition' ? 'disabled' : ''}>${count === 0 ? '사용 안 함' : `${count}개`}</button>`).join('')}</fieldset>`;
+      get('shop-products').innerHTML = `<div class="shop-detail"><p class="eyebrow">RACE LOADOUT · ${total}/2</p><h2>주행 아이템</h2><div class="shop-item-modes" role="group" aria-label="아이템 경기 모드"><button type="button" data-item-mode="time-attack" aria-pressed="${itemMode === 'time-attack'}" ${busy ? 'disabled' : ''}>타임어택</button><button type="button" data-item-mode="competition" aria-pressed="${itemMode === 'competition'}" ${busy ? 'disabled' : ''}>AI 레이스</button></div><p class="shop-hint">합계 2개 장착 · 공통 재사용 대기 3초. 아이템 장착 경기는 보조 기록으로 분리하며 기본 보상은 80%, 기록 갱신 보너스는 없습니다. 사용하지 않은 수량은 남습니다.</p><article class="shop-upgrade"><div><h3>집중 모드</h3><p>2초 동안 모든 기체의 주행을 45% 속도로 늦춥니다. 경기 시계는 정상적으로 흐릅니다.</p><p>보유 <strong>${profile.focus}개</strong> · 모든 모드</p></div><div class="shop-action"><button type="button" data-action="focus" class="primary-action" ${busy || profile.balance < FOCUS_PRICE || profile.focus >= INVENTORY_LIMIT ? 'disabled' : ''}>${FOCUS_PRICE} P · 1개 구매</button>${insufficient(FOCUS_PRICE, profile.balance)}</div>${choices('focus', profile.focus, profile.focusSlots)}</article>${RIVAL_ITEMS.map(item => {
+        const stock = profile.rivalInventory[item.id]; const count = profile.rivalSlots.filter(id => id === item.id).length;
+        return `<article class="shop-upgrade"><div><h3>${item.name}</h3><p>${item.description}</p><p>보유 <strong>${stock}개</strong> · AI 레이스 전용</p></div><div class="shop-action"><button type="button" class="primary-action" data-rival-buy="${item.id}" ${busy || itemMode !== 'competition' || stock >= INVENTORY_LIMIT || profile.balance < item.price ? 'disabled' : ''}>${item.price} P · 1개 구매</button>${insufficient(item.price, profile.balance)}</div>${choices(item.id, stock, count)}</article>`;
+      }).join('')}<p class="shop-hint">타임어택에서는 AI 전용 아이템이 출전에 포함되지 않습니다. 전파 교란은 앞쪽 180m 안에 대상이 없으면 소비하지 않습니다. V / 패드 LB로 사용 가능한 다음 아이템을 쓰거나 주행 버튼을 눌러 선택하세요.</p></div>`;
     }
   };
   const purchase = async (command: ProgressCommand) => {
@@ -58,7 +64,10 @@ export function mountShop(root: HTMLDivElement, store: ProgressStore, onBack: ()
   root.addEventListener('click', event => {
     const button = (event.target as Element).closest<HTMLButtonElement>('button');
     if (!button || button.disabled || busy) return;
-    if (button.dataset.tab) { tab = button.dataset.tab as typeof tab; salePending = false; render(); }
+    if (button.dataset.itemMode) { itemMode = button.dataset.itemMode as typeof itemMode; render(); }
+    else if (button.dataset.rivalBuy) void purchase({ kind: 'rival-buy', item: button.dataset.rivalBuy as RivalItemId, mode: itemMode });
+    else if (button.dataset.rivalSlots) { const item = button.dataset.item as RivalItemId; const slots = [...store.snapshot().rivalSlots.filter(id => id !== item), ...Array<RivalItemId>(Number(button.dataset.rivalSlots)).fill(item)]; void purchase({ kind: 'rival-slots', slots, mode: itemMode }); }
+    else if (button.dataset.tab) { tab = button.dataset.tab as typeof tab; salePending = false; render(); }
     else if (button.dataset.craft) { selected = button.dataset.craft; salePending = false; render(); }
     else if (button.dataset.action === 'sell') { salePending = true; render(); }
     else if (button.dataset.action === 'cancel-sale') { salePending = false; render(); }

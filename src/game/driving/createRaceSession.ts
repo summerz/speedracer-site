@@ -9,12 +9,15 @@ import { createTimeAttack } from './createTimeAttack.js';
 import { createRaceRecords } from './raceRecords.js';
 import { aiDrivingProfile, AI_STYLE_LABELS, selectAiRacer } from './aiRoster.js';
 import type { AiControlMode, AiDrivingProfile } from './aiRoster.js';
+import { RIVAL_ITEMS, isRivalItem } from '../progression/catalog.js';
+import type { RivalItemId } from '../progression/catalog.js';
 
 export type RaceMode = 'time-attack' | 'competition';
 export interface Standing {
   id: string; name: string; color: string; player: boolean;
   distance: number; completedLaps: number; finishTime: number | null; rank: number;
   craftName?: string; style?: string; rating?: number;
+  effect?: RivalItemId | null;
 }
 export interface CompetitionSnapshot {
   standings: Standing[]; playerRank: number; complete: boolean;
@@ -61,7 +64,7 @@ export function craftContact(a0: ContactPose, a1: ContactPose, b0: ContactPose, 
 
 /** AI makes ordinary driving decisions; it never writes speed, distance or lap progress. */
 export function aiDrivingInput(track: Track, configuration: DroneConfiguration, state: DrivingState,
-  index: number, opponents: readonly DrivingState[], profile?: AiDrivingProfile): DrivingInput {
+  index: number, opponents: readonly DrivingState[], profile?: AiDrivingProfile, speedScale = 1): DrivingInput {
   const p = configuration.performance;
   const curvature = track.sample(state.distance).curvature;
   let bend = Math.abs(curvature);
@@ -71,7 +74,7 @@ export function aiDrivingInput(track: Track, configuration: DroneConfiguration, 
   const pace = (difficulty === 2 ? .96 : 1) * (profile?.pace ?? 1);
   const boost = bend < (profile?.boostCurvature ?? .003) && !state.boostNeedsRelease &&
     (state.boosting ? state.charge > (profile?.boostEndCharge ?? .03) : state.charge > (profile?.boostStartCharge ?? .5));
-  const desiredSpeed = (boost ? p.boostStage2Speed : p.topSpeed) * pace;
+  const desiredSpeed = (boost ? p.boostStage2Speed : p.topSpeed) * pace * speedScale;
   const cornerLimit = profile?.cornerLimit ?? .74;
   let goalSpeed = Math.min(desiredSpeed, cornerLimit / Math.max(.001, bend));
   // A fast craft needs more than 60m to brake for a hairpin. Work backwards from
@@ -105,7 +108,10 @@ export function aiDrivingInput(track: Track, configuration: DroneConfiguration, 
 /** One clock, countdown and pause lifecycle for both modes; completed pilots become ghosts. */
 export function createRaceSession(track: Track, configuration: DroneConfiguration,
   records: ReturnType<typeof createRaceRecords>, focusSlots = 0, mode: RaceMode = 'time-attack',
-  random: () => number = Math.random, controlMode: AiControlMode = 'desktop', rules: RaceRules = {}, rating?: number) {
+  random: () => number = Math.random, controlMode: AiControlMode = 'desktop', rules: RaceRules = {}, rating?: number, rivalSlots: readonly RivalItemId[] = []) {
+  if (rivalSlots.length && mode !== 'competition' || rivalSlots.length + focusSlots > 2 || !rivalSlots.every(isRivalItem)) throw new Error('Invalid race item loadout');
+  let itemCooldown = 0;
+  const itemUsed: RivalItemId[] = [];
   const player = createTimeAttack(track, configuration.performance, records, focusSlots, rules);
   const craft = DRONE_CATALOG.find(c => c.configuration.modelVariant === configuration.modelVariant);
   const playerColor = craft?.lineColor ?? configuration.boostStyle.pulseColor;
@@ -117,7 +123,7 @@ export function createRaceSession(track: Track, configuration: DroneConfiguratio
       core: '#ffffff', body: color, tail: color, afterglow: color, pulseColor: color,
     } };
     return {
-      id: `ai-${racer.id}`, name: racer.name, craftName: entry.name, color, racer,
+      id: `ai-${racer.id}`, name: racer.name, craftName: entry.name, color, racer, effects: { freeze: 0, jam: 0 },
       style: AI_STYLE_LABELS[racer.style], rating: racer.rating, profile: aiDrivingProfile(racer, controlMode), configuration: rivalConfiguration,
       controller: createTimeAttack(track, rivalConfiguration.performance,
         createRaceRecords({ trackId: 'ai-memory', laps: rules.laps, configurationId: racer.id }), focusSlots, { laps: rules.laps }),
@@ -128,8 +134,9 @@ export function createRaceSession(track: Track, configuration: DroneConfiguratio
   const contacts = new Map<string, number>();
   let clock = 0;
   const grid = () => {
-    contacts.clear(); clock = 0;
+    contacts.clear(); clock = 0; itemCooldown = 0; itemUsed.length = 0;
     rivals.forEach((rival, index) => {
+      rival.effects.freeze = 0; rival.effects.jam = 0;
       rival.controller.model.state.distance = -(index + 1) * 7;
       rival.controller.model.state.offset = (index - 1) * Math.min(4.5, track.halfWidth - 3.5);
     });
@@ -140,14 +147,28 @@ export function createRaceSession(track: Track, configuration: DroneConfiguratio
     const standings = rankParticipants(participants.map(p => {
       const s = p.controller.snapshot();
       return { id: p.id, name: p.name, color: p.color, player: p === participants[0], craftName: p.craftName, style: p.style, rating: p.rating,
-        distance: p.controller.model.state.distance, completedLaps: s.completedLaps, finishTime: s.finishTime };
+        distance: p.controller.model.state.distance, completedLaps: s.completedLaps, finishTime: s.finishTime,
+        effect: 'effects' in p ? p.effects.freeze > 0 ? 'time-stop' as const : p.effects.jam > 0 ? 'interference' as const : null : null };
     }));
     return { standings, playerRank: standings.find(p => p.player)!.rank, complete: standings.every(p => p.finishTime !== null) };
   };
+  const targets = (item: RivalItemId) => {
+    const active = rivals.filter(rival => rival.controller.phase === 'running');
+    if (item === 'time-stop') return active;
+    const distance = player.model.state.distance;
+    return active.filter(rival => rival.controller.model.state.distance > distance && rival.controller.model.state.distance <= distance + 180)
+      .sort((a, b) => a.controller.model.state.distance - b.controller.model.state.distance).slice(0, 2);
+  };
+  const itemRemaining = (item: RivalItemId) => rivalSlots.filter(id => id === item).length - itemUsed.filter(id => id === item).length;
+  const canUseRivalItem = (item: RivalItemId) => player.phase === 'running' && itemCooldown <= 1e-8 && itemRemaining(item) > 0 && targets(item).length > 0;
   return {
     model: player.model, rivals, controlMode,
     get phase() { return player.phase; },
-    snapshot() { return { ...player.snapshot(), mode, competition: competition() }; },
+    snapshot() { const snapshot = player.snapshot(); return { ...snapshot, mode, competition: competition(),
+      assisted: snapshot.assisted || rivalSlots.length > 0, canFocus: snapshot.canFocus && itemCooldown <= 1e-8, itemCooldown,
+      items: RIVAL_ITEMS.map(item => ({ id: item.id, remaining: itemRemaining(item.id), canUse: canUseRivalItem(item.id),
+        active: Math.max(0, ...rivals.map(rival => item.id === 'time-stop' ? rival.effects.freeze : rival.effects.jam)),
+        targets: targets(item.id).map(rival => rival.name) })) }; },
     start() {
       const fresh = player.phase === 'ready' || player.phase === 'finished';
       player.start(); rivals.forEach(p => fresh ? p.controller.restart() : p.controller.start()); if (fresh) grid();
@@ -156,25 +177,40 @@ export function createRaceSession(track: Track, configuration: DroneConfiguratio
     pause() { player.pause(); rivals.forEach(p => p.controller.pause()); },
     recover() { player.recover(); },
     useFocus() {
-      if (!player.useFocus()) return false;
+      if (itemCooldown > 1e-8 || !player.useFocus()) return false;
+      itemCooldown = 3;
       rivals.forEach(p => p.controller.useFocus()); return true;
+    },
+    useRivalItem(item: RivalItemId) {
+      if (!isRivalItem(item) || !canUseRivalItem(item)) return false;
+      const affected = targets(item);
+      for (const rival of affected) {
+        if (item === 'time-stop') rival.effects.freeze = 1;
+        else rival.effects.jam = 3;
+      }
+      itemUsed.push(item); itemCooldown = 3; return true;
     },
     step(delta: number, input: DrivingInput) {
       const dt = Math.max(0, Math.min(Number.isFinite(delta) ? delta : 0, .1));
       if (player.phase === 'ready' || player.phase === 'paused' || dt === 0) return;
-      if (!rivals.length) { player.step(dt, input); return; }
+      if (!rivals.length) { player.step(dt, input); if (player.phase === 'running') itemCooldown = Math.max(0, itemCooldown - dt); return; }
       // Small shared substeps keep contact decisions stable across rendering frame rates.
       let remaining = dt; let firstStep = true;
       while (remaining > 1e-8) {
-        const step = Math.min(remaining, 1 / 120); remaining -= step;
+        const boundaries = rivals.flatMap(rival => [rival.effects.freeze, rival.effects.jam]).filter(time => time > 1e-8);
+        const step = Math.min(remaining, 1 / 120, ...boundaries); remaining -= step;
         const before = participants.map(p => ({ ...p.controller.model.state }));
         const active = participants.map(p => p.controller.phase === 'running');
         player.step(step, { ...input, lift: firstStep ? input.lift : 0 }); firstStep = false;
         rivals.forEach((rival, index) => {
           const opponents = participants.filter(p => p !== rival && p.controller.phase !== 'finished').map(p => p.controller.model.state);
-          rival.controller.step(step, aiDrivingInput(track, rival.configuration, rival.controller.model.state, index, opponents, rival.profile));
+          const controls = aiDrivingInput(track, rival.configuration, rival.controller.model.state, index, opponents, rival.profile, rival.effects.jam > 1e-8 ? .5 : 1);
+          rival.controller.step(step, { ...controls, ...(rival.effects.jam > 1e-8 ? { targetSpeedScale: .5 } : {}) }, rival.effects.freeze > 1e-8);
+          rival.effects.freeze = Math.max(0, rival.effects.freeze - step);
+          rival.effects.jam = Math.max(0, rival.effects.jam - step);
         });
         if (participants.some(p => p.controller.phase === 'running')) clock += step;
+        if (player.phase === 'running') itemCooldown = Math.max(0, itemCooldown - step);
         for (let a = 0; a < participants.length; a++) for (let b = a + 1; b < participants.length; b++) {
           if (!active[a] || !active[b] || participants[a].controller.phase !== 'running' || participants[b].controller.phase !== 'running') continue;
           const key = `${a}:${b}`;

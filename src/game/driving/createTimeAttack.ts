@@ -55,7 +55,7 @@ export function createTimeAttack(track: Track, performance: DronePerformance, re
       if (phase !== 'running' || focusUsed >= focusSlots || focusCooldown > 0) return false;
       focusUsed++; focusRemaining = 2; focusCooldown = 3; return true;
     },
-    step(delta: number, input: DrivingInput) {
+    step(delta: number, input: DrivingInput, frozen = false) {
       let remaining = Math.max(0, Math.min(Number.isFinite(delta) ? delta : 0, 0.1));
       if (phase === 'countdown') {
         const used = Math.min(remaining, countdownRemaining);
@@ -68,6 +68,13 @@ export function createTimeAttack(track: Track, performance: DronePerformance, re
         const duration = focusRemaining > 0 ? Math.min(remaining, focusRemaining) : remaining;
         const scale = focusRemaining > 0 ? .45 : 1;
         const startedAt = model.state.elapsed;
+        if (frozen) {
+          model.state.elapsed += duration;
+          focusRemaining = Math.max(0, focusRemaining - duration);
+          focusCooldown = Math.max(0, focusCooldown - duration);
+          remaining -= duration;
+          continue;
+        }
         model.step(duration * scale, input, segment => {
         segment = { ...segment, timeFrom: startedAt + (segment.timeFrom - startedAt) / scale,
           timeTo: startedAt + (segment.timeTo - startedAt) / scale };

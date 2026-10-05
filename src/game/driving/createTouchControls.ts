@@ -31,6 +31,23 @@ export function createTouchControls(container: HTMLElement, actions: {
   const events = new AbortController();
   const listen = { signal: events.signal };
   let running = false;
+  // iOS can recognize native zoom even when an absolutely positioned control
+  // has touch-action:none. Cancel Touch Events too; driving uses Pointer Events.
+  // Keep ordinary HUD/menu clicks outside these surfaces working normally.
+  const preventZoom = (event: Event) => {
+    if (running && media.matches && event.cancelable) event.preventDefault();
+  };
+  const gestureListen = { ...listen, capture: true, passive: false };
+  for (const surface of [element, container.querySelector('.race-scene')]) {
+    if (!surface) continue;
+    for (const type of ['touchstart', 'touchmove', 'touchend', 'dblclick']) {
+      surface.addEventListener(type, preventZoom, gestureListen);
+    }
+  }
+  // A pinch can span both controls, the canvas, or a HUD element.
+  for (const type of ['gesturestart', 'gesturechange', 'gestureend']) {
+    container.addEventListener(type, preventZoom, gestureListen);
+  }
   const paint = () => {
     const { x, y, brake } = input.position;
     knob.style.transform = `translate(${x * joystick.clientWidth * .3}px, ${y * joystick.clientHeight * .3}px)`;
