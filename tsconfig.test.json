@@ -27,6 +27,8 @@
     "src/game/driving/createRaceSoundFeedback.ts",
     "src/game/driving/createRaceAudio.ts",
     "src/game/audio/soundtrack.ts",
+    "src/game/audio/midi.ts",
+    "src/game/audio/synth.ts",
     "src/game/drone/droneCatalog.ts",
     "src/game/drone/createRacingDrone.ts",
     "src/game/driving/createExhaustHaze.ts"
