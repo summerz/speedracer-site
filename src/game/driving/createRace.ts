@@ -1,4 +1,5 @@
-import { createCatalogTrack, campaignLapLimit } from '../track/trackCatalog';
+import { campaignLapLimit } from '../track/trackCatalog';
+import { createCatalogTrack } from '../track/trackRuntime';
 import type { TrackDefinition } from '../track/trackCatalog';
 import { createDistrictScenery } from '../track/createDistrictScenery';
 import { RENDER_QUALITIES } from '../../platform/renderQuality';
@@ -109,7 +110,7 @@ export function createRace(
   let storage: Storage | undefined;
   try { storage = window.localStorage; } catch { /* Private browsing can deny storage. */ }
   const records = createRaceRecords({ laps: course?.laps, trackId: course ? `${course.id}:v${course.revision}` : `neon-circuit-v1:${difficulty?.id ?? 'beginner'}`, configurationId: JSON.stringify({ performance: config.performance, altitude: track.altitudeProfile, ...(focusSlots ? { assisted: true } : {}), ...(mode === 'competition' ? { mode } : {}) }) }, storage);
-  const timeAttack = createRaceSession(track, config, records, focusSlots, mode, Math.random, coarsePointer.matches ? 'touch' : 'desktop', course ? { laps: course.laps, ...(mode === 'time-attack' ? { lapLimit: campaignLapLimit(course, track.length) } : {}) } : {}, course?.rating);
+  const timeAttack = createRaceSession(track, config, records, focusSlots, mode, Math.random, coarsePointer.matches ? 'touch' : 'desktop', course ? { laps: course.laps, ...(mode === 'time-attack' ? { lapLimit: campaignLapLimit(course) } : {}) } : {}, course?.rating);
   const rivalVisuals = createRivalVisuals(scene, track, timeAttack.rivals);
   const model = timeAttack.model;
   const raceGates = createRaceGates(track, timeAttack.snapshot().gatesPerLap);

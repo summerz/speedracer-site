@@ -1,9 +1,11 @@
 import { menuHeader } from './menuHeader';
-import { TRACK_CATALOG, DISTRICTS, createCatalogTrack, campaignLapLimit, trackMetrics } from './game/track/trackCatalog';
+import { TRACK_CATALOG, DISTRICTS, campaignLapLimit } from './game/track/trackCatalog';
+import { createCatalogTrack, trackMetrics } from './game/track/trackRuntime';
 import { campaignStatus, nextCampaignTrack } from './game/progression/campaign';
 import type { ProgressStore } from './game/progression/progressStore';
 import type { RaceMode } from './game/driving/createRaceSession';
 import { createTrackPreview } from './game/track/createTrackPreview';
+import { describeTrackLandmark } from './game/track/createTrackLandmark';
 import './campaign.css';
 
 export function mountCampaign(root: HTMLDivElement, store: ProgressStore) {
@@ -17,7 +19,7 @@ export function mountCampaign(root: HTMLDivElement, store: ProgressStore) {
       <div class="campaign-modes" role="group" aria-label="캠페인 방식"><button type="button" data-mode="time-attack">타임어택</button><button type="button" data-mode="competition">AI 레이스</button></div>
       <p id="campaign-rule" class="campaign-rule"></p><div id="campaign-list" class="campaign-list"></div>
     </section><section class="campaign-detail" aria-label="선택한 트랙"><div class="campaign-preview" id="campaign-preview" aria-label="트랙 3D 경로 미리보기"><p class="campaign-preview-legend">루프 · 코일 · 노면 회전 구간</p></div>
-      <div class="campaign-detail-copy"><p class="eyebrow" id="course-district"></p><h2 id="course-name"></h2><p id="course-features"></p><dl id="course-metrics"></dl><p id="course-record"></p><p id="course-access" role="status"></p><button id="course-start" class="primary-action" type="button">도전하기 ↗</button><p id="campaign-warning" class="progress-warning" role="status"></p></div>
+      <div class="campaign-detail-copy"><p class="eyebrow" id="course-district"></p><h2 id="course-name"></h2><p id="course-features"></p><p id="course-landmark"></p><dl id="course-metrics"></dl><p id="course-record"></p><p id="course-access" role="status"></p><button id="course-start" class="primary-action" type="button">도전하기 ↗</button><p id="campaign-warning" class="progress-warning" role="status"></p></div>
     </section></div></main>`;
   const get = (id: string) => root.querySelector<HTMLElement>(`#${id}`)!;
   const events = new AbortController(); const listen = { signal: events.signal };
@@ -36,8 +38,9 @@ export function mountCampaign(root: HTMLDivElement, store: ProgressStore) {
       const status = campaignStatus(campaign, mode, t);
       return `<button type="button" class="course-card" data-track="${t.id}" aria-pressed="${t.id === selected.id}" style="--district-color:${district.color}"><span class="course-number mono">${String(t.order).padStart(2, '0')}</span><span><strong>${t.name}</strong><small>난이도 ${t.rating}/6 · ${t.altitudeLevels}단 고도</small></span><span class="course-status">${!campaign.knownTracks.includes(t.id) ? 'NEW · ' : ''}${status === 'cleared' ? '✓ 통과' : status === 'locked' ? '잠김' : '도전'}</span></button>`;
     }).join('')}</div></section>`).join('');
-    const track = createCatalogTrack(selected), metrics = trackMetrics(track), limit = campaignLapLimit(selected, track.length);
-    preview?.setTrack(track, DISTRICTS[selected.district].color);
+    const track = createCatalogTrack(selected), metrics = trackMetrics(track), limit = campaignLapLimit(selected);
+    preview?.setTrack(track, DISTRICTS[selected.district].color, selected);
+    get('course-landmark').textContent = `랜드마크 · ${describeTrackLandmark(track, selected).name}`;
     get('course-district').textContent = `${DISTRICTS[selected.district].name} · ${String(selected.order).padStart(2, '0')}`;
     get('course-name').textContent = selected.name; get('course-features').textContent = selected.features;
     get('course-metrics').innerHTML = `<div><dt>난이도</dt><dd>${selected.rating}/6</dd></div><div><dt>랩 거리</dt><dd>${(metrics.length / 1000).toFixed(1)} km</dd></div><div><dt>고저차</dt><dd>${Math.round(metrics.heightRange)} m</dd></div><div><dt>고도 / 장애물</dt><dd>${selected.altitudeLevels}단 / ${metrics.obstacles}개</dd></div><div><dt>경기</dt><dd>${selected.laps}랩</dd></div><div><dt>${mode === 'time-attack' ? '매 랩 제한' : '통과 조건'}</dt><dd>${mode === 'time-attack' ? `${Math.floor(limit / 60)}분 ${limit % 60}초` : '1위'}</dd></div>`;

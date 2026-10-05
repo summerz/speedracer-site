@@ -1,9 +1,4 @@
-import { createTrack, createTrackFrame } from './createTrack.js';
-import type { Track } from './createTrack.js';
-import { authorClosedTrack } from './trackAuthoring.js';
 import type { CourseLayout, CourseShape } from './trackAuthoring.js';
-import { ALTITUDE_PROFILES } from './altitudeProfile.js';
-import type { DifficultyPreset } from './difficulty.js';
 
 export type DistrictId = 'residential' | 'industrial' | 'stadium' | 'skyline' | 'research' | 'orbital';
 export const DISTRICTS: Record<DistrictId, { name: string; color: string }> = {
@@ -58,33 +53,13 @@ export const TRACK_CATALOG: readonly TrackDefinition[] = Object.freeze(recipes.m
     altitudeLevels: levels, obstacleLevels: Object.freeze(pattern), layout: r[4] ? Object.freeze({ ...r[4], stunts: Object.freeze(r[4].stunts.map(s => Object.freeze(s))) }) : null, features: r[3] });
 }));
 export function trackDefinition(id: string) { return TRACK_CATALOG.find(t => t.id === id); }
-export function trackPreset(definition: TrackDefinition): DifficultyPreset {
-  const id = definition.altitudeLevels === 2 ? 'beginner' : definition.altitudeLevels === 3 ? 'intermediate' : 'advanced';
-  return { id, label: `난이도 ${definition.rating}/6`, description: definition.features, altitude: ALTITUDE_PROFILES[id],
-    layout: { halfWidth: definition.halfWidth, helixTurns: 1, helixPitch: 300, corners: 'gentle' }, obstacleLevels: definition.obstacleLevels };
-}
-export function createCatalogTrack(definition: TrackDefinition): Track {
-  return createTrack(undefined, trackPreset(definition), definition.layout ? authorClosedTrack(definition.layout) : undefined);
-}
-/** Conservative starting targets, independent of upgrades; human playtesting tunes these explicit limits later. */
-export function campaignLapLimit(definition: TrackDefinition, length: number) {
-  return definition.lapLimit || Math.ceil(length / (definition.rating <= 2 ? 42 : definition.rating <= 4 ? 45 : 48) + 18);
-}
-export function trackMetrics(track: Track) {
-  const frame = createTrackFrame(); let maxCurvature = 0, minHeight = Infinity, maxHeight = -Infinity, rollingMetres = 0;
-  for (let d = 0; d < track.length; d += 5) {
-    track.sample(d, frame); maxCurvature = Math.max(maxCurvature, Math.abs(frame.curvature));
-    minHeight = Math.min(minHeight, frame.position.y); maxHeight = Math.max(maxHeight, frame.position.y);
-    if (frame.section !== 'course' || frame.up.y < .7) rollingMetres += 5;
-  }
-  return { length: track.length, halfWidth: track.halfWidth, heightRange: maxHeight - minHeight, maxCurvature,
-    rollingMetres, altitudeLevels: track.altitudeProfile.levels.length, obstacles: track.heightObstacles.length };
-}
+/** Explicit authored deadlines keep campaign rules independent of 3D geometry loading. */
+export function campaignLapLimit(definition: TrackDefinition) { return definition.lapLimit; }
 export function validateTrackCatalog(catalog: readonly TrackDefinition[]) {
   const ids = new Set(catalog.map(t => t.id));
   if (ids.size !== catalog.length) throw new Error('Duplicate track ID');
   for (const t of catalog) {
-    if (!/^[a-z][a-z0-9-]*$/.test(t.id) || !t.name || !Number.isInteger(t.revision) || t.revision < 1 || !Number.isInteger(t.laps) || t.laps < 1 || t.laps > 10 || !Number.isInteger(t.rating) || t.rating < 1 || t.rating > 6 || !Number.isFinite(t.halfWidth) || t.halfWidth <= 4 || !Number.isFinite(t.lapLimit) || t.lapLimit < 0 || ![2,3,4].includes(t.altitudeLevels) || t.obstacleLevels.some(n => !Number.isInteger(n) || n < 0 || n >= t.altitudeLevels)) throw new Error('Invalid track definition');
+    if (!/^[a-z][a-z0-9-]*$/.test(t.id) || !t.name || !Number.isInteger(t.revision) || t.revision < 1 || !Number.isInteger(t.laps) || t.laps < 1 || t.laps > 10 || !Number.isInteger(t.rating) || t.rating < 1 || t.rating > 6 || !Number.isFinite(t.halfWidth) || t.halfWidth <= 4 || !Number.isFinite(t.lapLimit) || t.lapLimit <= 0 || ![2,3,4].includes(t.altitudeLevels) || t.obstacleLevels.some(n => !Number.isInteger(n) || n < 0 || n >= t.altitudeLevels)) throw new Error('Invalid track definition');
     if (t.layout) {
       const l = t.layout;
       if (!['ring','kidney','thumb','eight','clover','triangle','horseshoe','star','knot'].includes(l.shape) || ![l.radiusX,l.radiusZ,l.elevation,l.waves,l.rotation,l.bank].every(Number.isFinite) || l.radiusX < 100 || l.radiusZ < 100 || l.elevation < 0 || !Number.isInteger(l.waves) || l.waves < 1 || !l.stunts.length) throw new Error('Invalid course layout');

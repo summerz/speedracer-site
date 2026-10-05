@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { TRACK_CATALOG, createCatalogTrack, campaignLapLimit, validateTrackCatalog, trackMetrics } from '../output/test/game/track/trackCatalog.js';
+import { TRACK_CATALOG, campaignLapLimit, validateTrackCatalog } from '../output/test/game/track/trackCatalog.js';
+import { createCatalogTrack, trackMetrics } from '../output/test/game/track/trackRuntime.js';
 import { initialProgress, validateProgress, applyCommand } from '../output/test/game/progression/progress.js';
 import { initialCampaign, campaignStatus, nextCampaignTrack, validateCampaign } from '../output/test/game/progression/campaign.js';
 import { createTimeAttack } from '../output/test/game/driving/createTimeAttack.js';
@@ -9,10 +10,11 @@ import { aiDrivingInput } from '../output/test/game/driving/createRaceSession.js
 import { DRONE_CATALOG } from '../output/test/game/drone/droneCatalog.js';
 import { NEUTRAL_INPUT } from '../output/test/game/driving/createDrivingModel.js';
 import { createDistrictScenery } from '../output/test/game/track/createDistrictScenery.js';
+import { disposeScenery } from '../output/test/game/track/createTrackLandmark.js';
 
 const first = TRACK_CATALOG[0], second = TRACK_CATALOG[1];
 const reward = id => ({ raceId: id, difficulty: 'beginner', collisions: 0, offTrackExits: 0, recoveries: 0, penaltyPoints: 0, improvedExistingBest: false, assisted: false });
-const outcome = (track = first, mode = 'time-attack', changes = {}) => ({ mode, trackId: track.id, revision: track.revision, total: 120, laps: [40,40,40], rank: 1, disqualified: false, assisted: false, lapLimit: campaignLapLimit(track, createCatalogTrack(track).length), ...changes });
+const outcome = (track = first, mode = 'time-attack', changes = {}) => ({ mode, trackId: track.id, revision: track.revision, total: 120, laps: [40,40,40], rank: 1, disqualified: false, assisted: false, lapLimit: campaignLapLimit(track), ...changes });
 const complete = (p, id, result = outcome()) => applyCommand(p, { kind: 'campaign-result', input: reward(id), outcome: result });
 
 test('old shop saves migrate without losing money, ownership, upgrades or rewards', () => {
@@ -102,11 +104,11 @@ for (const definition of TRACK_CATALOG) test(`${definition.name}: five stock cra
 test('district scenery is deterministic, instanced and omitted in the track overview', () => {
   for(const definition of TRACK_CATALOG.filter(t => t.order % 4 === 1)) {
     const track = createCatalogTrack(definition), a = createDistrictScenery(track, definition), b = createDistrictScenery(track, definition);
-    assert.equal(a.object.children.length, 3); assert.ok(a.counts.buildings > 20); assert.ok(a.counts.windows > 50);
+    assert.equal(a.object.children.length, 4); assert.ok(a.counts.buildings > 20); assert.ok(a.counts.windows > 50);
     assert.deepEqual(a.object.children[0].instanceMatrix.array, b.object.children[0].instanceMatrix.array);
     a.setOverview(true); assert.equal(a.object.visible,false); a.setOverview(false); assert.equal(a.object.visible,true);
     a.setQuality('low'); assert.ok(a.object.children[1].count < b.object.children[1].count);
-    for(const scenery of [a,b]) for(const mesh of scenery.object.children) { mesh.dispose(); mesh.geometry.dispose(); mesh.material.dispose(); }
+    for(const scenery of [a,b]) disposeScenery(scenery.object);
   }
 });
 
@@ -142,7 +144,7 @@ test('geometry revisions preserve completed access and older records while start
   assert.equal(campaignStatus(p.campaign,'time-attack',changed),'cleared');
   assert.ok(p.campaign.modes['time-attack'][second.id].records[`${second.revision}:normal`]);
   assert.equal(p.campaign.modes['time-attack'][second.id].records[`${changed.revision}:normal`],undefined);
-  for(const invalid of [{...second,laps:11},{...second,rating:NaN},{...second,halfWidth:Infinity},{...second,layout:{...second.layout,stunts:[{kind:'loop',start:.9,span:.2,radius:100,turns:1}]}}])assert.throws(()=>validateTrackCatalog([first,invalid]));
+  for(const invalid of [{...second,lapLimit:0},{...second,laps:11},{...second,rating:NaN},{...second,halfWidth:Infinity},{...second,layout:{...second.layout,stunts:[{kind:'loop',start:.9,span:.2,radius:100,turns:1}]}}])assert.throws(()=>validateTrackCatalog([first,invalid]));
 });
 
 test('campaign keeps varied lap lengths, early stunts and difficulty relief between districts', () => {

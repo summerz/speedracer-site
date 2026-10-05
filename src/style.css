@@ -148,3 +148,11 @@ h1 span { color: #687e89; }
   .hangar .craft-stats dd { margin-block: 3px 4px; }
   .hangar .thrust-test, .hangar .hangar-start { margin-top: 10px; }
 }
+
+.screen-loading { min-height: 100dvh; display: grid; place-content: center; gap: 16px; padding: 32px; text-align: center; }
+
+/* Shared controls must be available before any screen module is loaded. */
+.primary-action { display:flex; align-items:center; justify-content:space-between; gap:24px; min-height:50px; padding:14px 22px; color:#081a1d; background:var(--accent); border:1px solid var(--accent); font-size:14px; font-weight:650; }
+.hangar-start { margin-top:18px; width:min(290px,100%); }
+.progress-warning { color: #ffc991; font-size: 12px; line-height: 1.5; }
+.free-drive-link { display:block; color:#97afb8; padding:12px 0 0; font-size:12px; text-underline-offset:4px; }

@@ -1,5 +1,3 @@
-.primary-action { display:flex; align-items:center; justify-content:space-between; gap:24px; min-height:50px; padding:14px 22px; color:#081a1d; background:var(--accent); border:1px solid var(--accent); font-size:14px; font-weight:650; }
-.hangar-start { margin-top:18px; width:min(290px,100%); }
 .drive-screen { position:relative; height:100dvh; overflow:hidden; background:#080f19; color:#d7e9ec; }
 .drive-screen,.drive-screen * { user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; }
 .race-scene { position:absolute; inset:0; }

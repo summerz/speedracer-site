@@ -1,4 +1,4 @@
-import { TRACK_CATALOG, campaignLapLimit, createCatalogTrack } from '../track/trackCatalog.js';
+import { TRACK_CATALOG, campaignLapLimit } from '../track/trackCatalog.js';
 import type { TrackDefinition } from '../track/trackCatalog.js';
 import type { RaceMode } from '../driving/createRaceSession.js';
 
@@ -48,7 +48,7 @@ export function completeCampaign(progress: CampaignProgress, outcome: CampaignOu
     || !Number.isFinite(outcome.total) || outcome.total <= 0 || !Number.isFinite(outcome.lapLimit) || outcome.lapLimit <= 0
     || !Number.isInteger(outcome.rank) || outcome.rank < 1 || outcome.rank > 4 || typeof outcome.disqualified !== 'boolean' || typeof outcome.assisted !== 'boolean'
     || !Array.isArray(outcome.laps) || outcome.laps.some(n => !Number.isFinite(n) || n <= 0)) throw new Error('잘못된 캠페인 결과');
-  const allowedLimit = campaignLapLimit(track, createCatalogTrack(track).length);
+  const allowedLimit = campaignLapLimit(track);
   if (outcome.mode === 'time-attack' && outcome.lapLimit !== allowedLimit) throw new Error('잘못된 랩 제한시간');
   if (outcome.laps.length > track.laps || (!outcome.disqualified && (outcome.laps.length !== track.laps || Math.abs(outcome.laps.reduce((a, b) => a + b, 0) - outcome.total) > .003))) throw new Error('잘못된 랩 합계');
   if (campaignStatus(progress, outcome.mode, track) === 'locked') throw new Error('아직 도전할 수 없는 트랙입니다.');
