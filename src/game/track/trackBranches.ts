@@ -24,6 +24,14 @@ export interface TrackFork {
 export interface RoadPath { start: number; end: number; routeId: string | null }
 const localDistance = (track: Track, distance: number) => { const d = distance % track.length; return d < 0 ? d + track.length : d; };
 const smooth = (u: number) => { const t = THREE.MathUtils.clamp(u, 0, 1); return t * t * t * (10 + t * (-15 + t * 6)); };
+// Race progress differs on longer routes. Junction edges must pair the same authored
+// cross-section, rather than unrelated positions with the same race progress.
+const junctionPairs = new WeakMap<Track, Map<string, (distance: number) => TrackFrame>>();
+function arcIndex(cumulative: readonly number[], arc: number) {
+  let lo = 0, hi = cumulative.length - 1;
+  while (lo + 1 < hi) { const mid = (lo + hi) >> 1; if (cumulative[mid] <= arc) lo = mid; else hi = mid; }
+  return lo + (arc - cumulative[lo]) / Math.max(.00001, cumulative[lo + 1] - cumulative[lo]);
+}
 /** Ease angular speed at either end, with an even sweep through the middle. */
 const sweep = (u: number) => {
   const t = THREE.MathUtils.clamp(u, 0, 1), ramp = .15;
@@ -100,19 +108,19 @@ export function roadPaths(track: Track): RoadPath[] {
   return paths;
 }
 
-/** Trim overlapping horizontal mouths to a shared seam; only exposed edges glow. */
+/** Every entrance opens sideways first; trim the joined Y to one exposed outline. */
 export function roadBoundary(track: Track, distance: number, frame: TrackFrame, routeId?: string | null) {
   const edges = [frame.position.clone().addScaledVector(frame.right, -track.halfWidth),
     frame.position.clone().addScaledVector(frame.right, track.halfWidth)];
   const visible = [true, true];
   const fork = forkAt(track, distance);
-  if (!fork || fork.kind !== 'horizontal' || !routeId) return { edges, visible };
+  if (!fork || !routeId) return { edges, visible };
   const side = fork.routes.findIndex(r => r.id === routeId);
   if (side < 0) return { edges, visible };
   const route = fork.routes[side], d = localDistance(track, distance);
   // Never trim a later crossing, coil or rolling road.
   if (d > route.mouthEnd && d < route.mergeStart) return { edges, visible };
-  const other = track.sample(distance, undefined, fork.routes[1 - side].id);
+  const other = junctionPairs.get(track)?.get(routeId)?.(d) ?? track.sample(distance, undefined, fork.routes[1 - side].id);
   const inner = side ? 0 : 1;
   const otherInner = other.position.clone().addScaledVector(other.right, side ? track.halfWidth : -track.halfWidth);
   const axis = frame.right.clone().add(other.right).normalize();
@@ -155,6 +163,8 @@ export function withTrackBranches(track: Track, recipes: readonly BranchRecipe[]
   }
   if (run >= 0 && track.length - 90 - run > 255) eligible.push({ start: run, end: track.length - 100 });
   const samplers = new Map<string, (distance: number, target: TrackFrame) => TrackFrame>();
+  const pairs = new Map<string, (distance: number) => TrackFrame>();
+  junctionPairs.set(track, pairs);
   const forks: TrackFork[] = [];
   for (const [recipeIndex, recipe] of recipes.entries()) {
     // An early first fork makes the feature immediately discoverable.
@@ -176,6 +186,7 @@ export function withTrackBranches(track: Track, recipes: readonly BranchRecipe[]
     const mouthFraction = Math.min(100 / (span - junctionLength * 2), recipe.intertwined ? .18 : .25);
     const bodySpan = (span - junctionLength * 2) * (1 - mouthFraction * 2);
     let technicalLength = 0;
+    const geometry: { cumulative: number[]; entryArc: number; innerLength: number }[] = [];
     const makeRoute = (side: 0 | 1): BranchRoute => {
       const id = `${recipe.id}:${side}`;
       const count = Math.ceil(span * 2);
@@ -195,7 +206,7 @@ export function withTrackBranches(track: Track, recipes: readonly BranchRecipe[]
           const weave = side ? 0 : 10 * Math.min(1, bodySpan / 240) ** 2 * Math.sin(4 * Math.PI * body);
           let sideways = sign * (side ? 52 : 34) + weave;
           let rise = side ? 18 : 7;
-          if (recipe.kind === 'vertical') { sideways = sign * 18 + weave * .5; rise = side ? 76 : 2; }
+          if (recipe.kind === 'vertical') { sideways = sign * 34 + weave * .5; rise = side ? 76 : 2; }
           if (recipe.intertwined) {
             // Opposite points on an ellipse cross in plan while remaining separated in 3D.
             envelope = smooth(body / .15) * smooth((1 - body) / .15);
@@ -203,8 +214,10 @@ export function withTrackBranches(track: Track, recipes: readonly BranchRecipe[]
             sideways = sign * 52 * Math.cos(phase);
             rise = 28 + sign * 52 * Math.sin(phase);
           }
-          const mouthSide = recipe.kind === 'horizontal' ? sign * (track.halfWidth + 11) : 0;
-          const mouthRise = recipe.kind === 'vertical' ? sign * 28 : 0;
+          // A vertical-only split hides one deck behind the other from the driver's view.
+          // All choices first form a sideways Y on one deck, then rise/coil/roll independently.
+          const mouthSide = sign * (track.halfWidth + 11);
+          const mouthRise = 0;
           const position = base.position.clone().addScaledVector(base.right, mouthSide * mouth + (sideways - mouthSide) * envelope)
             .addScaledVector(base.up, mouthRise * mouth + (rise + extraRise - mouthRise) * envelope);
           positions.push(position); frames.push(base);
@@ -216,6 +229,7 @@ export function withTrackBranches(track: Track, recipes: readonly BranchRecipe[]
       const entryIndex = Math.round(junctionLength / span * count), exitIndex = count - entryIndex;
       const entryArc = cumulative[entryIndex], exitArc = cumulative[exitIndex];
       const innerLength = exitArc - entryArc, length = innerLength + junctionLength * 2;
+      geometry[side] = { cumulative, entryArc, innerLength };
       const mouthIndex = Math.round((junctionLength + mouthFraction * (span - junctionLength * 2)) / span * count);
       const sharedAt = (index: number) => start + junctionLength + (cumulative[index] - entryArc) / innerLength * (span - junctionLength * 2);
       const mouthEnd = sharedAt(mouthIndex), mergeStart = sharedAt(count - mouthIndex);
@@ -251,9 +265,7 @@ export function withTrackBranches(track: Track, recipes: readonly BranchRecipe[]
       samplers.set(id, (distance, target) => {
         if (distance <= start + junctionLength || distance >= end - junctionLength) return baseSample(distance, target);
         const arc = entryArc + (distance - start - junctionLength) / (span - junctionLength * 2) * innerLength;
-        let lo = 0, hi = count;
-        while (lo + 1 < hi) { const mid = (lo + hi) >> 1; if (cumulative[mid] <= arc) lo = mid; else hi = mid; }
-        const mix = (arc - cumulative[lo]) / Math.max(.00001, cumulative[lo + 1] - cumulative[lo]);
+        const index = arcIndex(cumulative, arc), lo = Math.floor(index), mix = index - lo;
         target.position.copy(positions[lo]).lerp(positions[lo + 1], mix);
         quaternion.copy(orientations[lo]).slerp(orientations[lo + 1], mix);
         target.right.set(1, 0, 0).applyQuaternion(quaternion);
@@ -273,6 +285,14 @@ export function withTrackBranches(track: Track, recipes: readonly BranchRecipe[]
         description: technical ? '가까운 구조물 · 굽이와 고도 대응' : '트인 전망 · 긴 부스트 기회' };
     };
     const routes: [BranchRoute, BranchRoute] = [makeRoute(0), makeRoute(1)];
+    for (const side of [0, 1]) pairs.set(routes[side].id, distance => {
+      const own = geometry[side], other = geometry[1 - side];
+      const arc = own.entryArc + (distance - start - junctionLength) / (span - junctionLength * 2) * own.innerLength;
+      const index = arcIndex(own.cumulative, arc), lo = Math.floor(index), mix = index - lo;
+      const otherArc = THREE.MathUtils.lerp(other.cumulative[lo], other.cumulative[lo + 1], mix);
+      const pairedDistance = start + junctionLength + (otherArc - other.entryArc) / other.innerLength * (span - junctionLength * 2);
+      return track.sample(pairedDistance, undefined, routes[1 - side].id);
+    });
     forks.push({ id: recipe.id, kind: recipe.kind, start, end, junctionLength, routes });
   }
   Object.assign(track, { branches: forks });

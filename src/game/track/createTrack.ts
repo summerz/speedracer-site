@@ -243,22 +243,27 @@ export function createTrackVisual(track: Track, lineColor?: string) {
   const dashMaterial = new THREE.MeshBasicMaterial({ color: lineColor ? new THREE.Color(lineColor).multiplyScalar(.28) : 0x426c76 });
   const marks = (spacing: number, sides: boolean, geometry: THREE.BufferGeometry, material: THREE.Material, height: number, edgeInset: number) => {
     const samples = paths.flatMap(path => {
-      const result: { distance: number; routeId: string | null }[] = [];
+      const result: { distance: number; routeId: string | null; side: number | null }[] = [];
+      const route = track.branches?.flatMap(f => f.routes).find(r => r.id === path.routeId);
       for (let d = path.start; d < path.end; d += spacing) {
-        // No posts inside the mouth where the two surfaces still overlap.
-        if (height > 1 && path.routeId && (d - path.start < 70 || path.end - d < 70)) continue;
-        result.push({ distance: d, routeId: path.routeId });
+        track.sample(d, frame, path.routeId);
+        if (sides) {
+          const boundary = roadBoundary(track, d, frame, path.routeId);
+          for (let side = 0; side < 2; side++) if (boundary.visible[side]) result.push({ distance: d, routeId: path.routeId, side });
+        } else {
+          // Two centerlines across the joined pavement look like crossing roads.
+          if (route && (d <= route.mouthEnd || d >= route.mergeStart)) continue;
+          result.push({ distance: d, routeId: path.routeId, side: null });
+        }
       }
       return result;
     });
-    const mesh = new THREE.InstancedMesh(geometry, material, samples.length * (sides ? 2 : 1));
+    const mesh = new THREE.InstancedMesh(geometry, material, samples.length);
     samples.forEach((sample, i) => {
       track.sample(sample.distance, frame, sample.routeId);
-      for (let side = 0; side < (sides ? 2 : 1); side++) {
-        dummy.position.copy(frame.position).addScaledVector(frame.up, height);
-        if (sides) dummy.position.addScaledVector(frame.right, (side ? 1 : -1) * (track.halfWidth - edgeInset));
-        orient(dummy); dummy.updateMatrix(); mesh.setMatrixAt(i * (sides ? 2 : 1) + side, dummy.matrix);
-      }
+      dummy.position.copy(frame.position).addScaledVector(frame.up, height);
+      if (sample.side !== null) dummy.position.addScaledVector(frame.right, (sample.side ? 1 : -1) * (track.halfWidth - edgeInset));
+      orient(dummy); dummy.updateMatrix(); mesh.setMatrixAt(i, dummy.matrix);
     });
     group.add(mesh);
   };

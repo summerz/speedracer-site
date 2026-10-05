@@ -27,7 +27,7 @@ for (const kind of ['horizontal', 'vertical']) for (const intertwined of [false,
           const travel = exit ? route.length - fork.junctionLength - metres : fork.junctionLength + metres;
           return track.sample(advanceTrackDistance(track, fork.start, travel, route.id), undefined, route.id);
         });
-        const axis = kind === 'horizontal' ? 'x' : 'y', otherAxis = kind === 'horizontal' ? 'y' : 'x';
+        const axis = 'x', otherAxis = 'y';
         assert.ok(frames[0].position[axis] < 0 && frames[1].position[axis] > 0);
         assert.ok(Math.abs(frames[0].position[axis] + frames[1].position[axis]) < .002, 'both Y arms match');
         assert.ok(Math.abs(frames[0].position[otherAxis]) < .002 && Math.abs(frames[1].position[otherAxis]) < .002, 'no body curve inside Y');
@@ -36,9 +36,11 @@ for (const kind of ['horizontal', 'vertical']) for (const intertwined of [false,
         assert.ok(gap > separation, 'arms open progressively'); separation = gap;
       }
     }
-    if (kind === 'horizontal') {
-      const d = fork.start + fork.junctionLength + 3;
-      const boundaries = fork.routes.map(r => roadBoundary(track, d, track.sample(d, undefined, r.id), r.id));
+    {
+      const boundaries = fork.routes.map(r => {
+        const d = advanceTrackDistance(track, fork.start, fork.junctionLength + 3, r.id);
+        return roadBoundary(track, d, track.sample(d, undefined, r.id), r.id);
+      });
       assert.deepEqual(boundaries.map(b => b.visible), [[true, false], [false, true]]);
       assert.ok(boundaries[0].edges[1].distanceTo(boundaries[1].edges[0]) < 1e-8, 'joined surfaces share one seam');
       const separated = fork.start + fork.junctionLength + 100;
@@ -118,6 +120,23 @@ test('choice locks until merge, resets, and can change on the next lap', () => {
     model.reset();assert.equal(state.routeId,null);assert.equal(state.distance,0);
     assert.equal(forkAt(track,track.length+fork.start+.01).id,fork.id);
     assert.equal(selectBranch(track,fork.start+.01,-3,0),fork.routes[0].id);
+  }
+});
+for (const definition of definitions) test(`${definition.name}: Y entry and both merge surfaces never fold backwards`, () => {
+  const track = createCatalogTrack(definition, 'easy');
+  for (const fork of track.branches) for (const route of fork.routes) {
+    for (const [start, end] of [[fork.start + fork.junctionLength, route.mouthEnd], [route.mergeStart, fork.end - fork.junctionLength]]) {
+      let previous;
+      for (let d = start; d <= end; d += .25) {
+        const frame = track.sample(d, undefined, route.id);
+        const boundary = roadBoundary(track, d, frame, route.id);
+        if (previous) for (const [side, edge] of boundary.edges.entries()) {
+          assert.ok(edge.clone().sub(previous.edges[side]).dot(frame.tangent) > 0,
+            `${route.id}: folded pavement at ${d}, edge ${side}`);
+        }
+        previous = boundary;
+      }
+    }
   }
 });
 test('either choice remains available in the shared entrance without moving the road frame', () => {
