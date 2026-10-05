@@ -66,8 +66,12 @@ export function distinctAiColor(color: string, playerColor: string): boolean {
 }
 
 /** Every model has several fixed liveries; selection avoids the player's nearby neon hue. */
-export function selectAiRacer(modelVariant: string, playerColor: string, random: () => number): AiRacer {
-  const candidates = AI_RACERS.filter(racer => racer.modelVariant === modelVariant && distinctAiColor(racer.color, playerColor));
+export function selectAiRacer(modelVariant: string, playerColor: string, random: () => number, rating?: number): AiRacer {
+  let candidates = AI_RACERS.filter(racer => racer.modelVariant === modelVariant && distinctAiColor(racer.color, playerColor));
+  if (rating !== undefined && candidates.length) {
+    const nearest = Math.min(...candidates.map(r => Math.abs(r.rating - rating)));
+    candidates = candidates.filter(r => Math.abs(r.rating - rating) <= Math.max(1, nearest));
+  }
   if (!candidates.length) throw new Error(`No eligible AI racer for ${modelVariant}`);
   return candidates[Math.floor(random() * candidates.length)];
 }

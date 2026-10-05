@@ -7,6 +7,8 @@
     "outDir": "output/test"
   },
   "include": [
+    "src/platform/gamepadInput.ts",
+    "src/game/track/createDistrictScenery.ts",
     "src/game/driving/createTimeAttack.ts",
     "src/game/driving/createRaceSession.ts",
     "src/game/driving/createRivalVisuals.ts",

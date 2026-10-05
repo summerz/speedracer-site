@@ -9,7 +9,11 @@ import { createProgressStore, indexedProgressRepository } from './game/progressi
 import type { ProgressStore } from './game/progression/progressStore';
 import { upgradedConfiguration } from './game/progression/catalog';
 import { mountShop } from './shopApp';
+import { mountCampaign } from './campaignApp';
+import { trackDefinition } from './game/track/trackCatalog';
+import { campaignStatus } from './game/progression/campaign';
 import { menuHeader } from './menuHeader';
+import { mountMenuNavigation } from './platform/menuNavigation';
 
 function mountHangar(root: HTMLDivElement, selected: DroneCatalogEntry, onSelect: (entry: DroneCatalogEntry) => void, onDrive: () => void, store: ProgressStore): () => void {
   document.title = 'Speedracer · 격납고';
@@ -31,7 +35,7 @@ function mountHangar(root: HTMLDivElement, selected: DroneCatalogEntry, onSelect
             <button type="button" data-thrust="boost" aria-pressed="false" aria-keyshortcuts="3"><kbd>3</kbd>부스트</button>
           </div>
         </div>
-        <button type="button" id="start-driving" class="primary-action hangar-start">레이스 <span aria-hidden="true">↗</span></button>
+        <button type="button" id="start-driving" class="primary-action hangar-start">캠페인 시작 <span aria-hidden="true">↗</span></button><a class="free-drive-link" href="#drive">자유 주행 · 타임어택 / AI 레이스</a>
       </section>
 
       <section class="viewport" aria-label="드론 3D 미리보기">
@@ -134,6 +138,7 @@ function mountHangar(root: HTMLDivElement, selected: DroneCatalogEntry, onSelect
 }
 
 export function mountApp(root: HTMLDivElement): () => void {
+  const disposeNavigation = mountMenuNavigation(root);
   const repository = (() => {
     try { return indexedProgressRepository(window.indexedDB); }
     catch { return { read: async () => { throw new Error('진행 저장을 사용할 수 없습니다. 주행은 가능합니다.'); }, transact: async () => { throw new Error('진행 저장을 사용할 수 없습니다.'); }, close() {} }; }
@@ -166,14 +171,20 @@ export function mountApp(root: HTMLDivElement): () => void {
     await developmentGrant;
     await store.refresh();
     if (disposed || id !== renderId) return;
-    soundtrack.setScene(location.hash === '#drive' ? 'ready' : 'menu');
+    const [screen, query = ''] = location.hash.slice(1).split('?');
+    const params = new URLSearchParams(query);
+    const track = trackDefinition(params.get('track') ?? '');
+    const mode = params.get('mode') === 'competition' ? 'competition' : 'time-attack';
+    soundtrack.setScene(screen === 'drive' ? 'ready' : 'menu');
     const profile = store.snapshot();
     const entry = DRONE_CATALOG.find(craft => craft.configuration.id === profile.equipped)!;
     const selected = { ...entry, configuration: upgradedConfiguration(profile.equipped, profile.upgrades[profile.equipped]) };
-    disposeScreen = location.hash === '#drive'
-      ? mountRace(root, () => { location.hash = ''; }, selected.configuration, store, () => { location.hash = 'shop'; })
-      : location.hash === '#shop' ? mountShop(root, store, () => { location.hash = ''; })
-      : mountHangar(root, selected, () => {}, () => { location.hash = 'drive'; }, store);
+    if (screen === 'drive' && params.has('track') && (!track || campaignStatus(profile.campaign, mode, track) === 'locked')) { location.hash = 'campaign'; return; }
+    disposeScreen = screen === 'drive'
+      ? mountRace(root, () => { location.hash = ''; }, selected.configuration, store, () => { location.hash = 'shop'; }, track ? { track, mode } : undefined)
+      : screen === 'campaign' ? mountCampaign(root, store)
+      : screen === 'shop' ? mountShop(root, store, () => { location.hash = ''; })
+      : mountHangar(root, selected, () => {}, () => { location.hash = 'campaign'; }, store);
     refreshMusicButton();
   };
   const onHash = () => { void render(); };
@@ -184,6 +195,6 @@ export function mountApp(root: HTMLDivElement): () => void {
     window.removeEventListener('hashchange', onHash);
     document.removeEventListener('pointerdown', activateAudio); document.removeEventListener('keydown', activateAudio);
     document.removeEventListener('visibilitychange', visibility); root.removeEventListener('click', musicToggle);
-    disposeScreen(); store.close(); soundtrack.dispose(); root.replaceChildren();
+    disposeNavigation(); disposeScreen(); store.close(); soundtrack.dispose(); root.replaceChildren();
   };
 }

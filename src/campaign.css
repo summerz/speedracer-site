@@ -1,0 +1,42 @@
+.free-drive-link { display:block; color:#97afb8; padding:12px 0 0; font-size:12px; text-underline-offset:4px; }
+.campaign-screen { min-height:100dvh; background:#080f16; padding-bottom:max(40px, env(safe-area-inset-bottom)); }
+.campaign-heading { display:flex; align-items:end; justify-content:space-between; gap:16px; padding:24px max(4.5%, env(safe-area-inset-right)) 18px max(4.5%, env(safe-area-inset-left)); }
+.campaign-heading h1 { font-size:clamp(34px,5vw,64px); margin:0; line-height:1; }
+.campaign-heading h1 span { color:#80ffe0; }
+.campaign-heading p { color:#99adb9; font-size:12px; }
+.campaign-layout { display:grid; grid-template-columns:minmax(280px,.85fr) minmax(340px,1.15fr); gap:30px; align-items:start; padding-inline:max(4.5%, env(safe-area-inset-left)) max(4.5%, env(safe-area-inset-right)); }
+.campaign-modes { display:flex; gap:8px; }
+.campaign-modes button,.course-card { color:#c9dadf; background:#0b1c28; border:1px solid #58717d70; border-radius:5px; cursor:pointer; font:inherit; }
+.campaign-modes button { padding:12px 20px; flex:1; }
+.campaign-modes button[aria-pressed=true] { border-color:#80ffe0; background:#12312f; color:#baffeb; }
+.campaign-rule { color:#99adb9; font-size:12px; line-height:1.6; min-height:38px; }
+.campaign-list { max-height:66dvh; overflow:auto; padding-right:6px; scrollbar-width:thin; }
+.course-district h3 { font-size:12px; color:#849ca9; font-weight:500; margin:18px 0 8px; }
+.course-district>div { display:grid; gap:6px; }
+.course-card { display:flex; align-items:center; gap:14px; padding:12px 14px; width:100%; text-align:left; min-height:65px; }
+.course-card:hover { border-color:var(--district-color); }
+.course-card[aria-pressed=true] { border-color:var(--district-color); background:#152d37; box-shadow:inset 3px 0 var(--district-color); }
+.course-card strong { display:block; font-size:15px; letter-spacing:.03em; }
+.course-card small { display:block; color:#93a8b4; font-size:11px; margin-top:3px; }
+.course-number { font-size:11px; color:var(--district-color); }
+.course-status { margin-left:auto; white-space:nowrap; font-size:11px; color:#9eb8bd; }
+.campaign-detail { border:1px solid #58717d50; border-radius:8px; overflow:hidden; background:#08141e; }
+.campaign-preview { height:clamp(220px,30dvh,360px); background:radial-gradient(ellipse at center,#142936,#08141e 75%); display:grid; place-items:center; }
+.campaign-preview canvas { width:100%; height:100%; display:block; }
+.campaign-detail-copy { padding:22px 26px; }
+.campaign-detail h2 { font-size:32px; margin:4px 0 8px; }
+.campaign-detail p { color:#99adb9; font-size:12px; line-height:1.6; }
+#course-metrics { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin:20px 0; }
+#course-metrics dt { color:#78919e; font-size:11px; }
+#course-metrics dd { margin:4px 0 0; font-size:17px; color:#d3e5e9; }
+#course-start { width:100%; min-height:46px; }
+#course-start:disabled { opacity:.35; cursor:default; }
+#campaign-next,#campaign-select { border:1px solid #58717d70; background:#0b1c28; color:#c9dadf; font:inherit; font-size:12px; padding:12px 16px; border-radius:5px; margin:8px 8px 0 0; }
+#campaign-next { color:#baffeb; border-color:#80ffe080; }
+#lap-deadline { color:#ffce83; font-size:11px; font-family:var(--font-mono); }
+@media(max-width:760px) { .campaign-screen { padding-bottom:max(30px, env(safe-area-inset-bottom)); } .campaign-heading { padding:18px max(24px, env(safe-area-inset-right)) 18px max(24px, env(safe-area-inset-left)); } .campaign-layout { grid-template-columns:1fr; gap:20px; padding-inline:max(24px, env(safe-area-inset-left)) max(24px, env(safe-area-inset-right)); } .campaign-list { max-height:42dvh; } .campaign-detail-copy { padding:18px; } .campaign-preview { height:210px; } .campaign-detail h2 { font-size:28px; } }
+@media(max-height:500px) and (min-width:761px) { .campaign-heading { padding-block:12px; } .campaign-list { max-height:55dvh; } .campaign-preview { height:190px; } }
+
+.campaign-preview { position:relative; }
+.campaign-detail .campaign-preview-legend { position:absolute; bottom:12px; left:16px; margin:0; color:#b4c7d0; font-size:11px; pointer-events:none; }
+.campaign-preview-legend::before { content:""; display:inline-block; width:18px; height:3px; margin-right:7px; vertical-align:middle; background:var(--stunt-color); }

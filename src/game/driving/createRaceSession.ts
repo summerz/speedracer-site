@@ -4,6 +4,7 @@ import { upcomingHeightObstacle } from '../track/createTrack.js';
 import type { Track } from '../track/createTrack.js';
 import { steeringYawRate } from './createDrivingModel.js';
 import type { DrivingInput, DrivingState } from './createDrivingModel.js';
+import type { RaceRules } from './createTimeAttack.js';
 import { createTimeAttack } from './createTimeAttack.js';
 import { createRaceRecords } from './raceRecords.js';
 import { aiDrivingProfile, AI_STYLE_LABELS, selectAiRacer } from './aiRoster.js';
@@ -63,13 +64,22 @@ export function aiDrivingInput(track: Track, configuration: DroneConfiguration, 
   index: number, opponents: readonly DrivingState[], profile?: AiDrivingProfile): DrivingInput {
   const p = configuration.performance;
   const curvature = track.sample(state.distance).curvature;
-  const bend = Math.max(Math.abs(curvature), Math.abs(track.sample(state.distance + 25).curvature), Math.abs(track.sample(state.distance + 55).curvature));
+  let bend = Math.abs(curvature);
+  // Short sampling intervals catch tight bends between the old lookahead points.
+  for (let ahead = 10; ahead <= 60; ahead += 10) bend = Math.max(bend, Math.abs(track.sample(state.distance + ahead).curvature));
   const difficulty = track.altitudeProfile.levels.length;
   const pace = (difficulty === 2 ? .96 : 1) * (profile?.pace ?? 1);
   const boost = bend < (profile?.boostCurvature ?? .003) && !state.boostNeedsRelease &&
     (state.boosting ? state.charge > (profile?.boostEndCharge ?? .03) : state.charge > (profile?.boostStartCharge ?? .5));
   const desiredSpeed = (boost ? p.boostStage2Speed : p.topSpeed) * pace;
-  const goalSpeed = Math.min(desiredSpeed, (profile?.cornerLimit ?? .74) / Math.max(.001, bend));
+  const cornerLimit = profile?.cornerLimit ?? .74;
+  let goalSpeed = Math.min(desiredSpeed, cornerLimit / Math.max(.001, bend));
+  // A fast craft needs more than 60m to brake for a hairpin. Work backwards from
+  // each bend using braking distance rather than slowing immediately for far bends.
+  for (let ahead = 70; ahead <= 280; ahead += 10) {
+    const turnSpeed = cornerLimit / Math.max(.001, Math.abs(track.sample(state.distance + ahead).curvature));
+    goalSpeed = Math.min(goalSpeed, Math.sqrt(turnSpeed ** 2 + 2 * p.braking * .7 * (ahead - 25)));
+  }
   const edge = track.halfWidth - 3.5;
   const laneWidth = Math.min(5.2, edge * .7);
   const preferredLane = (index - 1) * laneWidth + Math.sin(state.distance / 210 + index * 2) * .65;
@@ -95,13 +105,13 @@ export function aiDrivingInput(track: Track, configuration: DroneConfiguration, 
 /** One clock, countdown and pause lifecycle for both modes; completed pilots become ghosts. */
 export function createRaceSession(track: Track, configuration: DroneConfiguration,
   records: ReturnType<typeof createRaceRecords>, focusSlots = 0, mode: RaceMode = 'time-attack',
-  random: () => number = Math.random, controlMode: AiControlMode = 'desktop') {
-  const player = createTimeAttack(track, configuration.performance, records, focusSlots);
+  random: () => number = Math.random, controlMode: AiControlMode = 'desktop', rules: RaceRules = {}, rating?: number) {
+  const player = createTimeAttack(track, configuration.performance, records, focusSlots, rules);
   const craft = DRONE_CATALOG.find(c => c.configuration.modelVariant === configuration.modelVariant);
   const playerColor = craft?.lineColor ?? configuration.boostStyle.pulseColor;
   const candidates = mode === 'competition' ? selectRivalCrafts(configuration, random) : [];
   const rivals = candidates.map(entry => {
-    const racer = selectAiRacer(entry.configuration.modelVariant, playerColor, random);
+    const racer = selectAiRacer(entry.configuration.modelVariant, playerColor, random, rating);
     const { color } = racer;
     const rivalConfiguration = { ...entry.configuration, boostStyle: {
       core: '#ffffff', body: color, tail: color, afterglow: color, pulseColor: color,
@@ -110,7 +120,7 @@ export function createRaceSession(track: Track, configuration: DroneConfiguratio
       id: `ai-${racer.id}`, name: racer.name, craftName: entry.name, color, racer,
       style: AI_STYLE_LABELS[racer.style], rating: racer.rating, profile: aiDrivingProfile(racer, controlMode), configuration: rivalConfiguration,
       controller: createTimeAttack(track, rivalConfiguration.performance,
-        createRaceRecords({ trackId: 'ai-memory', configurationId: racer.id }), focusSlots),
+        createRaceRecords({ trackId: 'ai-memory', laps: rules.laps, configurationId: racer.id }), focusSlots, { laps: rules.laps }),
     };
   });
   const participants = [{ id: 'player', name: craft?.name ?? 'PLAYER',

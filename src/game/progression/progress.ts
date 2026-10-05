@@ -1,3 +1,6 @@
+import { initialCampaign, validateCampaign, completeCampaign } from './campaign.js';
+import type { CampaignProgress, CampaignOutcome } from './campaign.js';
+import { trackDefinition } from '../track/trackCatalog.js';
 import { CRAFT_PRICES, craftResaleValue, emptyLevels, FOCUS_PRICE, INVENTORY_LIMIT, STARTER_ID, UPGRADES, UPGRADE_COSTS } from './catalog.js';
 import type { UpgradeId, UpgradeLevels } from './catalog.js';
 import type { DifficultyId } from '../track/difficulty.js';
@@ -6,19 +9,21 @@ export interface RewardInput {
   raceId: string; difficulty: DifficultyId; collisions: number; offTrackExits: number; recoveries: number;
   penaltyPoints: number; improvedExistingBest: boolean; assisted: boolean;
 }
-export interface Reward { base: number; clean: number; best: number; penalty: number; total: number; assisted: boolean }
+export interface Reward { base: number; clean: number; best: number; penalty: number; total: number; assisted: boolean; bonus?: number }
 export interface Progress {
   version: 1; revision: number; balance: number; owned: string[]; equipped: string;
   upgrades: Record<string, UpgradeLevels>; focus: number; focusSlots: number;
   rewards: Record<string, Reward>;
+  campaign: CampaignProgress;
   focusUses: Record<string, 'pending' | 'used' | 'refunded'>;
 }
 export const initialProgress = (): Progress => ({ version: 1, revision: 0, balance: 0, owned: [STARTER_ID], equipped: STARTER_ID,
-  upgrades: { [STARTER_ID]: emptyLevels() }, focus: 0, focusSlots: 0, rewards: {}, focusUses: {} });
+  upgrades: { [STARTER_ID]: emptyLevels() }, focus: 0, focusSlots: 0, rewards: {}, focusUses: {}, campaign: initialCampaign() });
 const integer = (n: unknown, max = Number.MAX_SAFE_INTEGER): n is number => Number.isSafeInteger(n) && (n as number) >= 0 && (n as number) <= max;
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
 const own = (object: object, key: string) => Object.hasOwn(object, key);
 export function validateProgress(value: unknown): Progress {
+  if (record(value) && value.campaign === undefined) value = { ...value, campaign: initialCampaign() };
   if (record(value) && value.focusUses === undefined) value = { ...value, focusUses: {} };
   if (!record(value) || value.version !== 1 || !integer(value.revision) || !integer(value.balance)
     || !Array.isArray(value.owned) || !value.owned.length || new Set(value.owned).size !== value.owned.length
@@ -34,8 +39,10 @@ export function validateProgress(value: unknown): Progress {
   if (Number(value.focus) + Object.values(value.focusUses as object).filter(state => state === 'pending').length > INVENTORY_LIMIT) throw new Error('아이템 보유 한도 초과');
   for (const [id, r] of Object.entries(value.rewards)) {
     if (!id || id.length > 160 || !record(r) || !['base', 'clean', 'best', 'penalty', 'total'].every(key => integer(r[key]))
-      || typeof r.assisted !== 'boolean' || r.total !== Math.max(0, Number(r.base) + Number(r.clean) + Number(r.best) - Number(r.penalty))) throw new Error('잘못된 보상 데이터');
+      || typeof r.assisted !== 'boolean' || r.total !== Math.max(0, Number(r.base) + Number(r.clean) + Number(r.best) + Number(r.bonus ?? 0) - Number(r.penalty))) throw new Error('잘못된 보상 데이터');
+    if (r.bonus !== undefined && !integer(r.bonus)) throw new Error('잘못된 첫 클리어 보상');
   }
+  value.campaign = validateCampaign(value.campaign);
   return structuredClone(value) as unknown as Progress;
 }
 export function calculateReward(input: RewardInput): Reward {
@@ -47,13 +54,29 @@ export function calculateReward(input: RewardInput): Reward {
   const best = !input.assisted && input.improvedExistingBest ? 20 : 0;
   return { base, clean, best, penalty: input.penaltyPoints, total: Math.max(0, base + clean + best - input.penaltyPoints), assisted: input.assisted };
 }
-export type ProgressCommand = { kind: 'reward'; input: RewardInput } | { kind: 'craft'; id: string }
+export type ProgressCommand = { kind: 'campaign-select'; mode: CampaignOutcome['mode']; trackId: string }
+  | { kind: 'campaign-result'; input: RewardInput; outcome: CampaignOutcome } | { kind: 'reward'; input: RewardInput } | { kind: 'craft'; id: string }
   | { kind: 'equip'; id: string } | { kind: 'sell-craft'; id: string } | { kind: 'upgrade'; id: string; upgrade: UpgradeId }
   | { kind: 'focus' } | { kind: 'slots'; count: number } | { kind: 'consume-focus'; id: string } | { kind: 'refund-focus'; id: string } | { kind: 'confirm-focus'; id: string };
 export function applyCommand(current: Progress, command: ProgressCommand): Progress {
   const next = validateProgress(current);
   const charge = (cost: number) => { if (next.balance < cost) throw new Error(`${cost - next.balance}P가 부족합니다.`); next.balance -= cost; };
   switch (command.kind) {
+    case 'campaign-select': {
+      if (!trackDefinition(command.trackId) || !['time-attack', 'competition'].includes(command.mode)) throw new Error('알 수 없는 트랙입니다.');
+      next.campaign.last = { mode: command.mode, trackId: command.trackId };
+      if (!next.campaign.knownTracks.includes(command.trackId)) next.campaign.knownTracks.push(command.trackId); break;
+    }
+    case 'campaign-result': {
+      if (own(next.rewards, command.input.raceId)) return next;
+      if (command.input.assisted !== command.outcome.assisted) throw new Error('잘못된 보조 모드');
+      const completion = completeCampaign(next.campaign, command.outcome);
+      const calculated = calculateReward(command.input);
+      const reward = command.outcome.disqualified ? { base: 0, clean: 0, best: 0, penalty: 0, total: 0, assisted: command.input.assisted } : calculated;
+      reward.bonus = completion.bonus; reward.total = Math.max(0, reward.base + reward.clean + reward.best + reward.bonus - reward.penalty);
+      if (!Number.isSafeInteger(next.balance + reward.total)) throw new Error('포인트 한도를 초과했습니다.');
+      next.balance += reward.total; next.rewards[command.input.raceId] = reward; break;
+    }
     case 'reward': {
       if (own(next.rewards, command.input.raceId)) return next;
       const reward = calculateReward(command.input);

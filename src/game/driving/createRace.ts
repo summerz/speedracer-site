@@ -1,6 +1,10 @@
+import { createCatalogTrack, campaignLapLimit } from '../track/trackCatalog';
+import type { TrackDefinition } from '../track/trackCatalog';
+import { createDistrictScenery } from '../track/createDistrictScenery';
 import { RENDER_QUALITIES } from '../../platform/renderQuality';
 import type { RenderQuality } from '../../platform/renderQuality';
 import { createExhaustHaze } from './createExhaustHaze';
+import { gamepadDriving } from '../../platform/gamepadInput';
 import * as THREE from 'three';
 import { createRaceViews, raceViewLayout, VIEW_LABELS } from './createRaceViews';
 import type { RaceView, TrackDisplay, Viewport } from './createRaceViews';
@@ -72,6 +76,7 @@ export function createRace(
   difficulty?: DifficultyPreset,
   focusSlots = 0,
   mode: RaceMode = 'time-attack',
+  course?: TrackDefinition,
 ): Race {
   const config = resolveDroneConfiguration(configuration);
   const visuals = config.speedEffects;
@@ -88,7 +93,9 @@ export function createRace(
   scene.add(new THREE.HemisphereLight(0xabcbdc, 0x152435, 2.5));
   const sun = new THREE.DirectionalLight(0xc8dfed, 3);
   sun.position.set(-50, 150, -100); scene.add(sun);
-  const track = createTrack(altitudeProfile, difficulty);
+  const track = course ? createCatalogTrack(course) : createTrack(altitudeProfile, difficulty);
+  const scenery = course ? createDistrictScenery(track, course) : undefined;
+  if (scenery) scene.add(scenery.object);
   const trackVisual = createTrackVisual(track, config.boostStyle.pulseColor);
   scene.add(trackVisual.object);
   const drone = createRacingDrone({ variant: config.modelVariant, neonBoost: 1.7, thrusterIntensity: 0.35 });
@@ -101,8 +108,8 @@ export function createRace(
   const coarsePointer = window.matchMedia('(any-pointer: coarse)');
   let storage: Storage | undefined;
   try { storage = window.localStorage; } catch { /* Private browsing can deny storage. */ }
-  const records = createRaceRecords({ trackId: `neon-circuit-v1:${difficulty?.id ?? 'beginner'}`, configurationId: JSON.stringify({ performance: config.performance, altitude: track.altitudeProfile, ...(focusSlots ? { assisted: true } : {}), ...(mode === 'competition' ? { mode } : {}) }) }, storage);
-  const timeAttack = createRaceSession(track, config, records, focusSlots, mode, Math.random, coarsePointer.matches ? 'touch' : 'desktop');
+  const records = createRaceRecords({ laps: course?.laps, trackId: course ? `${course.id}:v${course.revision}` : `neon-circuit-v1:${difficulty?.id ?? 'beginner'}`, configurationId: JSON.stringify({ performance: config.performance, altitude: track.altitudeProfile, ...(focusSlots ? { assisted: true } : {}), ...(mode === 'competition' ? { mode } : {}) }) }, storage);
+  const timeAttack = createRaceSession(track, config, records, focusSlots, mode, Math.random, coarsePointer.matches ? 'touch' : 'desktop', course ? { laps: course.laps, ...(mode === 'time-attack' ? { lapLimit: campaignLapLimit(course, track.length) } : {}) } : {}, course?.rating);
   const rivalVisuals = createRivalVisuals(scene, track, timeAttack.rivals);
   const model = timeAttack.model;
   const raceGates = createRaceGates(track, timeAttack.snapshot().gatesPerLap);
@@ -214,6 +221,16 @@ export function createRace(
     views.cycleTrack(); resize(); notify();
   };
   const controlCodes = new Set(['KeyS', 'KeyA', 'KeyD', 'ArrowDown', 'ArrowUp', 'Space', 'KeyR', 'KeyF', 'KeyC', 'KeyX', 'Escape']);
+  window.addEventListener('speedracer:pad-action', (event) => {
+    if (lost || document.querySelector('dialog[open]')) return;
+    const action = (event as CustomEvent<string>).detail;
+    if (action === 'pause') { togglePause(); return; }
+    if (timeAttack.phase !== 'running') return;
+    if (action === 'up' || action === 'down') heightRequests.push(action === 'up' ? 1 : -1);
+    else if (action === 'cockpit') toggleCockpit();
+    else if (action === 'track') cycleTrack();
+    else if (action === 'focus') window.dispatchEvent(new CustomEvent('speedracer:focus-request'));
+  }, listen);
   window.addEventListener('keydown', (event) => {
     if (event.defaultPrevented || document.querySelector('dialog[open]')) return;
     if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
@@ -237,7 +254,7 @@ export function createRace(
   }, listen);
   window.addEventListener('keyup', (event) => {
     keys.delete(event.code);
-    if (event.code === 'Space' && !touchControls.read().boost) { model.interruptBoost(); boostHaptics.stop(); notify(); }
+    if (event.code === 'Space' && !touchControls.read().boost && !gamepadDriving.boost) { model.interruptBoost(); boostHaptics.stop(); notify(); }
   }, listen);
   window.addEventListener('blur', pause, listen);
 
@@ -280,10 +297,10 @@ export function createRace(
     let heightChanged = false;
     if (oldPhase === 'running' || oldPhase === 'countdown') {
       const touch = touchControls.read();
-      input.brake = keys.has('KeyS') || touch.brake;
+      input.brake = keys.has('KeyS') || touch.brake || gamepadDriving.brake;
       input.throttle = !input.brake;
-      input.steer = THREE.MathUtils.clamp(Number(keys.has('KeyD')) - Number(keys.has('KeyA')) + touch.steer, -1, 1);
-      input.boost = keys.has('Space') || touch.boost;
+      input.steer = THREE.MathUtils.clamp(Number(keys.has('KeyD')) - Number(keys.has('KeyA')) + touch.steer + gamepadDriving.steer, -1, 1);
+      input.boost = keys.has('Space') || touch.boost || gamepadDriving.boost;
       for (const lift of heightRequests) {
         const previousLevel = model.state.altitudeLevel;
         model.step(0, { ...input, lift });
@@ -365,12 +382,13 @@ export function createRace(
     raceGates.update(timeAttack.snapshot().nextCheckpoint);
     speedLines.update(state.elapsed, state.speed, state.boosting, reducedMotion.matches, state.boostStage === 2);
     views.prepareDriving();
+    scenery?.setOverview(false); scenery?.update(drone.position);
     exhaustHaze.update(state.elapsed, state.boostStage, phase === 'running' && state.speed > 1, views.view === 'cockpit', reducedMotion.matches);
     composer.render(delta);
     if (layout.track) {
       const linesVisible = speedLines.object.visible;
       speedLines.object.visible = false;
-      views.prepareOverview(); overviewComposer.render(delta);
+      views.prepareOverview(); scenery?.setOverview(true); overviewComposer.render(delta); scenery?.setOverview(false);
       speedLines.object.visible = linesVisible;
       views.prepareDriving();
     }
@@ -402,7 +420,7 @@ export function createRace(
   return {
     start, togglePause, restart, useFocus() { const used = timeAttack.useFocus(); if (used) notify(); return used; }, recover, toggleCockpit, cycleTrack,
     setBloom(enabled) { bloom.enabled = enabled; },
-    setQuality(quality) { renderQuality = quality; resize(); },
+    setQuality(quality) { scenery?.setQuality(quality); renderQuality = quality; resize(); },
     setExhaustHaze(enabled) { exhaustHaze.setEnabled(enabled); },
     setSoundEnabled(enabled) { raceAudio.setEnabled(enabled); },
     setMusicEnabled(enabled) { raceAudio.setMusicEnabled(enabled); },

@@ -51,7 +51,9 @@ export function createTrackFrame(): TrackFrame {
 }
 
 /** Arc-length sampling keeps distance and speed independent of control-point spacing. */
-export function createTrack(profile?: AltitudeProfile, preset?: DifficultyPreset): Track {
+export interface TrackControlPoint { position: THREE.Vector3; up: THREE.Vector3; section: TrackFrame['section'] }
+
+export function createTrack(profile?: AltitudeProfile, preset?: DifficultyPreset, authored?: readonly TrackControlPoint[]): Track {
   const altitudeProfile = resolveAltitudeProfile(profile ?? preset?.altitude);
   const minHeight = altitudeProfile.levels[0];
   const maxHeight = altitudeProfile.levels[altitudeProfile.levels.length - 1];
@@ -61,6 +63,9 @@ export function createTrack(profile?: AltitudeProfile, preset?: DifficultyPreset
   const add = (x: number, y: number, z: number, up = new THREE.Vector3(0, 1, 0), kind: TrackFrame['section'] = 'course') => {
     points.push(new THREE.Vector3(x, y, z)); hints.push(up); kinds.push(kind);
   };
+  if (authored) {
+    for (const point of authored) add(point.position.x, point.position.y, point.position.z, point.up.clone(), point.section);
+  } else {
   add(-140, 12, 120); add(-140, 12, 40); add(-140, 12, -40); add(-140, 12, -120);
   // A 136 m tall vertical loop. Its 48 m sideways exit keeps both roads apart.
   for (let i = 0; i <= 96; i++) {
@@ -87,6 +92,8 @@ export function createTrack(profile?: AltitudeProfile, preset?: DifficultyPreset
   } else { add(gentle ? 470 : 430, 12, coilEnd + 130); add(gentle ? 470 : 430, 18, -450); }
   add(400, gentle ? 32 : 55, -80);
   add(270, 28, 170); add(90, 12, 260); add(-70, 12, 245);
+  }
+  if (points.length < 4) throw new Error('A closed course needs at least four control points.');
   const curve = new THREE.CatmullRomCurve3(points, true, 'centripetal');
   curve.arcLengthDivisions = 16384;
   const length = curve.getLength();
@@ -244,9 +251,12 @@ export function createTrackVisual(track: Track, lineColor?: string) {
     group.add(barrier.object);
     return barrier;
   });
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(1800, 1800), new THREE.MeshStandardMaterial({ color: 0x080f17, roughness: 1 }));
-  ground.rotation.x = -Math.PI / 2; ground.position.set(100, -0.1, -40); group.add(ground);
-  const grid = new THREE.GridHelper(1600, 100, 0x19323f, 0x101f2b); grid.position.set(100, 0, -40); group.add(grid);
+  const bounds = new THREE.Box3().setFromPoints(left.concat(right));
+  const extent = bounds.getSize(new THREE.Vector3()), center = bounds.getCenter(new THREE.Vector3());
+  const groundSize = Math.max(1800, extent.x + 600, extent.z + 600);
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(groundSize, groundSize), new THREE.MeshStandardMaterial({ color: 0x080f17, roughness: 1 }));
+  ground.rotation.x = -Math.PI / 2; ground.position.set(center.x, -0.1, center.z); group.add(ground);
+  const grid = new THREE.GridHelper(groundSize, Math.ceil(groundSize / 16), 0x19323f, 0x101f2b); grid.position.set(center.x, 0, center.z); group.add(grid);
   return {
     object: group,
     hit(distance: number) {

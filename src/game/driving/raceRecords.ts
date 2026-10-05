@@ -2,13 +2,13 @@ import { RACE_LAPS, RACE_RULES_VERSION } from './raceProgress.js';
 
 export interface RaceRecord { total: number; laps: number[]; recordedAt: string }
 export interface RecordStorage { getItem(key: string): string | null; setItem(key: string, value: string): void }
-export interface RecordScope { trackId: string; configurationId: string }
+export interface RecordScope { trackId: string; configurationId: string; laps?: number }
 export interface RecordResult { best: RaceRecord; isNewBest: boolean; improvedExistingBest: boolean; saved: boolean }
 
-const validRecord = (record: unknown): record is RaceRecord => {
+const validRecord = (record: unknown, lapCount = RACE_LAPS): record is RaceRecord => {
   if (!record || typeof record !== 'object') return false;
   const r = record as RaceRecord;
-  return Number.isFinite(r.total) && r.total > 0 && r.total < 86400 && Array.isArray(r.laps) && r.laps.length === RACE_LAPS
+  return Number.isFinite(r.total) && r.total > 0 && r.total < 86400 && Array.isArray(r.laps) && r.laps.length === lapCount
     && r.laps.every(lap => Number.isFinite(lap) && lap > 0)
     && Math.abs(r.laps.reduce((sum, lap) => sum + lap, 0) - r.total) < 1e-6
     && typeof r.recordedAt === 'string' && Number.isFinite(Date.parse(r.recordedAt));
@@ -23,7 +23,7 @@ export function createRaceRecords(scope: RecordScope, storage?: RecordStorage) {
   const refresh = () => {
     try {
       const payload = JSON.parse(storage?.getItem(key) ?? 'null');
-      if (payload?.trackId === scope.trackId && payload?.configurationId === scope.configurationId && payload?.rulesVersion === RACE_RULES_VERSION && validRecord(payload.record)
+      if (payload?.trackId === scope.trackId && payload?.configurationId === scope.configurationId && payload?.rulesVersion === RACE_RULES_VERSION && validRecord(payload.record, scope.laps)
         && (!best || payload.record.total <= best.total)) {
         best = copy(payload.record); persisted = true;
       }
@@ -35,7 +35,7 @@ export function createRaceRecords(scope: RecordScope, storage?: RecordStorage) {
     read: () => copy(best),
     save(total: number, laps: readonly number[]): RecordResult {
       const record = { total, laps: [...laps], recordedAt: new Date().toISOString() };
-      if (!validRecord(record)) throw new Error('Invalid completed race');
+      if (!validRecord(record, scope.laps)) throw new Error('Invalid completed race');
       refresh(); // Another tab may have finished a faster race since this one started.
       const hadBest = best !== null;
       const isNewBest = !best || total < best.total - 1e-8;
