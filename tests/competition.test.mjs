@@ -81,13 +81,13 @@ test('the same named driver actually completes the mobile race more slowly', () 
   assert.ok(times[1] > times[0] * 1.08, `${times}`);
 });
 
-test('each player faces three unique other models and all four alternatives can appear', () => {
+test('each player faces seven opponents covering all four other models', () => {
   for (const player of DRONE_CATALOG) {
     const seen = new Set();
     for (const random of [() => 0, () => .999]) {
       const entries = selectRivalCrafts(player.configuration, random);
-      assert.equal(entries.length, 3);
-      assert.equal(new Set(entries.map(p => p.configuration.modelVariant)).size, 3);
+      assert.equal(entries.length, 7);
+      assert.equal(new Set(entries.map(p => p.configuration.modelVariant)).size, 4);
       assert.ok(entries.every(p => p.configuration.modelVariant !== player.configuration.modelVariant));
       entries.forEach(p => seen.add(p.configuration.modelVariant));
     }
@@ -98,7 +98,7 @@ test('each player faces three unique other models and all four alternatives can 
 test('AI liveries differ from every player color and keep catalog performance and paint untouched', () => {
   const original = JSON.stringify(DRONE_CATALOG), race = session();
   const visuals = createRivalVisuals(new THREE.Scene(), course, race.rivals);
-  assert.equal(new Set(race.rivals.map(p => p.color)).size, 3);
+  assert.equal(new Set(race.rivals.map(p => p.color)).size, 7);
   for (const rival of race.rivals) {
     assert.ok(DRONE_CATALOG.every(p => p.lineColor !== rival.color));
     assert.equal(rival.configuration.boostStyle.pulseColor, rival.color);
@@ -147,7 +147,7 @@ test('swept contact catches crossing, a lap gap and the start seam; separate hei
   assert.equal(craftContact(pose(20, 6), pose(40, 6), pose(30), pose(31), 500), false);
 });
 
-test('shared countdown, pause, resume and restart freeze/reset all four participants', () => {
+test('shared countdown, pause, resume and restart freeze/reset all eight participants', () => {
   const race = session(); race.start(); advance(race, 2.9);
   assert.equal(race.phase, 'countdown');
   assert.ok(race.rivals.every(p => p.controller.model.state.elapsed === 0));
@@ -159,7 +159,7 @@ test('shared countdown, pause, resume and restart freeze/reset all four particip
   assert.ok(race.rivals.every(p => Math.abs(p.controller.model.state.elapsed - elapsed) < 1e-8));
   race.restart(); assert.equal(race.phase, 'countdown');
   assert.equal(race.model.state.elapsed, 0);
-  assert.deepEqual(race.rivals.map(p => p.controller.model.state.distance), [-7, -14, -21]);
+  assert.deepEqual(race.rivals.map(p => p.controller.model.state.distance), [-7, -14, -21, -28, -35, -42, -49]);
 });
 
 test('contact slows both crafts using their collision resistance and does not penalize every simulation tick', () => {
@@ -187,7 +187,7 @@ test('focus slows every active racer while every official elapsed clock keeps ru
 test('braking lets AI overtake and every pilot completes three laps without waiting for the player', () => {
   const race = session(); race.start(); advance(race, 3);
   advance(race, 5, { ...input, brake: true });
-  assert.equal(race.snapshot().competition.playerRank, 4);
+  assert.equal(race.snapshot().competition.playerRank, 8);
   for (let n = 0; n < 6000; n++) {
     race.step(1 / 120, { ...input, boost: true, lift: n === 0 ? 1 : 0 });
     if (race.snapshot().competition.complete) break;
@@ -261,4 +261,20 @@ test('rendering at 30, 60 or 120 Hz preserves AI finish times and the final stan
     return race.snapshot().competition.standings.map(p => [p.id, p.rank, p.finishTime]);
   });
   assert.deepEqual(outcomes[0], outcomes[1]); assert.deepEqual(outcomes[1], outcomes[2]);
+});
+
+
+test('every grid has seven distinct identities, skilled leaders and safe three-column starts', () => {
+  for (const craft of DRONE_CATALOG) for (const random of [() => 0, () => .55, () => .999]) {
+    const race = createRaceSession(course, craft.configuration, createRaceRecords({ trackId: 'field-test', configurationId: craft.configuration.id }), 0, 'competition', random, 'desktop', {}, 1);
+    assert.equal(race.rivals.length, 7);
+    assert.equal(new Set(race.rivals.map(p => p.id)).size, 7);
+    assert.ok(race.rivals.some(p => p.rating >= 5));
+    assert.ok(Math.max(...race.rivals.map(p => p.rating)) - Math.min(...race.rivals.map(p => p.rating)) >= 3);
+    assert.ok(race.rivals.every(p => Math.abs(p.controller.model.state.offset) < course.halfWidth - 3));
+    const identities = race.rivals.map(p => p.id);
+    race.start(); advance(race, 5); race.restart();
+    assert.deepEqual(race.rivals.map(p => p.id), identities);
+    assert.equal(race.snapshot().competition.standings.length, 8);
+  }
 });

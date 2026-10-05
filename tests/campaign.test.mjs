@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { TRACK_CATALOG, campaignLapLimit, validateTrackCatalog } from '../output/test/game/track/trackCatalog.js';
 import { createCatalogTrack, trackMetrics } from '../output/test/game/track/trackRuntime.js';
 import { initialProgress, validateProgress, applyCommand } from '../output/test/game/progression/progress.js';
-import { initialCampaign, campaignStatus, nextCampaignTrack, validateCampaign } from '../output/test/game/progression/campaign.js';
+import { initialCampaign, campaignStatus, nextCampaignTrack, validateCampaign, campaignClearRecord, completeCampaign } from '../output/test/game/progression/campaign.js';
 import { createTimeAttack } from '../output/test/game/driving/createTimeAttack.js';
 import { createRaceRecords } from '../output/test/game/driving/raceRecords.js';
 import { aiDrivingInput } from '../output/test/game/driving/createRaceSession.js';
@@ -161,4 +161,47 @@ test('campaign keeps varied lap lengths, early stunts and difficulty relief betw
   assert.ok(Math.max(...TRACK_CATALOG.map(t=>t.rating))<=4);
   for(const t of TRACK_CATALOG)assert.ok(t.lapLimit>0);
   assert.ok(TRACK_CATALOG[12].rating>TRACK_CATALOG[0].rating && lengths[12]<lengths[0]);
+});
+
+
+test('a faster defeat or replay cannot overwrite the saved campaign passing result', () => {
+  const progress = initialCampaign();
+  const result = { mode: 'competition', trackId: first.id, revision: first.revision, total: 150, laps: [50,50,50], rank: 1, disqualified: false, assisted: true, lapLimit: campaignLapLimit(first) };
+  completeCampaign(progress, result);
+  completeCampaign(progress, { ...result, total: 120, laps: [40,40,40], rank: 2 });
+  completeCampaign(progress, { ...result, total: 135, laps: [45,45,45] });
+  const saved = validateCampaign(JSON.parse(JSON.stringify(progress)));
+  assert.equal(saved.modes.competition[first.id].records[`${first.revision}:assisted`].rank, 2);
+  assert.deepEqual(campaignClearRecord(saved, 'competition', first), { revision: first.revision, total: 150, laps: [50,50,50], rank: 1, assisted: true });
+});
+
+test('legacy clears display only verified passing records and all eight ranks persist', () => {
+  const progress = initialCampaign();
+  progress.modes.competition[first.id] = { cleared: true, attempts: 1, records: { [`${first.revision}:normal`]: { total: 120, laps: [40,40,40], rank: 8, assisted: false } } };
+  assert.equal(campaignClearRecord(validateCampaign(progress), 'competition', first), undefined);
+  progress.modes.competition[first.id].records[`${first.revision}:normal`].rank = 1;
+  assert.equal(campaignClearRecord(progress, 'competition', first).rank, 1);
+  progress.modes.competition[first.id].records[`${first.revision}:normal`].rank = 9;
+  assert.throws(() => validateCampaign(progress));
+});
+
+test('eighth-place campaign results are accepted but do not unlock the next course', () => {
+  const progress = initialCampaign();
+  const result = { mode: 'competition', trackId: first.id, revision: first.revision, total: 120, laps: [40,40,40], rank: 8, disqualified: false, assisted: false, lapLimit: campaignLapLimit(first) };
+  assert.equal(completeCampaign(progress, result).passed, false);
+  assert.equal(campaignStatus(progress, 'competition', second), 'locked');
+  assert.equal(validateCampaign(progress).modes.competition[first.id].records[`${first.revision}:normal`].rank, 8);
+  assert.throws(() => completeCampaign(progress, { ...result, rank: 9 }));
+  progress.modes.competition[first.id].clearRecord = { ...result, revision: first.revision };
+  assert.throws(() => validateCampaign(progress));
+});
+
+test('a recoverable legacy winning record survives a faster losing replay', () => {
+  const progress = initialCampaign();
+  const old = { total: 150, laps: [50,50,50], rank: 1, assisted: false };
+  progress.modes.competition[first.id] = { cleared: true, attempts: 1, records: { [`${first.revision}:normal`]: old } };
+  completeCampaign(progress, { mode: 'competition', trackId: first.id, revision: first.revision, total: 120, laps: [40,40,40], rank: 2, disqualified: false, assisted: false, lapLimit: campaignLapLimit(first) });
+  const saved = validateCampaign(JSON.parse(JSON.stringify(progress)));
+  assert.equal(saved.modes.competition[first.id].records[`${first.revision}:normal`].rank, 2);
+  assert.deepEqual(campaignClearRecord(saved, 'competition', first), { ...old, revision: first.revision });
 });

@@ -1,3 +1,6 @@
+export const AI_OPPONENT_COUNT = 7;
+export const RACE_PARTICIPANT_COUNT = AI_OPPONENT_COUNT + 1;
+
 export type AiControlMode = 'desktop' | 'touch';
 export type AiStyle = 'straight' | 'corner' | 'burst' | 'steady';
 export interface AiRacer {
@@ -66,8 +69,8 @@ export function distinctAiColor(color: string, playerColor: string): boolean {
 }
 
 /** Every model has several fixed liveries; selection avoids the player's nearby neon hue. */
-export function selectAiRacer(modelVariant: string, playerColor: string, random: () => number, rating?: number): AiRacer {
-  let candidates = AI_RACERS.filter(racer => racer.modelVariant === modelVariant && distinctAiColor(racer.color, playerColor));
+export function selectAiRacer(modelVariant: string, playerColor: string, random: () => number, rating?: number, excluded: ReadonlySet<string> = new Set()): AiRacer {
+  let candidates = AI_RACERS.filter(racer => !excluded.has(racer.id) && racer.modelVariant === modelVariant && distinctAiColor(racer.color, playerColor));
   if (rating !== undefined && candidates.length) {
     const nearest = Math.min(...candidates.map(r => Math.abs(r.rating - rating)));
     candidates = candidates.filter(r => Math.abs(r.rating - rating) <= Math.max(1, nearest));

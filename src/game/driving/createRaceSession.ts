@@ -7,7 +7,7 @@ import type { DrivingInput, DrivingState } from './createDrivingModel.js';
 import type { RaceRules } from './createTimeAttack.js';
 import { createTimeAttack } from './createTimeAttack.js';
 import { createRaceRecords } from './raceRecords.js';
-import { aiDrivingProfile, AI_STYLE_LABELS, selectAiRacer } from './aiRoster.js';
+import { aiDrivingProfile, AI_STYLE_LABELS, AI_OPPONENT_COUNT, selectAiRacer } from './aiRoster.js';
 import type { AiControlMode, AiDrivingProfile } from './aiRoster.js';
 import { RIVAL_ITEMS, isRivalItem } from '../progression/catalog.js';
 import type { RivalItemId } from '../progression/catalog.js';
@@ -35,14 +35,14 @@ export function rankParticipants(entries: Omit<Standing, 'rank'>[]): Standing[] 
 
 type ContactPose = Pick<DrivingState, 'distance' | 'offset' | 'altitude'>;
 
-/** Three distinct opponents from all four other models; injected randomness keeps simulations repeatable. */
+/** Seven opponents covering all four other models; injected randomness keeps simulations repeatable. */
 export function selectRivalCrafts(configuration: DroneConfiguration, random: () => number = Math.random) {
   const candidates = DRONE_CATALOG.filter(entry => entry.configuration.modelVariant !== configuration.modelVariant);
   for (let i = candidates.length - 1; i > 0; i--) {
     const j = Math.floor(random() * (i + 1));
     [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
   }
-  return candidates.slice(0, 3);
+  return Array.from({ length: AI_OPPONENT_COUNT }, (_, index) => candidates[index % candidates.length]);
 }
 /** Swept track-space boxes catch fast overtakes, including racers a lap apart and the start seam. */
 export function craftContact(a0: ContactPose, a1: ContactPose, b0: ContactPose, b1: ContactPose, length: number): boolean {
@@ -85,7 +85,7 @@ export function aiDrivingInput(track: Track, configuration: DroneConfiguration, 
   }
   const edge = track.halfWidth - 3.5;
   const laneWidth = Math.min(5.2, edge * .7);
-  const preferredLane = (index - 1) * laneWidth + Math.sin(state.distance / 210 + index * 2) * .65;
+  const preferredLane = (index % 3 - 1) * laneWidth + Math.sin(state.distance / 210 + index * 2) * .65;
   const traffic = opponents.filter(other => {
     const ahead = ((other.distance - state.distance) % track.length + track.length) % track.length;
     const lookAhead = Math.max(35, (desiredSpeed - other.speed) * 1.3 + 12);
@@ -116,8 +116,12 @@ export function createRaceSession(track: Track, configuration: DroneConfiguratio
   const craft = DRONE_CATALOG.find(c => c.configuration.modelVariant === configuration.modelVariant);
   const playerColor = craft?.lineColor ?? configuration.boostStyle.pulseColor;
   const candidates = mode === 'competition' ? selectRivalCrafts(configuration, random) : [];
-  const rivals = candidates.map(entry => {
-    const racer = selectAiRacer(entry.configuration.modelVariant, playerColor, random, rating);
+  const usedRacers = new Set<string>();
+  const baseRating = rating ?? 3;
+  const fieldRatings = [6, 5, Math.min(6, baseRating + 1), baseRating, baseRating, Math.max(1, baseRating - 1), 1];
+  const rivals = candidates.map((entry, index) => {
+    const racer = selectAiRacer(entry.configuration.modelVariant, playerColor, random, fieldRatings[index], usedRacers);
+    usedRacers.add(racer.id);
     const { color } = racer;
     const rivalConfiguration = { ...entry.configuration, boostStyle: {
       core: '#ffffff', body: color, tail: color, afterglow: color, pulseColor: color,
@@ -138,7 +142,7 @@ export function createRaceSession(track: Track, configuration: DroneConfiguratio
     rivals.forEach((rival, index) => {
       rival.effects.freeze = 0; rival.effects.jam = 0;
       rival.controller.model.state.distance = -(index + 1) * 7;
-      rival.controller.model.state.offset = (index - 1) * Math.min(4.5, track.halfWidth - 3.5);
+      rival.controller.model.state.offset = (index % 3 - 1) * Math.min(4.5, track.halfWidth - 3.5);
     });
   };
   grid();

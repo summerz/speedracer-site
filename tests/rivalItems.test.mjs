@@ -87,9 +87,9 @@ test('interference targets only nearest two rivals ahead within 180m, and no tar
   race.rivals.forEach(p=>{p.controller.model.state.distance = distance - 20;});
   assert.equal(race.useRivalItem('interference'),false);
   assert.equal(race.snapshot().items.find(p=>p.id==='interference').remaining,2);
-  race.rivals.forEach((p,i)=>{p.controller.model.state.distance = distance + [120,40,80][i];});
+  race.rivals.forEach((p,i)=>{p.controller.model.state.distance = distance + ([120,40,80][i] ?? -20);});
   assert.equal(race.useRivalItem('interference'),true);
-  assert.deepEqual(race.rivals.map(p=>p.effects.jam),[0,3,3]);
+  assert.deepEqual(race.rivals.map(p=>p.effects.jam),[0,3,3,0,0,0,0]);
   advance(race,3); assert.ok(race.rivals.every(p=>p.effects.jam<1e-8));
   race.rivals.forEach((p,i)=>{p.controller.model.state.distance = race.model.state.distance + (i===0 ? 181 : -20);});
   assert.equal(race.useRivalItem('interference'),false);
@@ -128,7 +128,7 @@ test('rival items preserve ordered laps, final standings and stable completion',
   advance(race,3); race.useRivalItem('interference');
   for(let n=0;n<12000&&!race.snapshot().competition.complete;n++)race.step(1/120,input);
   const final=race.snapshot(); assert.equal(final.competition.complete,true);
-  assert.deepEqual(final.competition.standings.map(p=>p.rank),[1,2,3,4]);
+  assert.deepEqual(final.competition.standings.map(p=>p.rank),[1,2,3,4,5,6,7,8]);
   assert.ok(final.competition.standings.every(p=>p.completedLaps===3&&p.finishTime>0));
   assert.equal(race.useRivalItem('time-stop'),false);
   advance(race,1); assert.deepEqual(race.snapshot(),final);

@@ -7,9 +7,14 @@
 .race-telemetry { display:grid; gap:5px; font-variant-numeric:tabular-nums; text-shadow:0 2px 6px #000; }
 .telemetry-row { display:flex; align-items:center; gap:24px; }
 .lap-readout { font-size:11px; color:var(--accent); white-space:nowrap; }
-.speed-readout { display:flex; align-items:baseline; gap:7px; }
-.speed-readout strong { font:600 38px/.95 'Barlow Condensed',sans-serif; }
-.speed-readout .mono, #drive-time { font-size:11px; color:#b4c8d0; }
+.speed-readout { display:flex; align-items:center; gap:8px; padding:7px 10px; border:1px solid #73b7bb55; border-left:3px solid var(--accent); background:#071724e6; }
+.speed-readout strong { min-width:3ch; color:#edfff9; font:600 42px/.95 'Barlow Condensed',sans-serif; font-variant-numeric:tabular-nums; }
+.speed-unit { display:grid; gap:3px; font-size:10px; color:#b4c8d0; }
+.speed-unit small { font:10px 'IBM Plex Mono',monospace; color:var(--accent); }
+.speed-readout[data-boost-stage='1'] strong { color:var(--accent); }
+.speed-readout[data-boost-stage='2'] { border-left-color:#ffc06c; }
+.speed-readout[data-boost-stage='2'] strong { color:#ffc06c; }
+#drive-time { font-size:11px; color:#b4c8d0; }
 .corner-guide { display:flex; align-items:center; gap:12px; font-size:11px; }
 .corner-guide strong { font-weight:500; }
 .corner-hint { color:#9ab2bc; font-size:10px; }
@@ -154,7 +159,8 @@ button:focus-visible { outline:2px solid #c9f9f2; outline-offset:3px; }
 .has-touch-controls .drive-hud { bottom:max(177px,calc(env(safe-area-inset-bottom) + 157px)); width:min(290px,calc(100% - 84px)); }
 @media (max-width:600px) {
   .race-header { padding-top:max(12px,env(safe-area-inset-top)); }
-  .speed-readout strong { font-size:32px; }
+  .speed-readout { gap:6px; padding:6px 8px; }
+  .speed-readout strong { font-size:36px; }
   .telemetry-row { gap:20px; }
   .corner-guide { font-size:10px; }.corner-hint { display:none; }
   .race-pip-frame { font-size:8px; }

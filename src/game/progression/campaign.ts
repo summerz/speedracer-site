@@ -1,10 +1,15 @@
 import { TRACK_CATALOG, campaignLapLimit } from '../track/trackCatalog.js';
 import type { TrackDefinition } from '../track/trackCatalog.js';
+import { RACE_PARTICIPANT_COUNT } from '../driving/aiRoster.js';
 import type { RaceMode } from '../driving/createRaceSession.js';
+
+export interface CampaignRecord { total: number; laps: number[]; rank: number; assisted: boolean }
+export interface CampaignClearRecord extends CampaignRecord { revision: number }
 
 export interface CampaignTrackProgress {
   cleared: boolean; attempts: number; clearedAt?: number;
-  records: Record<string, { total: number; laps: number[]; rank: number; assisted: boolean }>;
+  records: Record<string, CampaignRecord>;
+  clearRecord?: CampaignClearRecord;
 }
 export interface CampaignProgress {
   modes: Record<RaceMode, Record<string, CampaignTrackProgress>>;
@@ -31,8 +36,9 @@ export function validateCampaign(value: unknown): CampaignProgress {
     // Keep unknown/retired track IDs: later releases may restore them.
     for (const [id, entry] of Object.entries(data)) {
       if (!/^[a-z][a-z0-9-]*$/.test(id) || !entry || typeof entry.cleared !== 'boolean' || !Number.isSafeInteger(entry.attempts) || entry.attempts < 0 || !entry.records || typeof entry.records !== 'object' || Array.isArray(entry.records)) throw new Error('잘못된 캠페인 트랙 기록');
+      if (entry.clearRecord !== undefined && (!entry.cleared || !Number.isSafeInteger(entry.clearRecord?.revision) || entry.clearRecord.revision < 1 || (mode === 'competition' && entry.clearRecord.rank !== 1))) throw new Error('잘못된 통과 기록');
       if (entry.clearedAt !== undefined && (!Number.isFinite(entry.clearedAt) || entry.clearedAt < 0)) throw new Error('잘못된 클리어 시간');
-      for (const r of Object.values(entry.records)) if (!r || !Number.isFinite(r.total) || r.total <= 0 || !Array.isArray(r.laps) || !r.laps.length || r.laps.some(n => !Number.isFinite(n) || n <= 0) || !Number.isInteger(r.rank) || r.rank < 1 || r.rank > 4 || typeof r.assisted !== 'boolean') throw new Error('잘못된 캠페인 랩 기록');
+      for (const r of [...Object.values(entry.records), ...(entry.clearRecord ? [entry.clearRecord] : [])]) if (!r || !Number.isFinite(r.total) || r.total <= 0 || !Array.isArray(r.laps) || !r.laps.length || r.laps.some(n => !Number.isFinite(n) || n <= 0) || !Number.isInteger(r.rank) || r.rank < 1 || r.rank > RACE_PARTICIPANT_COUNT || typeof r.assisted !== 'boolean') throw new Error('잘못된 캠페인 랩 기록');
     }
   }
   return structuredClone(c);
@@ -46,20 +52,38 @@ export function completeCampaign(progress: CampaignProgress, outcome: CampaignOu
   const track = TRACK_CATALOG.find(t => t.id === outcome.trackId);
   if (!track || track.revision !== outcome.revision || !['time-attack', 'competition'].includes(outcome.mode)
     || !Number.isFinite(outcome.total) || outcome.total <= 0 || !Number.isFinite(outcome.lapLimit) || outcome.lapLimit <= 0
-    || !Number.isInteger(outcome.rank) || outcome.rank < 1 || outcome.rank > 4 || typeof outcome.disqualified !== 'boolean' || typeof outcome.assisted !== 'boolean'
+    || !Number.isInteger(outcome.rank) || outcome.rank < 1 || outcome.rank > RACE_PARTICIPANT_COUNT || typeof outcome.disqualified !== 'boolean' || typeof outcome.assisted !== 'boolean'
     || !Array.isArray(outcome.laps) || outcome.laps.some(n => !Number.isFinite(n) || n <= 0)) throw new Error('잘못된 캠페인 결과');
   const allowedLimit = campaignLapLimit(track);
   if (outcome.mode === 'time-attack' && outcome.lapLimit !== allowedLimit) throw new Error('잘못된 랩 제한시간');
   if (outcome.laps.length > track.laps || (!outcome.disqualified && (outcome.laps.length !== track.laps || Math.abs(outcome.laps.reduce((a, b) => a + b, 0) - outcome.total) > .003))) throw new Error('잘못된 랩 합계');
   if (campaignStatus(progress, outcome.mode, track) === 'locked') throw new Error('아직 도전할 수 없는 트랙입니다.');
   const entry = progress.modes[outcome.mode][track.id] ??= { cleared: false, attempts: 0, records: {} };
+  // Preserve a recoverable legacy winning result before a faster replay replaces it.
+  entry.clearRecord ??= campaignClearRecord(progress, outcome.mode, track);
   entry.attempts++;
   const passed = !outcome.disqualified && outcome.laps.length === track.laps && (outcome.mode === 'competition' ? outcome.rank === 1 : outcome.laps.every(lap => lap <= allowedLimit));
   const firstClear = passed && !entry.cleared;
-  if (passed) { entry.cleared = true; entry.clearedAt ??= Date.now(); }
+  if (passed) {
+    entry.cleared = true; entry.clearedAt ??= Date.now();
+    entry.clearRecord ??= { revision: track.revision, total: outcome.total, laps: [...outcome.laps], rank: outcome.rank, assisted: outcome.assisted };
+  }
   if (!outcome.disqualified && outcome.laps.length === track.laps) {
     const key = `${track.revision}:${outcome.assisted ? 'assisted' : 'normal'}`;
     if (!entry.records[key] || entry.records[key].total > outcome.total) entry.records[key] = { total: outcome.total, laps: [...outcome.laps], rank: outcome.rank, assisted: outcome.assisted };
   }
   return { passed, firstClear, bonus: firstClear ? 100 + track.rating * 25 : 0 };
+}
+
+/** Older saves have no dedicated clear record: only show a verifiable passing result. */
+export function campaignClearRecord(progress: CampaignProgress, mode: RaceMode, track: TrackDefinition): CampaignClearRecord | undefined {
+  const entry = progress.modes[mode][track.id];
+  if (!entry?.cleared) return undefined;
+  if (entry.clearRecord) return entry.clearRecord;
+  for (const [key, record] of Object.entries(entry.records)) {
+    const revision = Number(key.split(':')[0]);
+    if (!Number.isSafeInteger(revision) || revision < 1 || record.laps.length !== track.laps) continue;
+    if (mode === 'competition' ? record.rank === 1 : revision === track.revision && record.laps.every(lap => lap <= campaignLapLimit(track))) return { ...record, revision };
+  }
+  return undefined;
 }

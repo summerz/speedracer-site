@@ -50,8 +50,8 @@ export function mountApp(root: HTMLDivElement): () => void {
     const selected = { ...entry, configuration: upgradedConfiguration(profile.equipped, profile.upgrades[profile.equipped]) };
     if (screen === 'drive' && params.has('track') && (!track || campaignStatus(profile.campaign, mode, track) === 'locked')) { location.hash = 'campaign'; return; }
     const mount = screen === 'drive'
-      ? () => import('./raceApp').then(({ mountRace }) => () => mountRace(root, () => { location.hash = ''; }, selected.configuration, store, () => { location.hash = 'shop'; }, track ? { track, mode } : undefined))
-      : screen === 'campaign' ? () => import('./campaignApp').then(({ mountCampaign }) => () => mountCampaign(root, store))
+      ? () => import('./raceApp').then(({ mountRace }) => () => mountRace(root, () => { location.hash = track ? `campaign?track=${track.id}&mode=${mode}` : 'campaign'; }, selected.configuration, store, () => { location.hash = 'shop'; }, track ? { track, mode } : undefined))
+      : screen === 'campaign' ? () => import('./campaignApp').then(({ mountCampaign }) => () => mountCampaign(root, store, params.has('mode') ? { mode, trackId: params.get('track') ?? undefined } : undefined))
       : screen === 'shop' ? () => import('./shopApp').then(({ mountShop }) => () => mountShop(root, store, () => { location.hash = ''; }))
       : () => import('./hangarApp').then(({ mountHangar }) => () => mountHangar(root, selected, () => {}, () => { location.hash = 'campaign'; }, store));
     try {

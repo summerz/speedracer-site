@@ -28,13 +28,15 @@ export function mountMenuNavigation(root: HTMLElement): () => void {
   };
   const back = () => {
     const dialog = root.querySelector<HTMLDialogElement>('dialog[open]'); if (dialog) { dialog.close(); return; }
-    if (root.querySelector('.drive-screen')) { window.dispatchEvent(new CustomEvent('speedracer:menu-back')); return; }
+    const request = new CustomEvent('speedracer:menu-back', { cancelable: true });
+    if (!window.dispatchEvent(request) || root.querySelector('.drive-screen')) return;
     if (location.hash) location.hash = '';
   };
   window.addEventListener('keydown', event => {
     if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || inGame() || editable(event.target instanceof Element ? event.target : null)) return;
     const action = ({ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right'} as const)[event.code as 'ArrowUp'];
-    if (action) { event.preventDefault(); move(action); }
+    if (event.code === 'Escape') { event.preventDefault(); if (!event.repeat) back(); }
+    else if (action) { event.preventDefault(); move(action); }
     else if (event.code === 'Enter' && candidates().includes(document.activeElement as HTMLElement)) { event.preventDefault(); if (!event.repeat) select(); }
   }, { ...options, capture: true });
   const clear = () => { suspended = true; Object.assign(gamepadDriving, { connected:false, steer:0, brake:false, boost:false }); };
