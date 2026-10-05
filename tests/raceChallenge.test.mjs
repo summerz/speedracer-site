@@ -56,6 +56,32 @@ test('difficulty records and stars are independent, unlocks shared, bonus paid o
   assert.equal(campaignDifficultyProgress(p,'time-attack',first,'hard').attempts,1);
   assert.deepEqual(validateCampaign(p),p);
 });
+test('incidents lower stars but allow imperfect fast runs and never block a passing unlock',()=>{
+  const fast=result('normal',.89), laps=first.laps;
+  const rate=(collisions,offTrackExits)=>challengeStars('time-attack',first,'normal',{...fast,collisions,offTrackExits});
+  assert.equal(rate(3*laps,1*laps),3); // 14 points per lap: below the 15-point allowance.
+  assert.equal(rate(4*laps,1*laps),2);
+  assert.equal(rate(6*laps,3*laps),1);
+  assert.equal(challengeStars('competition',first,'normal',{...fast,collisions:8*laps}),2);
+  assert.equal(challengeStars('time-attack',first,'normal',{...result(),offTrackExits:100}),1);
+  const p=initialCampaign(),dirty={...fast,collisions:4*laps,offTrackExits:1*laps};
+  assert.equal(completeCampaign(p,dirty).stars,2);
+  assert.equal(campaignStatus(p,'time-attack',TRACK_CATALOG[1]),'available');
+  let d=campaignDifficultyProgress(p,'time-attack',first);
+  assert.equal(d.clearRecord.collisions,dirty.collisions);
+  assert.equal(d.clearRecord.offTrackExits,dirty.offTrackExits);
+  completeCampaign(p,{...result('normal',.90),collisions:0,offTrackExits:0});
+  completeCampaign(p,{...result('normal',.70),collisions:20*laps,offTrackExits:10*laps});
+  d=campaignDifficultyProgress(p,'time-attack',first);
+  assert.equal(d.stars,3);assert.equal(d.clearRecord.collisions,0);
+  assert.equal(d.records[`${first.revision}:normal`].offTrackExits,10*laps);
+  assert.deepEqual(validateCampaign(p),p);
+  for(const field of ['collisions','offTrackExits']) {
+    assert.throws(()=>completeCampaign(p,{...fast,[field]:-1}));
+    const invalid=structuredClone(p);invalid.modes['time-attack'][first.id].difficulties.normal.clearRecord[field]=1.5;
+    assert.throws(()=>validateCampaign(invalid));
+  }
+});
 test('legacy records migrate to normal without losing clear records or unlocking bonuses',()=>{
   const p=initialCampaign(),old=result();
   p.modes['time-attack'][first.id]={cleared:true,attempts:2,records:{[`${first.revision}:normal`]:{total:old.total,laps:old.laps,rank:1,assisted:false}}};

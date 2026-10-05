@@ -1,4 +1,4 @@
-import { RACE_CHALLENGES, challengeStars, type RaceChallengeId } from './game/track/raceChallenge';
+import { RACE_CHALLENGES, challengeStars, challengeStarPenalty, type RaceChallengeId } from './game/track/raceChallenge';
 import { selectRaceEnvironment } from './game/environment/raceEnvironment';
 import { AI_OPPONENT_COUNT } from './game/driving/aiRoster';
 import { RIVAL_ITEMS } from './game/progression/catalog';
@@ -151,6 +151,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
         const next = TRACK_CATALOG.find(t => t.predecessor === campaign.track.id);
         const stars = outcome ? challengeStars(selectedMode, campaign.track, challenge, outcome) : 0;
         get('campaign-result').textContent = passed ? `${'★'.repeat(stars)}${'☆'.repeat(3 - stars)} · ${RACE_CHALLENGES[challenge].label} · ` + (next ? '트랙 통과 · 다음 코스가 열렸습니다.' : '캠페인 완주 · 모든 코스를 통과했습니다.') : outcome?.disqualified ? '랩 제한시간 초과 · 다시 도전하세요.' : selectedMode === 'competition' ? `${campaignRankLimit(campaign.track)}위 이내로 완주하면 다음 코스가 열립니다.` : '모든 랩을 제한시간 안에 완주하면 다음 코스가 열립니다.';
+        if (passed && outcome) get('campaign-result').textContent += ` · 별점 감점 ${challengeStarPenalty(outcome, campaign.track.laps).toFixed(1)}점/랩`;
         get('campaign-next').hidden = !passed || !next;
         if (passed && next && document.activeElement === startButton && lastPhase === 'finished') get('campaign-next').focus({ preventScroll: true });
       }
@@ -245,7 +246,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
       get('record-warning').hidden = !attack.result || attack.result.saved;
       get('campaign-next').hidden = true;
       get('campaign-result').textContent = campaign ? '캠페인 결과를 저장하고 있습니다…' : '';
-      campaignOutcome = campaign ? { mode: selectedMode, trackId: campaign.track.id, revision: campaign.track.revision, total: state.elapsed, laps: attack.lapTimes, rank: competition?.playerRank ?? 1, disqualified: attack.disqualified, assisted: attack.assisted, lapLimit: attack.lapLimit ?? 1, challenge } : undefined;
+      campaignOutcome = campaign ? { mode: selectedMode, trackId: campaign.track.id, revision: campaign.track.revision, total: state.elapsed, laps: attack.lapTimes, rank: competition?.playerRank ?? 1, disqualified: attack.disqualified, assisted: attack.assisted, lapLimit: attack.lapLimit ?? 1, challenge, collisions: state.collisions, offTrackExits: state.offTrackExits } : undefined;
       get('result-shop').hidden = !onShop;
       rewardInput = { raceId: attack.raceId, difficulty: selectedDifficulty, collisions: state.collisions, offTrackExits: state.offTrackExits, recoveries: state.recoveries, penaltyPoints: state.penaltyPoints, obstaclesPassed: state.obstaclesPassed, cleanHalfLaps: attack.cleanHalfLaps, improvedExistingBest: !!attack.result?.improvedExistingBest, assisted: attack.assisted };
       get('result-reward').textContent = store ? '완주 보상을 저장하고 있습니다…' : '';

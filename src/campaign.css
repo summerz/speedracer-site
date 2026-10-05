@@ -145,7 +145,9 @@
   .campaign-craft-copy strong { font-size:17px; }
 }
 
-.course-challenges { display:flex; gap:6px; margin:12px 0 8px; }
+.campaign-difficulty { display:grid; grid-template-columns:auto minmax(0,1fr); align-items:center; gap:12px; margin-top:12px; }
+.campaign-difficulty > span { color:#99adb9; font-size:11px; white-space:nowrap; }
+.course-challenges { display:flex; gap:6px; margin:0; }
 .course-challenges button { flex:1; min-height:44px; padding:10px 12px; border:1px solid #58717d70; border-radius:5px; background:#0b1c28; color:#c9dadf; font:inherit; font-size:13px; cursor:pointer; }
 .course-challenges button[aria-pressed=true] { border-color:#80ffe0; background:#12312f; color:#baffeb; }
 .course-challenges button:focus-visible { outline:2px solid #80ffe0; outline-offset:3px; }

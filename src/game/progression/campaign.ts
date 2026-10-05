@@ -1,10 +1,10 @@
 import { TRACK_CATALOG, campaignRankLimit } from '../track/trackCatalog.js';
 import type { TrackDefinition } from '../track/trackCatalog.js';
 import { RACE_PARTICIPANT_COUNT } from '../driving/aiRoster.js';
-import { challengeLapLimit, challengeStars, raceChallenge, type RaceChallengeId } from '../track/raceChallenge.js';
+import { challengeLapLimit, challengeStars, raceChallenge, type RaceStarIncidents, type RaceChallengeId } from '../track/raceChallenge.js';
 import type { RaceMode } from '../driving/createRaceSession.js';
 
-export interface CampaignRecord { total: number; laps: number[]; rank: number; assisted: boolean }
+export interface CampaignRecord extends RaceStarIncidents { total: number; laps: number[]; rank: number; assisted: boolean }
 export interface CampaignClearRecord extends CampaignRecord { revision: number }
 
 export interface CampaignDifficultyProgress {
@@ -29,11 +29,14 @@ export function campaignStatus(progress: CampaignProgress, mode: RaceMode, track
 export function nextCampaignTrack(progress: CampaignProgress, mode: RaceMode, catalog = TRACK_CATALOG) {
   return catalog.find(t => campaignStatus(progress, mode, t) === 'available') ?? catalog[0];
 }
+function validIncidents(result: RaceStarIncidents) {
+  return [result.collisions, result.offTrackExits].every(count => count === undefined || (Number.isSafeInteger(count) && count >= 0));
+}
 function validateEntry(entry: CampaignDifficultyProgress) {
   if (!entry || typeof entry.cleared !== 'boolean' || !Number.isSafeInteger(entry.attempts) || entry.attempts < 0 || !entry.records || typeof entry.records !== 'object' || Array.isArray(entry.records)) throw new Error('잘못된 캠페인 트랙 기록');
   if (entry.clearRecord !== undefined && (!entry.cleared || !Number.isSafeInteger(entry.clearRecord?.revision) || entry.clearRecord.revision < 1)) throw new Error('잘못된 통과 기록');
   if (entry.clearedAt !== undefined && (!Number.isFinite(entry.clearedAt) || entry.clearedAt < 0)) throw new Error('잘못된 클리어 시간');
-  for (const r of [...Object.values(entry.records), ...(entry.clearRecord ? [entry.clearRecord] : [])]) if (!r || !Number.isFinite(r.total) || r.total <= 0 || !Array.isArray(r.laps) || !r.laps.length || r.laps.some(n => !Number.isFinite(n) || n <= 0) || !Number.isInteger(r.rank) || r.rank < 1 || r.rank > RACE_PARTICIPANT_COUNT || typeof r.assisted !== 'boolean') throw new Error('잘못된 캠페인 랩 기록');
+  for (const r of [...Object.values(entry.records), ...(entry.clearRecord ? [entry.clearRecord] : [])]) if (!r || !Number.isFinite(r.total) || r.total <= 0 || !Array.isArray(r.laps) || !r.laps.length || r.laps.some(n => !Number.isFinite(n) || n <= 0) || !Number.isInteger(r.rank) || r.rank < 1 || r.rank > RACE_PARTICIPANT_COUNT || typeof r.assisted !== 'boolean' || !validIncidents(r)) throw new Error('잘못된 캠페인 랩 기록');
   if (entry.stars !== undefined && (!Number.isInteger(entry.stars) || entry.stars < 0 || entry.stars > 3 || (entry.stars > 0 && !entry.cleared))) throw new Error('잘못된 별점');
 }
 
@@ -75,7 +78,7 @@ export function validateCampaign(value: unknown): CampaignProgress {
   }
   return structuredClone(c);
 }
-export interface CampaignOutcome {
+export interface CampaignOutcome extends RaceStarIncidents {
   mode: RaceMode; trackId: string; revision: number; total: number; laps: number[];
   rank: number; disqualified: boolean; assisted: boolean; lapLimit: number; challenge?: RaceChallengeId;
 }
@@ -84,7 +87,7 @@ export function completeCampaign(progress: CampaignProgress, outcome: CampaignOu
   const track = TRACK_CATALOG.find(t => t.id === outcome.trackId);
   if (!track || track.revision !== outcome.revision || !['time-attack', 'competition'].includes(outcome.mode)
     || !Number.isFinite(outcome.total) || outcome.total <= 0 || !Number.isFinite(outcome.lapLimit) || outcome.lapLimit <= 0
-    || !Number.isInteger(outcome.rank) || outcome.rank < 1 || outcome.rank > RACE_PARTICIPANT_COUNT || typeof outcome.disqualified !== 'boolean' || typeof outcome.assisted !== 'boolean'
+    || !Number.isInteger(outcome.rank) || outcome.rank < 1 || outcome.rank > RACE_PARTICIPANT_COUNT || typeof outcome.disqualified !== 'boolean' || typeof outcome.assisted !== 'boolean' || !validIncidents(outcome)
     || !Array.isArray(outcome.laps) || outcome.laps.some(n => !Number.isFinite(n) || n <= 0)) throw new Error('잘못된 캠페인 결과');
   const challenge = raceChallenge(outcome.challenge);
   if (outcome.challenge !== undefined && outcome.challenge !== challenge) throw new Error('잘못된 난이도');
@@ -104,17 +107,20 @@ export function completeCampaign(progress: CampaignProgress, outcome: CampaignOu
   const passed = !outcome.disqualified && outcome.laps.length === track.laps && (outcome.mode === 'competition' ? outcome.rank <= campaignRankLimit(track) : outcome.laps.every(lap => lap <= allowedLimit));
   const firstClear = passed && !entry.cleared;
   const stars = challengeStars(outcome.mode, track, challenge, outcome);
+  const incidents: RaceStarIncidents = {};
+  if (outcome.collisions !== undefined) incidents.collisions = outcome.collisions;
+  if (outcome.offTrackExits !== undefined) incidents.offTrackExits = outcome.offTrackExits;
   difficulty.stars = Math.max(difficulty.stars ?? 0, stars);
   if (passed) {
     difficulty.cleared = true; difficulty.clearedAt ??= Date.now();
     // Keep the strongest passing result for the comparison table, independently of fastest total.
-    if (!difficulty.clearRecord || stars > challengeStars(outcome.mode, track, challenge, { ...difficulty.clearRecord, disqualified: false }) || (stars === challengeStars(outcome.mode, track, challenge, { ...difficulty.clearRecord, disqualified: false }) && outcome.total < difficulty.clearRecord.total)) difficulty.clearRecord = { revision: track.revision, total: outcome.total, laps: [...outcome.laps], rank: outcome.rank, assisted: outcome.assisted };
+    if (!difficulty.clearRecord || stars > challengeStars(outcome.mode, track, challenge, { ...difficulty.clearRecord, disqualified: false }) || (stars === challengeStars(outcome.mode, track, challenge, { ...difficulty.clearRecord, disqualified: false }) && outcome.total < difficulty.clearRecord.total)) difficulty.clearRecord = { revision: track.revision, total: outcome.total, laps: [...outcome.laps], rank: outcome.rank, assisted: outcome.assisted, ...incidents };
     entry.cleared = true; entry.clearedAt ??= Date.now();
-    entry.clearRecord ??= { revision: track.revision, total: outcome.total, laps: [...outcome.laps], rank: outcome.rank, assisted: outcome.assisted };
+    entry.clearRecord ??= { revision: track.revision, total: outcome.total, laps: [...outcome.laps], rank: outcome.rank, assisted: outcome.assisted, ...incidents };
   }
   if (!outcome.disqualified && outcome.laps.length === track.laps) {
     const key = `${track.revision}:${outcome.assisted ? 'assisted' : 'normal'}`;
-    if (!difficulty.records[key] || difficulty.records[key].total > outcome.total) difficulty.records[key] = { total: outcome.total, laps: [...outcome.laps], rank: outcome.rank, assisted: outcome.assisted };
+    if (!difficulty.records[key] || difficulty.records[key].total > outcome.total) difficulty.records[key] = { total: outcome.total, laps: [...outcome.laps], rank: outcome.rank, assisted: outcome.assisted, ...incidents };
     if (challenge === 'normal') entry.records[key] = structuredClone(difficulty.records[key]);
   }
   return { passed, firstClear, stars, bonus: firstClear ? 100 + track.rating * 25 : 0 };

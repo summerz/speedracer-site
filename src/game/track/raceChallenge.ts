@@ -13,7 +13,19 @@ export function raceChallenge(value: unknown): RaceChallengeId {
 export function challengeLapLimit(track: TrackDefinition, challenge: RaceChallengeId = 'normal') {
   return Math.round(campaignLapLimit(track) * RACE_CHALLENGES[challenge].timeScale);
 }
+export interface RaceStarIncidents { collisions?: number; offTrackExits?: number }
+/** A few mistakes fit within each grade's 15-point allowance. Exits weigh more than contact. */
+export function challengeStarPenalty(result: RaceStarIncidents, laps: number): number {
+  return ((result.collisions ?? 0) * 2 + (result.offTrackExits ?? 0) * 8) / Math.max(1, laps);
+}
 export function challengeStars(mode: 'time-attack' | 'competition', track: TrackDefinition, challenge: RaceChallengeId,
+  result: { laps: number[]; rank: number; disqualified: boolean } & RaceStarIncidents): number {
+  const base = performanceStars(mode, track, challenge, result);
+  if (!base) return 0;
+  const score = 40 + base * 20 - challengeStarPenalty(result, track.laps);
+  return score >= 85 ? 3 : score >= 65 ? 2 : 1;
+}
+function performanceStars(mode: 'time-attack' | 'competition', track: TrackDefinition, challenge: RaceChallengeId,
   result: { laps: number[]; rank: number; disqualified: boolean }): number {
   if (result.disqualified || result.laps.length !== track.laps || result.laps.some(lap => !Number.isFinite(lap) || lap <= 0)) return 0;
   if (mode === 'competition') {
