@@ -1,5 +1,6 @@
 import { RACE_PARTICIPANT_COUNT } from './game/driving/aiRoster';
 import { menuHeader } from './menuHeader';
+import { DRONE_CATALOG } from './game/drone/droneCatalog';
 import { TRACK_CATALOG, DISTRICTS, campaignLapLimit, campaignRankLimit } from './game/track/trackCatalog';
 import { createCatalogTrack, trackMetrics } from './game/track/trackRuntime';
 import { campaignStatus, nextCampaignTrack, campaignClearRecord } from './game/progression/campaign';
@@ -15,7 +16,9 @@ export function mountCampaign(root: HTMLDivElement, store: ProgressStore, contex
   let mode: RaceMode = context?.mode ?? initial.last.mode;
   let selected = TRACK_CATALOG.find(t => t.id === (context?.trackId ?? initial.last.trackId) && campaignStatus(initial, mode, t) !== 'locked') ?? nextCampaignTrack(initial, mode);
   root.innerHTML = `<main class="campaign-screen">${menuHeader('campaign', store.snapshot().balance)}
-    <section class="campaign-heading"><div><p class="eyebrow">CITY CIRCUITS</p><h1>CAMPAIGN<span>.</span></h1></div><p id="campaign-count" class="mono"></p></section>
+    <section class="campaign-heading"><div class="campaign-heading-title"><p class="eyebrow">CITY CIRCUITS</p><h1>CAMPAIGN<span>.</span></h1><p id="campaign-count" class="mono"></p></div>
+      <a id="campaign-craft" class="campaign-craft" href="#" aria-label="격납고에서 출전 기체 변경"><img id="campaign-craft-image" width="480" height="240" alt=""><span class="campaign-craft-copy"><span class="campaign-craft-caption">출전 기체<span aria-hidden="true">변경 ↗</span></span><strong id="campaign-craft-name"></strong><span id="campaign-craft-role"></span></span></a>
+    </section>
     <div class="campaign-layout"><section class="campaign-courses" aria-label="트랙 선택">
       <div class="campaign-modes" role="group" aria-label="캠페인 방식"><button type="button" data-mode="time-attack">타임어택</button><button type="button" data-mode="competition">AI 레이스</button></div>
       <p id="campaign-rule" class="campaign-rule"></p><div id="campaign-list" class="campaign-list"></div>
@@ -41,6 +44,15 @@ export function mountCampaign(root: HTMLDivElement, store: ProgressStore, contex
   const paint = () => {
     const focusedTrack = document.activeElement instanceof HTMLElement ? document.activeElement.dataset.track : undefined;
     const profile = store.snapshot(), campaign = profile.campaign;
+    const craft = DRONE_CATALOG.find(entry => entry.configuration.id === profile.equipped) ?? DRONE_CATALOG[0];
+    const craftLink = get('campaign-craft');
+    craftLink.style.setProperty('--campaign-craft-color', craft.lineColor);
+    craftLink.setAttribute('aria-label', `${craft.name} · ${craft.role} · 격납고에서 출전 기체 변경`);
+    const craftImage = get('campaign-craft-image') as HTMLImageElement;
+    const imagePath = `/craft-previews/${craft.configuration.modelVariant}.png`;
+    if (craftImage.getAttribute('src') !== imagePath) craftImage.src = imagePath;
+    get('campaign-craft-name').textContent = craft.name;
+    get('campaign-craft-role').textContent = craft.role;
     get('campaign-balance').textContent = `${profile.balance.toLocaleString()} P`;
     const count = TRACK_CATALOG.filter(t => campaignStatus(campaign, mode, t) === 'cleared').length;
     get('campaign-count').textContent = `${count} / ${TRACK_CATALOG.length} CLEARED`;
