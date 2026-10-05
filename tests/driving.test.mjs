@@ -189,7 +189,7 @@ for (const kind of ['rise', 'descend']) {
     Object.assign(model.state, { distance: 45, speed: 64, altitude: wrongHeight, targetAltitude: wrongHeight });
     model.step(.1, input({ throttle: true, boost: true }));
     assert.ok(model.state.distance > 45.8, 'passes into the field');
-    assert.ok(model.state.speed > 64 * .3 && model.state.speed < 64 * .5, 'substantial speed loss without stopping');
+    assert.ok(model.state.speed > 64 * .2 && model.state.speed < 64 * .4, 'substantial speed loss without stopping');
     assert.equal(model.state.notice, 'height-collision');
     assert.equal(model.state.collisions, 1);
     advance(model, .5, input({ throttle: true }));

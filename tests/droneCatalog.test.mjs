@@ -33,7 +33,7 @@ test('Halo accelerates faster, Needle cruises faster, Catamaran steers faster at
   for (const speed of [60, 125, 155]) assert.ok(steeringYawRate(speed, get('Catamaran').performance) > steeringYawRate(speed, vanguard));
 });
 
-test('wall loss matches the display and electric-field severity respects craft resistance', () => {
+test('stronger wall loss matches the display and electric-field severity respects craft resistance', () => {
   const electric = { ...track, heightObstacles: [{ id: 0, distance: 5, depth: 4, minAltitude: 4, maxAltitude: 7, speedRetention: .35 }] };
   const losses = [];
   for (const craft of DRONE_CATALOG) {
@@ -43,8 +43,8 @@ test('wall loss matches the display and electric-field severity respects craft r
     model.step(1 / 120, { ...NEUTRAL_INPUT, steer: 1 });
     assert.equal(model.state.collisions, 1);
     const acceleration = flightAcceleration(60, p.topSpeed, 0, p, { grade: 0, curvature: 0, steer: 1, altitudeSpeed: 0 });
-    assert.ok(Math.abs(model.state.speed / (60 + acceleration / 120) - (1 - p.collisionSpeedLoss)) < 1e-8);
-    assert.equal(droneStats(craft.configuration).find(stat => stat.label === '충돌 감속').value, (p.collisionSpeedLoss * 100).toFixed(0));
+    assert.ok(Math.abs(model.state.speed / (60 + acceleration / 120) - (1 - p.collisionSpeedLoss * 1.15)) < 1e-8);
+    assert.equal(droneStats(craft.configuration).find(stat => stat.label === '충돌 감속').value, (p.collisionSpeedLoss * 115).toFixed(0));
     const field = createDrivingModel(electric, p); field.state.speed = 60; field.step(.1, NEUTRAL_INPUT);
     assert.equal(field.state.collisions, 1);
     losses.push([craft.name, field.state.speed]);

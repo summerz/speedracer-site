@@ -14,6 +14,7 @@ export function createNightSky(environment: NightEnvironment, forward: THREE.Vec
   const up = new THREE.Vector3().crossVectors(right, center).normalize();
   const material = new THREE.ShaderMaterial({
     uniforms: {
+      storm: { value: environment.rain ? 1 : 0 }, flash: { value: 0 },
       zenith: { value: new THREE.Color(environment.zenith) }, horizon: { value: new THREE.Color(environment.horizon) },
       starStrength: { value: environment.stars }, tint: { value: new THREE.Color(environment.celestialColor) },
       center: { value: center }, celestialRight: { value: right }, celestialUp: { value: up },
@@ -24,6 +25,7 @@ export function createNightSky(environment: NightEnvironment, forward: THREE.Vec
     vertexShader: 'varying vec3 direction; void main(){ direction=position; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }',
     fragmentShader: `
       varying vec3 direction;
+      uniform float storm, flash;
       uniform vec3 zenith, horizon, tint, center, celestialRight, celestialUp;
       uniform float starStrength, diskRadius, ringed, crescent;
       float hash(vec3 p){p=fract(p*.1031); p+=dot(p,p.yzx+33.33); return fract((p.x+p.y)*p.z);}
@@ -101,6 +103,9 @@ export function createNightSky(environment: NightEnvironment, forward: THREE.Vec
         // Actual ground/buildings occlude the complete body as the camera moves.
         float horizonHaze=.18*exp(-pow(d.y/.055,2.));
         color=mix(color,horizon*.65,horizonHaze);
+        float clouds=smoothstep(.2,.65,noise(d*5.+vec3(0.,2.,0.)));
+        color=mix(color, mix(zenith,horizon,clouds)*.7, storm*(.78+clouds*.2));
+        color+=vec3(.55,.68,.85)*flash;
         gl_FragColor=vec4(color,1.);
       }`,
     side: THREE.BackSide, depthWrite: false, fog: false, toneMapped: false,
@@ -112,6 +117,7 @@ export function createNightSky(environment: NightEnvironment, forward: THREE.Vec
   return {
     object,
     update(cameraPosition: THREE.Vector3) { object.position.copy(cameraPosition); },
+    setLightning(value: number) { material.uniforms.flash.value = value; },
     setOverview(value: boolean) { object.visible = !value; },
   };
 }

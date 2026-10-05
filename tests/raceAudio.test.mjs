@@ -94,3 +94,88 @@ test('missing or blocked Web Audio cannot prevent a race', () => {
   assert.doesNotThrow(() => { unavailable.activate(); unavailable.update('running', 0, 0, 1, false); unavailable.dispose(); });
   globalThis.AudioContext = original;
 });
+
+test('altitude warning repeats gently, cancels immediately on match, and obeys pause/mute', () => {
+  const original = globalThis.AudioContext;
+  globalThis.AudioContext = Context;
+  try {
+    const audio = createRaceAudio(); audio.activate();
+    const ctx = Context.instances.at(-1);
+    audio.update('running', 0, 0, 1, false);
+    let count = ctx.oscillators.length;
+    audio.setAltitudeWarning('down');
+    const warning = ctx.oscillators.at(-1);
+    assert.equal(warning.frequency.values[0], 330);
+    assert.equal(ctx.oscillators.length, count + 2);
+    ctx.currentTime = .3; audio.setAltitudeWarning('down');
+    assert.equal(ctx.oscillators.length, count + 2);
+    ctx.currentTime = .9; audio.setAltitudeWarning('down');
+    assert.equal(ctx.oscillators.length, count + 4);
+    const repeated = ctx.oscillators.at(-1);
+    audio.setAltitudeWarning(null);
+    assert.equal(repeated.connections.length, 0);
+    assert.equal(repeated.stops.at(-1), 0);
+    ctx.currentTime = 1.3; audio.setAltitudeWarning('down'); const resumed = ctx.oscillators.at(-1);
+    audio.pause(); assert.equal(resumed.connections.length, 0);
+    count = ctx.oscillators.length;
+    audio.setAltitudeWarning('down'); assert.equal(ctx.oscillators.length, count);
+    audio.update('running', 0, 0, 1, false); audio.setEnabled(false);
+    audio.setAltitudeWarning('down'); assert.equal(ctx.oscillators.length, count);
+    audio.dispose();
+  } finally { globalThis.AudioContext = original; }
+});
+
+test('boost notifications and thunder schedule finite voices and respect effects mute', () => {
+  const original = globalThis.AudioContext;
+  globalThis.AudioContext = Context;
+  try {
+    const audio = createRaceAudio(); audio.activate();
+    const ctx = Context.instances.at(-1);
+    audio.update('running', 0, 0, 1, false);
+    let count = ctx.oscillators.length;
+    audio.play('boost-full'); assert.equal(ctx.oscillators.length, count + 3);
+    audio.play('boost-complete'); assert.equal(ctx.oscillators.length, count + 3, 'notifications are serialized');
+    ctx.currentTime = .7; audio.update('running', 0, 0, 1, false);
+    assert.equal(ctx.oscillators.length, count + 9);
+    const sources = ctx.sources.length;
+    audio.play('thunder'); assert.equal(ctx.sources.length, sources + 2);
+    assert.equal(ctx.oscillators.at(-1).frequency.values[0], 48);
+    count = ctx.oscillators.length;
+    audio.setEnabled(false);
+    for (const cue of ['boost-full', 'boost-complete', 'thunder']) audio.play(cue);
+    assert.equal(ctx.oscillators.length, count);
+    audio.dispose();
+  } finally { globalThis.AudioContext = original; }
+});
+
+
+test('warnings duck engine/weather, use distinct directions, and defer boost chimes', () => {
+  const original = globalThis.AudioContext; globalThis.AudioContext = Context;
+  try {
+    const audio = createRaceAudio(); audio.activate(); const ctx = Context.instances.at(-1);
+    audio.update('running', 0, 0, 1, false);
+    const engineBus = ctx.oscillators[0].connections[0].connections[0].connections[0];
+    assert.equal(engineBus.gain.value, 1);
+    audio.setAltitudeWarning('up');
+    const up = ctx.oscillators.slice(-2);
+    assert.deepEqual(up.map(n => n.frequency.values[0]), [660, 990]);
+    assert.ok(up.every(n => n.type === 'triangle'));
+    assert.equal(engineBus.gain.value, .28);
+    let count = ctx.oscillators.length;
+    audio.play('boost-full'); assert.equal(ctx.oscillators.length, count);
+    ctx.currentTime = .4; audio.setAltitudeWarning('down');
+    assert.ok(up.every(n => n.connections.length === 0));
+    assert.deepEqual(ctx.oscillators.slice(-2).map(n => n.frequency.values[0]), [440, 330]);
+    assert.ok(ctx.oscillators.slice(-2).every(n => n.type === 'square'));
+    ctx.currentTime = .8; audio.setAltitudeWarning(null);
+    assert.equal(ctx.oscillators.at(-3).frequency.values[0], 1568, 'queued recharge plays once warning stops');
+    ctx.currentTime = 1.6; audio.update('running', 0, 0, 1, false);
+    assert.equal(engineBus.gain.value, 1, 'background returns to normal');
+    audio.setAltitudeWarning('up'); audio.play('electric-impact');
+    assert.equal(ctx.oscillators.at(-1).type, 'sawtooth');
+    count = ctx.oscillators.length; audio.setAltitudeWarning('up');
+    assert.equal(ctx.oscillators.length, count, 'impact has a short protected interval');
+    audio.pause(); assert.equal(engineBus.gain.value, 1);
+    audio.dispose();
+  } finally { globalThis.AudioContext = original; }
+});

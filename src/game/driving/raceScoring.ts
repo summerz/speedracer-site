@@ -1,5 +1,7 @@
 export const OFF_TRACK_PENALTY_POINTS = 7;
 export const COLLISION_PENALTY_POINTS = 1;
+export const OBSTACLE_COLLISION_PENALTY_POINTS = 3;
+export const OBSTACLE_PASS_POINTS = 1;
 export const CLEAN_HALF_LAP_POINTS = 3;
 export const RECORD_BONUS_POINTS = 30;
 

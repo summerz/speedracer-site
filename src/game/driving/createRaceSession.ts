@@ -175,9 +175,10 @@ export function createRaceSession(track: Track, configuration: DroneConfiguratio
         targets: targets(item.id).map(rival => rival.name) })) }; },
     start() {
       const fresh = player.phase === 'ready' || player.phase === 'finished';
+      if (fresh) track.randomizeObstacles?.(random);
       player.start(); rivals.forEach(p => fresh ? p.controller.restart() : p.controller.start()); if (fresh) grid();
     },
-    restart() { player.restart(); rivals.forEach(p => p.controller.restart()); grid(); },
+    restart() { track.randomizeObstacles?.(random); player.restart(); rivals.forEach(p => p.controller.restart()); grid(); },
     pause() { player.pause(); rivals.forEach(p => p.controller.pause()); },
     recover() { player.recover(); },
     useFocus() {

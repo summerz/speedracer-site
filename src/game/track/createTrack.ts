@@ -1,3 +1,4 @@
+import { expandObstacleLayout, randomObstacleAltitudes } from './obstacleLayout.js';
 import * as THREE from 'three';
 import { createDischargeBarrier } from './createDischargeBarrier.js';
 import { altitudeCanPass, resolveAltitudeProfile } from './altitudeProfile.js';
@@ -32,6 +33,7 @@ export interface Track {
   readonly halfWidth: number;
   readonly checkpointSpacing: number;
   readonly heightObstacles: readonly HeightObstacle[];
+  randomizeObstacles?(random: () => number): void;
   sample(distance: number, target?: TrackFrame): TrackFrame;
 }
 
@@ -149,8 +151,11 @@ export function createTrack(profile?: AltitudeProfile, preset?: DifficultyPreset
     minAltitude: i % 2 === 0 ? Math.max(minHeight, maxHeight - 1) : minHeight,
     maxAltitude: i % 2 === 0 ? maxHeight : Math.min(maxHeight, minHeight + 0.9),
   }));
-  return {
+  const track: Track = {
     altitudeProfile, sections,
+    randomizeObstacles(random) {
+      heightObstacles.splice(0, heightObstacles.length, ...randomObstacleAltitudes(heightObstacles, altitudeProfile.levels, random));
+    },
     length, halfWidth: preset?.layout.halfWidth ?? 11, checkpointSpacing: length / 24,
     heightObstacles,
     sample(distance, target = createTrackFrame()) {
@@ -166,6 +171,8 @@ export function createTrack(profile?: AltitudeProfile, preset?: DifficultyPreset
       return target;
     },
   };
+  heightObstacles.splice(0, heightObstacles.length, ...expandObstacleLayout(track, heightObstacles));
+  return track;
 }
 
 const maxAltitude = (track: Track) => track.altitudeProfile.levels[track.altitudeProfile.levels.length - 1];
@@ -243,7 +250,7 @@ export function createTrackVisual(track: Track, lineColor?: string) {
     }
   }
   group.add(rails);
-  const barriers = track.heightObstacles.map(obstacle => {
+  const makeBarriers = () => track.heightObstacles.map(obstacle => {
     track.sample(obstacle.distance, frame);
     const barrier = createDischargeBarrier(obstacle, track.halfWidth, maxAltitude(track));
     barrier.object.position.copy(frame.position);
@@ -251,6 +258,21 @@ export function createTrackVisual(track: Track, lineColor?: string) {
     group.add(barrier.object);
     return barrier;
   });
+  let barriers = makeBarriers();
+  const refreshObstacles = () => {
+    const geometries = new Set<THREE.BufferGeometry>(), materials = new Set<THREE.Material>();
+    for (const barrier of barriers) {
+      barrier.object.removeFromParent();
+      barrier.object.traverse(child => {
+        if (child instanceof THREE.Mesh) {
+          geometries.add(child.geometry);
+          (Array.isArray(child.material) ? child.material : [child.material]).forEach(m => materials.add(m));
+        }
+      });
+    }
+    geometries.forEach(g => g.dispose()); materials.forEach(m => m.dispose());
+    barriers = makeBarriers();
+  };
   const bounds = new THREE.Box3().setFromPoints(left.concat(right));
   const extent = bounds.getSize(new THREE.Vector3()), center = bounds.getCenter(new THREE.Vector3());
   const groundSize = Math.max(1800, extent.x + 600, extent.z + 600);
@@ -259,6 +281,7 @@ export function createTrackVisual(track: Track, lineColor?: string) {
   const grid = new THREE.GridHelper(groundSize, Math.ceil(groundSize / 16), 0x19323f, 0x101f2b); grid.position.set(center.x, 0, center.z); group.add(grid);
   return {
     object: group,
+    refreshObstacles,
     hit(distance: number) {
       const next = upcomingHeightObstacle(track, distance);
       if (next && Math.abs(next.distance) <= next.obstacle.depth / 2 + 3.2) {

@@ -9,6 +9,7 @@
   "include": [
     "src/platform/gamepadInput.ts",
     "src/game/environment/createNightSky.ts",
+    "src/game/environment/createRaceWeather.ts",
     "src/game/track/createDistrictScenery.ts",
     "src/game/track/trackRuntime.ts",
     "src/game/driving/createTimeAttack.ts",
@@ -23,6 +24,7 @@
     "src/game/driving/touchInput.ts",
     "src/platform/appUpdate.ts",
     "src/game/driving/createRaceFeedback.ts",
+    "src/game/driving/createRaceSoundFeedback.ts",
     "src/game/driving/createRaceAudio.ts",
     "src/game/audio/soundtrack.ts",
     "src/game/drone/droneCatalog.ts",

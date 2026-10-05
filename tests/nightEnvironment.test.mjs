@@ -8,12 +8,12 @@ import { createCatalogTrack } from '../output/test/game/track/trackRuntime.js';
 import { describeTrackLandmarks, createTrackLandmark, disposeScenery, sceneryRoute } from '../output/test/game/track/createTrackLandmark.js';
 import { createDistrictScenery } from '../output/test/game/track/createDistrictScenery.js';
 
-test('all campaign districts select four night environments; free driving keeps its default', () => {
-  assert.deepEqual([0, .25, .5, .75, 1].map(n => selectRaceEnvironment('residential', () => n).id), ['midnight', 'deep-night', 'predawn', 'afterglow', 'afterglow']);
+test('all campaign districts select five night environments; free driving keeps its default', () => {
+  assert.deepEqual([0, .2, .4, .6, .8, 1].map(n => selectRaceEnvironment('residential', () => n).id), ['midnight', 'deep-night', 'predawn', 'afterglow', 'storm-night', 'storm-night']);
   for (const district of new Set(TRACK_CATALOG.map(t => t.district))) assert.equal(selectRaceEnvironment(district, () => .75).id, 'afterglow');
   assert.equal(selectRaceEnvironment(undefined, () => { throw Error('random should not be called'); }).id, 'midnight');
   assert.equal(selectRaceEnvironment('residential', () => NaN).id, 'midnight');
-  assert.equal(new Set(NIGHT_ENVIRONMENTS.map(e => e.horizon)).size, 4);
+  assert.equal(new Set(NIGHT_ENVIRONMENTS.map(e => e.horizon)).size, 5);
 });
 
 test('sky follows position with world-fixed orientation, hides in overview and releases GPU assets', () => {

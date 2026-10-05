@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createTrackFrame } from '../output/test/game/track/createTrack.js';
 import { createDrivingModel, NEUTRAL_INPUT } from '../output/test/game/driving/createDrivingModel.js';
-import { flightAcceleration } from '../output/test/game/driving/flightDynamics.js';
+import { flightAcceleration, impactSpeedRetention } from '../output/test/game/driving/flightDynamics.js';
 import { DEFAULT_DRONE_CONFIGURATION as base, resolveDroneConfiguration } from '../output/test/game/drone/droneConfiguration.js';
 import { DRONE_CATALOG } from '../output/test/game/drone/droneCatalog.js';
 import { upgradedConfiguration, emptyLevels } from '../output/test/game/progression/catalog.js';
@@ -132,4 +132,97 @@ test('braking still crawls uphill/downhill and 30/60/120 Hz agree through 3D ben
     return model.state;
   });
   for (const state of states.slice(1)) for (const key of ['speed', 'distance', 'charge']) assert.ok(Math.abs(state[key] - states[0][key]) < 1e-7, key);
+});
+
+test('uphill tightens steering and downhill loosens steering for every craft', () => {
+  for (const craft of DRONE_CATALOG) {
+    const headings = [-.8, 0, .8].map(grade => {
+      const model = createDrivingModel(road(() => grade), craft.configuration.performance);
+      model.state.speed = 60;
+      model.step(1 / 120, input({ steer: .8 }));
+      return model.state.heading;
+    });
+    assert.ok(headings[0] < headings[1] && headings[1] < headings[2], craft.name);
+    assert.ok(impactSpeedRetention(craft.configuration.performance.collisionSpeedLoss) < 1 - craft.configuration.performance.collisionSpeedLoss);
+  }
+});
+
+test('obstacle recovery is slower than craft contact, boost respects it, and reset clears it', () => {
+  for (const boost of [false, true]) for (const craft of DRONE_CATALOG) {
+    const p = craft.configuration.performance;
+    const obstacle = { distance: 50, depth: 4, minAltitude: 5, maxAltitude: 7, speedRetention: .35 };
+    const obstacleModel = createDrivingModel({ ...road(), heightObstacles: [obstacle] }, p);
+    Object.assign(obstacleModel.state, { distance: 46, speed: 64 });
+    obstacleModel.step(1 / 120, input());
+    assert.equal(obstacleModel.state.collisions, 1);
+    obstacleModel.state.distance = 100;
+    const contactModel = createDrivingModel(road(), p); contactModel.contact();
+    const clearModel = createDrivingModel(road(), p);
+    for (const model of [obstacleModel, contactModel, clearModel]) model.state.speed = 20;
+    for (const model of [obstacleModel, contactModel, clearModel]) advance(model, .5, input({ boost }));
+    assert.ok(obstacleModel.state.speed < contactModel.state.speed, craft.name);
+    assert.ok(contactModel.state.speed < clearModel.state.speed, craft.name);
+    obstacleModel.reset(); const fresh = createDrivingModel(road(), p);
+    advance(obstacleModel, .1, input({ boost })); advance(fresh, .1, input({ boost }));
+    assert.equal(obstacleModel.state.speed, fresh.state.speed);
+  }
+});
+
+test('boost maneuver load is small, proportional to steering, frame-rate independent, and charged once per altitude tap', () => {
+  for (const fps of [30, 60, 120]) {
+    const charges = [0, .5, 1].map(steer => {
+      const model = createDrivingModel(road()); advance(model, 1, input({ boost: true, steer }), fps);
+      return model.state.charge;
+    });
+    assert.ok(Math.abs(charges[0] - charges[2] - p.boostDrain * .06) < 1e-9);
+    assert.ok(Math.abs(charges[0] - charges[1] - p.boostDrain * .03) < 1e-9);
+    const lifted = createDrivingModel(road()), flat = createDrivingModel(road());
+    lifted.step(1 / fps, input({ boost: true, lift: 1 })); flat.step(1 / fps, input({ boost: true }));
+    assert.ok(Math.abs(flat.state.charge - lifted.state.charge - p.boostDrain * .04) < 1e-9);
+    lifted.step(1 / fps, input({ boost: true, lift: 1 })); flat.step(1 / fps, input({ boost: true }));
+    assert.ok(Math.abs(flat.state.charge - lifted.state.charge - p.boostDrain * .04) < 1e-9, 'upper limit does not charge a second tap');
+    const cruise = createDrivingModel(road()); cruise.step(1 / fps, input({ steer: 1, lift: 1 }));
+    assert.equal(cruise.state.charge, 1, 'ordinary movement has no battery penalty');
+  }
+});
+
+test('boost incidents remove additional charge, zero charge stops boost, and obstacles charge only once', () => {
+  const obstacle = { distance: 50, depth: 4, minAltitude: 5, maxAltitude: 7, speedRetention: .35 };
+  for (const fps of [30, 60, 120]) {
+    const clear = createDrivingModel(road()), hit = createDrivingModel({ ...road(), heightObstacles: [obstacle] });
+    for (const model of [clear, hit]) Object.assign(model.state, { distance: 46, speed: 64 });
+    for (const model of [clear, hit]) model.step(1 / fps, input({ boost: true }));
+    assert.equal(hit.state.collisions, 1);
+    assert.ok(Math.abs(clear.state.charge - hit.state.charge - .18) < 1e-9);
+    for (const model of [clear, hit]) model.step(1 / fps, input({ boost: true }));
+    assert.ok(Math.abs(clear.state.charge - hit.state.charge - .18) < 1e-9);
+    const contact = createDrivingModel(road()); contact.step(1 / fps, input({ boost: true }));
+    const before = contact.state.charge; contact.contact();
+    assert.ok(Math.abs(before - contact.state.charge - .08) < 1e-9);
+    contact.state.charge = .04; contact.contact();
+    assert.equal(contact.state.charge, 0); assert.equal(contact.state.boosting, false);
+    assert.equal(contact.state.boostNeedsRelease, true);
+    contact.reset(); contact.contact(); assert.equal(contact.state.charge, 1);
+    for (const [offset, penalty, notice] of [[12, .15, 'off-track'], [9, .1, 'collision']]) {
+      const model = createDrivingModel({ ...road(), halfWidth: 10 });
+      Object.assign(model.state, { offset, speed: 64 });
+      model.step(1 / fps, input({ boost: true }));
+      assert.equal(model.state.notice, notice);
+      assert.ok(Math.abs(1 - p.boostDrain / fps - penalty - model.state.charge) < 1e-9);
+    }
+  }
+});
+
+test('instant altitude key taps cost boost only for a valid unbraked level change', () => {
+  const model = createDrivingModel(road());
+  model.step(0, input({ boost: true, lift: 1 }));
+  assert.equal(model.state.charge, 1 - p.boostDrain * .04);
+  model.step(0, input({ boost: true, lift: 1 }));
+  assert.equal(model.state.charge, 1 - p.boostDrain * .04, 'level limit ignores redundant taps');
+  model.step(0, input({ boost: true, brake: true, lift: -1 }));
+  assert.equal(model.state.charge, 1 - p.boostDrain * .04, 'braking suppresses boost load');
+  model.state.charge = .004;
+  model.step(0, input({ boost: true, lift: 1 }));
+  assert.equal(model.state.charge, 0);
+  assert.equal(model.state.boostNeedsRelease, true);
 });

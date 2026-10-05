@@ -1,3 +1,4 @@
+import { createRaceWeather } from '../environment/createRaceWeather';
 import { createNightSky } from '../environment/createNightSky';
 import { NIGHT_ENVIRONMENTS } from '../environment/raceEnvironment';
 import type { NightEnvironment } from '../environment/raceEnvironment';
@@ -27,6 +28,7 @@ import { createTouchControls } from './createTouchControls';
 import { createBoostPulse } from './createBoostPulse';
 import { createRaceAudio } from './createRaceAudio';
 import { createRaceFeedback } from './createRaceFeedback';
+import { createRaceSoundFeedback } from './createRaceSoundFeedback.js';
 import type { RaceAnnouncement } from './createRaceFeedback';
 import { createBoostHaptics } from './createBoostHaptics';
 import { createBoostWarp } from './createBoostWarp';
@@ -98,11 +100,12 @@ export function createRace(
   container.append(renderer.domElement);
   const scene = new THREE.Scene();
   scene.fog = new THREE.FogExp2(environment.fog, environment.fogDensity);
-  scene.add(new THREE.HemisphereLight(environment.ambient, 0x152435, environment.ambientIntensity));
+  const ambient = new THREE.HemisphereLight(environment.ambient, 0x152435, environment.ambientIntensity); scene.add(ambient);
   const sun = new THREE.DirectionalLight(environment.light, environment.lightIntensity);
   sun.position.set(-50, 150, -100); scene.add(sun);
   const track = course ? createCatalogTrack(course) : createTrack(altitudeProfile, difficulty);
   const sky = createNightSky(environment, track.sample(0).tangent); scene.add(sky.object);
+  const weather = createRaceWeather(!!environment.rain, track.length); scene.add(weather.object);
   const scenery = course ? createDistrictScenery(track, course) : undefined;
   if (scenery) scene.add(scenery.object);
   const trackVisual = createTrackVisual(track, config.boostStyle.pulseColor);
@@ -113,6 +116,7 @@ export function createRace(
   const boostPulse = createBoostPulse(drone, config.boostStyle.pulseColor);
   const raceAudio = createRaceAudio();
   const feedback = createRaceFeedback();
+  const soundFeedback = createRaceSoundFeedback(track);
   const boostHaptics = createBoostHaptics(typeof navigator.vibrate === 'function' ? navigator.vibrate.bind(navigator) : undefined);
   const coarsePointer = window.matchMedia('(any-pointer: coarse)');
   let storage: Storage | undefined;
@@ -203,7 +207,8 @@ export function createRace(
     if (lost || disposed) return;
     clearInput(); raceAudio.activate();
     if (timeAttack.phase === 'ready' || timeAttack.phase === 'finished') { feedback.reset(); raceAudio.reset(); }
-    timeAttack.start(); touchControls.setRunning(timeAttack.phase === 'running'); previous = performance.now(); notify();
+    const fresh = timeAttack.phase === 'ready' || timeAttack.phase === 'finished';
+    timeAttack.start(); if (fresh) { soundFeedback.reset(); trackVisual.refreshObstacles(); weather.reset(); } touchControls.setRunning(timeAttack.phase === 'running'); previous = performance.now(); notify();
   };
   const togglePause = () => {
     if (timeAttack.phase === 'running' || timeAttack.phase === 'countdown') pause();
@@ -211,7 +216,7 @@ export function createRace(
   };
   const restart = () => {
     if (lost || disposed) return;
-    clearInput(); feedback.reset(); raceAudio.activate(); raceAudio.reset(); timeAttack.restart(); boostPulse.reset(); boostWarp.reset(); boostHaptics.stop(); boostEntryAge = 1; bank = 0; craftShake = 0; cameraSnap = true; touchControls.setRunning(false); previous = performance.now(); notify();
+    clearInput(); feedback.reset(); soundFeedback.reset(); raceAudio.activate(); raceAudio.reset(); timeAttack.restart(); trackVisual.refreshObstacles(); weather.reset(); boostPulse.reset(); boostWarp.reset(); boostHaptics.stop(); boostEntryAge = 1; bank = 0; craftShake = 0; cameraSnap = true; touchControls.setRunning(false); previous = performance.now(); notify();
   };
   const recover = () => {
     if (lost || disposed) return;
@@ -320,6 +325,9 @@ export function createRace(
     rivalVisuals.update(delta, reducedMotion.matches);
     const cues = feedback.update({ ...timeAttack.snapshot(), phase, elapsed: model.state.elapsed });
     raceAudio.update(phase, model.state.boostStage, model.state.boostStageProgress, model.state.speed / visuals.referenceSpeed, input.brake);
+    const sound = soundFeedback.update(phase, model.state);
+    raceAudio.setAltitudeWarning(sound.warning);
+    for (const cue of sound.cues) raceAudio.play(cue);
     for (const cue of cues) raceAudio.play(cue);
     if (cues.length) notify();
     if (heightChanged) raceAudio.play('height');
@@ -389,12 +397,17 @@ export function createRace(
     speedLines.update(state.elapsed, state.speed, state.boosting, reducedMotion.matches, state.boostStage === 2);
     views.prepareDriving();
     scenery?.setOverview(false); scenery?.update(drone.position); sky.update(camera.position);
+    const weatherFrame = weather.update(camera.position, state.distance, delta, phase === 'running', reducedMotion.matches);
+    ambient.intensity = environment.ambientIntensity + weatherFrame.flash * 5;
+    sun.intensity = environment.lightIntensity + weatherFrame.flash * 10;
+    sky.setLightning(weatherFrame.flash);
+    for (let i = 0; i < weatherFrame.thunders; i++) raceAudio.play('thunder');
     exhaustHaze.update(state.elapsed, state.boostStage, phase === 'running' && state.speed > 1, views.view === 'cockpit', reducedMotion.matches);
     composer.render(delta);
     if (layout.track) {
       const linesVisible = speedLines.object.visible;
       speedLines.object.visible = false;
-      views.prepareOverview(); scenery?.setOverview(true); sky.setOverview(true); overviewComposer.render(delta); scenery?.setOverview(false); sky.setOverview(false);
+      views.prepareOverview(); scenery?.setOverview(true); sky.setOverview(true); weather.setOverview(true); overviewComposer.render(delta); scenery?.setOverview(false); sky.setOverview(false); weather.setOverview(false);
       speedLines.object.visible = linesVisible;
       views.prepareDriving();
     }
@@ -426,7 +439,7 @@ export function createRace(
   return {
     start, togglePause, restart, useFocus() { const used = timeAttack.useFocus(); if (used) notify(); return used; }, useRivalItem(item) { const used = timeAttack.useRivalItem(item); if (used) notify(); return used; }, recover, toggleCockpit, cycleTrack,
     setBloom(enabled) { bloom.enabled = enabled; },
-    setQuality(quality) { scenery?.setQuality(quality); renderQuality = quality; resize(); },
+    setQuality(quality) { scenery?.setQuality(quality); weather.setQuality(quality); renderQuality = quality; resize(); },
     setExhaustHaze(enabled) { exhaustHaze.setEnabled(enabled); },
     setSoundEnabled(enabled) { raceAudio.setEnabled(enabled); },
     setMusicEnabled(enabled) { raceAudio.setMusicEnabled(enabled); },

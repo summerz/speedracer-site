@@ -1,8 +1,9 @@
 import { soundtrack } from '../audio/soundtrack.js';
 import type { RacePhase } from './createTimeAttack.js';
+import type { AltitudeWarning } from './createRaceSoundFeedback.js';
 import type { RaceCue } from './createRaceFeedback.js';
 
-export type SoundCue = RaceCue | 'impact' | 'electric-impact' | 'recovery' | 'height';
+export type SoundCue = RaceCue | 'impact' | 'electric-impact' | 'recovery' | 'height' | 'thunder' | 'boost-full' | 'boost-complete';
 interface Voice { source: AudioScheduledSourceNode; nodes: AudioNode[]; music: boolean }
 const frequency = (midi: number) => 440 * 2 ** ((midi - 69) / 12);
 const STEP_SECONDS = 60 / 144 / 4;
@@ -12,6 +13,13 @@ export function createRaceAudio() {
   let context: AudioContext | undefined;
   let effects: GainNode;
   let music: GainNode;
+  let background: GainNode;
+  let notification: GainNode;
+  let notificationRouting = false;
+  let warningDirection: AltitudeWarning = null;
+  let alertUntil = 0, duckUntil = 0, alertPriority = 0;
+  const pending = new Map<SoundCue, number>();
+  const alertVoices = new Set<Voice>();
   let engine: OscillatorNode;
   let turbine: OscillatorNode;
   let charge: OscillatorNode;
@@ -27,12 +35,15 @@ export function createRaceAudio() {
   let phase: RacePhase = 'ready';
   let previousStage = 0;
   let engineRestartAt = -10;
+  const warningVoices = new Set<Voice>();
+  let nextWarningAt = 0;
   const voices = new Set<Voice>();
 
   const release = (voice: Voice) => {
     voice.source.onended = null;
     for (const node of voice.nodes) node.disconnect();
     voices.delete(voice);
+    warningVoices.delete(voice); alertVoices.delete(voice);
   };
   const stopVoices = (musicOnly = false, fade = false) => {
     for (const voice of [...voices]) {
@@ -51,6 +62,7 @@ export function createRaceAudio() {
     voices.add(voice);
     source.onended = () => release(voice);
     source.start(at); source.stop(at + duration);
+    return voice;
   };
   const envelope = (at: number, duration: number, level: number, bus: GainNode) => {
     const gain = context!.createGain();
@@ -60,19 +72,21 @@ export function createRaceAudio() {
     gain.connect(bus);
     return gain;
   };
-  const tone = (hz: number, at: number, duration: number, level: number, type: OscillatorType = 'sine', isMusic = false, endHz?: number) => {
+  const tone = (hz: number, at: number, duration: number, level: number, type: OscillatorType = 'sine', isMusic = false, endHz?: number, isAlert = notificationRouting) => {
     const source = context!.createOscillator(); source.type = type;
     source.frequency.setValueAtTime(hz, at);
     if (endHz) source.frequency.exponentialRampToValueAtTime(endHz, at + duration * 0.8);
-    const gain = envelope(at, duration, level, isMusic ? music : effects);
+    const gain = envelope(at, duration, level, isMusic ? music : isAlert ? notification : background);
     const filter = context!.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = isMusic ? hz >= 500 ? 4800 : 1800 : 6500;
     source.connect(filter); filter.connect(gain);
-    own(source, [source, filter, gain], isMusic, at, duration);
+    const voice = own(source, [source, filter, gain], isMusic, at, duration);
+    if (isAlert) alertVoices.add(voice);
+    return voice;
   };
   const hiss = (at: number, duration: number, level: number, hz: number, isMusic = false, type: BiquadFilterType = 'highpass') => {
     const source = context!.createBufferSource(); source.buffer = noise;
     const filter = context!.createBiquadFilter(); filter.type = type; filter.frequency.value = hz; filter.Q.value = 0.7;
-    const gain = envelope(at, duration, level, isMusic ? music : effects);
+    const gain = envelope(at, duration, level, isMusic ? music : background);
     source.connect(filter); filter.connect(gain);
     own(source, [source, filter, gain], isMusic, at, duration);
   };
@@ -89,6 +103,8 @@ export function createRaceAudio() {
         effects = context.createGain(); music = context.createGain();
         effects.gain.value = 0; music.gain.value = 0;
         effects.connect(master); music.connect(master);
+        background = context.createGain(); notification = context.createGain();
+        background.connect(effects); notification.connect(effects);
         const echo = context.createDelay(1); echo.delayTime.value = STEP_SECONDS * 3;
         const feedback = context.createGain(); feedback.gain.value = 0.24;
         const echoFilter = context.createBiquadFilter(); echoFilter.frequency.value = 1600;
@@ -101,9 +117,9 @@ export function createRaceAudio() {
         turbineGain = context.createGain(); turbineGain.gain.value = 0;
         engineGain.gain.value = 0; chargeGain.gain.value = 0;
         const engineFilter = context.createBiquadFilter(); engineFilter.frequency.value = 380;
-        engine.connect(engineFilter); engineFilter.connect(engineGain); engineGain.connect(effects);
-        turbine.connect(turbineGain); turbineGain.connect(effects);
-        charge.connect(chargeGain); chargeGain.connect(effects);
+        engine.connect(engineFilter); engineFilter.connect(engineGain); engineGain.connect(background);
+        turbine.connect(turbineGain); turbineGain.connect(background);
+        charge.connect(chargeGain); chargeGain.connect(background);
         engine.start(); turbine.start(); charge.start();
         noise = context.createBuffer(1, context.sampleRate, context.sampleRate);
         const data = noise.getChannelData(0);
@@ -111,12 +127,12 @@ export function createRaceAudio() {
         const wind = context.createBufferSource(); wind.buffer = noise; wind.loop = true;
         windFilter = context.createBiquadFilter(); windFilter.type = 'bandpass'; windFilter.Q.value = 0.5;
         windGain = context.createGain(); windGain.gain.value = 0;
-        wind.connect(windFilter); windFilter.connect(windGain); windGain.connect(effects); wind.start();
+        wind.connect(windFilter); windFilter.connect(windGain); windGain.connect(background); wind.start();
       }
       void context.resume().catch(() => {});
     } catch { /* Optional audio never prevents playing. */ }
   };
-  const play = (cue: SoundCue) => {
+  const emit = (cue: SoundCue) => {
     if (!context || context.state !== 'running' || !enabled || disposed) return;
     const now = context.currentTime;
     effects.gain.setTargetAtTime(0.75, now, 0.01);
@@ -125,6 +141,20 @@ export function createRaceAudio() {
       tone(90, now, 0.23, 0.22, 'sine', false, 28);
       hiss(now, 0.26, 0.3, cue === 'impact' ? 650 : 2600, false, 'bandpass');
       if (cue === 'electric-impact') for (let i = 0; i < 3; i++) tone(1800 - i * 430, now + i * 0.035, 0.055, 0.07, 'sawtooth');
+    } else if (cue === 'boost-full') {
+      // One high metallic bell: simultaneous inharmonic partials, long tail.
+      tone(1568, now, .55, .12);
+      tone(2510, now, .35, .045);
+      tone(4234, now, .20, .025);
+    } else if (cue === 'boost-complete') {
+      // Lower rhythmic fanfare, resolving to a bright chord, distinct from recharge.
+      [392, 494, 587].forEach((hz, i) => tone(hz, now + i * .10, .13, .12, 'square'));
+      [392, 494, 784].forEach(hz => tone(hz, now + .30, .38, .065, 'triangle'));
+    } else if (cue === 'thunder') {
+      // Low noise rumble with an initial crack, kept beneath the engine/music mix.
+      hiss(now, 1.8, .20, 220, false, 'lowpass');
+      hiss(now, .18, .14, 1800, false, 'lowpass');
+      tone(48, now, 1.3, .09, 'sine', false, 27);
     } else if (cue === 'countdown') {
       tone(440, now, 0.12, 0.15);
     } else if (cue === 'height') {
@@ -136,11 +166,78 @@ export function createRaceAudio() {
       notes.forEach((note, i) => tone(frequency(note), now + i * 0.11, 0.24, cue === 'final-lap' ? 0.14 : 0.1, 'triangle'));
     }
   };
+  const priority = (cue: SoundCue) => cue === 'finish' || cue === 'final-lap' ? 5
+    : cue === 'countdown' || cue === 'start' ? 4 : cue === 'lap' || cue === 'half-lap' ? 3 : 2;
+  const cancelAlerts = () => {
+    for (const voice of [...alertVoices]) {
+      try { voice.source.stop(); } catch { /* Already ended. */ }
+      release(voice);
+    }
+  };
+  const mix = () => {
+    if (!context) return;
+    const ducked = enabled && context.currentTime < duckUntil;
+    background.gain.setTargetAtTime(ducked ? .28 : 1, context.currentTime, ducked ? .012 : .12);
+    soundtrack.setDucking(ducked ? .32 : 1);
+  };
+  const flush = () => {
+    if (!context || !enabled || context.state !== 'running' || disposed) return;
+    const now = context.currentTime;
+    for (const [cue, at] of pending) if (now - at > 2.5) pending.delete(cue);
+    const cue = [...pending.keys()].sort((a, b) => priority(b) - priority(a))[0];
+    if (!cue || (warningDirection && priority(cue) < 3)
+      || (now < alertUntil && priority(cue) <= alertPriority)) return;
+    cancelAlerts(); pending.delete(cue);
+    const duration = cue === 'boost-full' ? .62 : cue === 'boost-complete' ? .75
+      : cue === 'finish' ? .85 : cue === 'final-lap' ? .75 : cue === 'lap' ? .6 : .45;
+    alertUntil = now + duration; alertPriority = priority(cue); duckUntil = alertUntil;
+    notificationRouting = true; emit(cue); notificationRouting = false; mix();
+  };
+  const play = (cue: SoundCue) => {
+    if (!context || context.state !== 'running' || !enabled || disposed) return;
+    if (cue === 'impact' || cue === 'electric-impact') {
+      cancelAlerts(); clearWarning(); pending.clear();
+      alertUntil = context.currentTime + .32; alertPriority = 5;
+      duckUntil = 0; mix(); emit(cue);
+    } else if (cue === 'height' || cue === 'thunder' || cue === 'recovery') {
+      // Mechanical/weather sounds stay under the notification bus.
+      if (cue !== 'height' || context.currentTime >= alertUntil) emit(cue);
+    } else {
+      if (cue === 'finish') { pending.clear(); warningDirection = null; }
+      pending.set(cue, context.currentTime); flush();
+    }
+  };
+  const resetMix = () => {
+    pending.clear(); warningDirection = null; alertUntil = duckUntil = alertPriority = 0;
+    mix();
+  };
+  const clearWarning = () => {
+    for (const voice of [...warningVoices]) {
+      try { voice.source.stop(); } catch { /* Already ended. */ }
+      release(voice);
+    }
+    nextWarningAt = 0;
+  };
   return {
     activate,
     play,
-    reset() { stopVoices(); previousStage = 0; },
+    reset() { clearWarning(); stopVoices(); resetMix(); previousStage = 0; },
+    setAltitudeWarning(direction: AltitudeWarning) {
+      if (!direction || phase !== 'running' || !enabled || disposed || !context || context.state !== 'running') {
+        clearWarning(); warningDirection = null; flush(); return;
+      }
+      if (direction !== warningDirection) { clearWarning(); warningDirection = direction; }
+      const now = context.currentTime;
+      if (now >= nextWarningAt && now >= alertUntil) {
+        const notes = direction === 'up' ? [660, 990, 1320] : [440, 330, 220];
+        // Two rising whistle pulses vs two falling low square pulses.
+        warningVoices.add(tone(notes[0], now, .10, .095, direction === 'up' ? 'triangle' : 'square', false, notes[1], true));
+        warningVoices.add(tone(notes[1], now + .14, .10, .095, direction === 'up' ? 'triangle' : 'square', false, notes[2], true));
+        nextWarningAt = now + .8; alertUntil = now + .3; alertPriority = 3; duckUntil = now + .38; mix();
+      }
+    },
     pause() {
+      clearWarning(); resetMix();
       phase = 'paused'; previousStage = 0; stopVoices(false, true); soundtrack.setScene('paused');
       if (context) {
         effects.gain.setTargetAtTime(0, context.currentTime, 0.015);
@@ -150,7 +247,7 @@ export function createRaceAudio() {
     setEnabled(value: boolean) {
       enabled = value;
       if (value) activate();
-      else if (context) effects.gain.setTargetAtTime(0, context.currentTime, 0.015);
+      else { clearWarning(); resetMix(); if (context) effects.gain.setTargetAtTime(0, context.currentTime, 0.015); }
     },
     setMusicEnabled(value: boolean) {
       musicEnabled = value; soundtrack.setEnabled(value);
@@ -160,6 +257,7 @@ export function createRaceAudio() {
     update(nextPhase: RacePhase, stage: number, progress: number, speedRatio: number, braking: boolean) {
       phase = nextPhase; soundtrack.setScene(nextPhase);
       if (!context || context.state !== 'running' || disposed) return;
+      flush(); mix();
       const now = context.currentTime;
       const racing = phase === 'running';
       effects.gain.setTargetAtTime(enabled && (active() || phase === 'finished') ? 0.75 : 0, now, 0.025);
@@ -181,7 +279,7 @@ export function createRaceAudio() {
 
     },
     dispose() {
-      disposed = true; stopVoices();
+      disposed = true; resetMix(); stopVoices();
       if (context) void context.close().catch(() => {});
     },
   };

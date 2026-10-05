@@ -22,7 +22,8 @@ class Param { value=0; setValueAtTime(v){this.value=v;} linearRampToValueAtTime(
 class Node { gain=new Param();frequency=new Param();Q=new Param();pan=new Param();detune=new Param();delayTime=new Param();threshold=new Param();knee=new Param();ratio=new Param(); connect(){} disconnect(){} start(at){this.at=at;} stop(at){this.end=at;} }
 class Context {
   currentTime=0;state='running';sampleRate=100;destination=new Node();sources=[];
-  createGain(){return new Node();}createStereoPanner(){return new Node();}createBiquadFilter(){return new Node();}createDynamicsCompressor(){return new Node();}createDelay(){return new Node();}
+  gains=[];
+  createGain(){const n=new Node();this.gains.push(n);return n;}createStereoPanner(){return new Node();}createBiquadFilter(){return new Node();}createDynamicsCompressor(){return new Node();}createDelay(){return new Node();}
   createOscillator(){const n=new Node();this.sources.push(n);return n;}createBufferSource(){return this.createOscillator();}
   createBuffer(_,frames){return {getChannelData:()=>new Float32Array(frames)};}resume(){return Promise.resolve();}suspend(){this.state='suspended';return Promise.resolve();}close(){this.state='closed';return Promise.resolve();}
 }
@@ -51,4 +52,19 @@ test('arrangement keeps bass, arpeggio and chord pad, omitting lead and horn mel
    for(const channel of [0,1,2,9]){const before=ctx.sources.length;synth.play(score.notes.find(n=>n.channel===channel),0,.5);assert.equal(ctx.sources.length,before+1);}
   }
  }finally{synth.dispose();}
+});
+
+test('notification ducking survives scene updates without interrupting music and respects mute', async()=>{
+  const ctx=new Context(),player=createSoundtrack(async song=>scores[song],()=>ctx);
+  try {
+    player.activate();await flush();player.setScene('running');await flush();
+    const voices=ctx.sources.length;
+    player.setDucking(.32);assert.equal(ctx.gains[0].gain.value,.8*.32);
+    player.setScene('running');await flush();assert.equal(ctx.gains[0].gain.value,.8*.32);
+    assert.equal(ctx.sources.length,voices,'ducking does not restart or reschedule music');
+    player.setEnabled(false);player.setDucking(1);assert.equal(ctx.gains[0].gain.value,0);
+    player.setEnabled(true);assert.equal(ctx.gains[0].gain.value,.8);
+    player.setDucking(.32);player.setScene('paused');assert.equal(ctx.gains[0].gain.value,.30*.32);
+    player.setDucking(1);assert.equal(ctx.gains[0].gain.value,.30);
+  } finally {player.dispose();}
 });

@@ -13,6 +13,27 @@ const incidents = () => ({ collisions: 0, offTrackExits: 0, recoveries: 0 });
 const reward = { raceId: 'scored', difficulty: 'beginner', ...incidents(), penaltyPoints: 0, cleanHalfLaps: 6, improvedExistingBest: false, assisted: false };
 const race = () => createTimeAttack(track, DRIVING_TUNING, createRaceRecords({ trackId: 'half-laps', configurationId: 'stock' }));
 
+test('safe fields award +1 once per lap; failed passages cost -3 and never award a pass', () => {
+  const obstacle = { distance: 50, depth: 4, minAltitude: 1.8, maxAltitude: 2.5, speedRetention: .35 };
+  for (const fps of [30, 60, 120]) for (const valid of [true, false]) {
+    const model = createDrivingModel({ ...track, heightObstacles: [obstacle] });
+    Object.assign(model.state, { speed: 64, distance: 40, altitude: valid ? 1.8 : 6.2, targetAltitude: valid ? 1.8 : 6.2 });
+    for (let i = 0; i < fps; i++) model.step(1 / fps, input);
+    assert.equal(model.state.obstaclesPassed, valid ? 1 : 0);
+    assert.equal(model.state.penaltyPoints, valid ? 0 : 3);
+    model.state.distance = 40;
+    for (let i = 0; i < fps; i++) model.step(1 / fps, input);
+    assert.equal(model.state.obstaclesPassed, valid ? 1 : 0, 'no replay reward');
+    assert.equal(model.state.penaltyPoints, valid ? 0 : 3);
+    model.state.distance = track.length + 40;
+    for (let i = 0; i < fps; i++) model.step(1 / fps, input);
+    assert.equal(model.state.obstaclesPassed, valid ? 2 : 0);
+    assert.equal(model.state.penaltyPoints, valid ? 0 : 6);
+  }
+  const before = calculateReward(reward), after = calculateReward({ ...reward, obstaclesPassed: 10 });
+  assert.equal(after.obstacles, 10); assert.equal(after.total - before.total, 10);
+});
+
 test('clean is local to each exact half lap, with no partial or duplicate recovery awards', () => {
   const clean = createCleanHalfLaps(240, 3), state = incidents();
   clean.cross(119.999, state); assert.equal(clean.snapshot().length, 0);

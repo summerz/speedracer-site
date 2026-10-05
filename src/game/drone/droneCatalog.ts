@@ -1,6 +1,7 @@
 import { DEFAULT_DRONE_CONFIGURATION, resolveDroneConfiguration } from './droneConfiguration.js';
 import type { DroneConfiguration, DronePerformance } from './droneConfiguration.js';
 import { steeringYawRate } from '../driving/createDrivingModel.js';
+import { impactSpeedRetention } from '../driving/flightDynamics.js';
 
 export interface DroneCatalogEntry {
   name: string;
@@ -53,6 +54,6 @@ export function droneStats(configuration: DroneConfiguration) {
     { label: '최고 속도', value: (p.topSpeed * 3.6).toFixed(0), unit: 'km/h', fill: p.topSpeed / 110, hint: `평지 기준 · 부스트 ${(p.boostSpeed * 3.6).toFixed(0)} · 2단계 ${(p.boostStage2Speed * 3.6).toFixed(0)} km/h` },
     { label: '좌우 핸들링', value: (steeringYawRate(60, p) * 180 / Math.PI).toFixed(0), unit: '°/s', fill: steeringYawRate(60, p) / 2.2, hint: '216 km/h 기준 · 높을수록 민첩' },
     { label: '좌우 제동', value: (Math.log(10) / p.lateralBraking).toFixed(2), unit: 's', fill: p.lateralBraking / 18, hint: '입력 해제 후 잔류 방향 90% 감소 · 짧을수록 즉각 제동' },
-    { label: '충돌 감속', value: (p.collisionSpeedLoss * 100).toFixed(0), unit: '%', fill: 1 - p.collisionSpeedLoss, hint: '벽 충돌 기준 · 낮을수록 유리' },
+    { label: '충돌 감속', value: ((1 - impactSpeedRetention(p.collisionSpeedLoss)) * 100).toFixed(0), unit: '%', fill: impactSpeedRetention(p.collisionSpeedLoss), hint: '벽 충돌 기준 · 낮을수록 유리' },
   ];
 }

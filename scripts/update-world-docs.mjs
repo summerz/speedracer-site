@@ -46,14 +46,15 @@ const documents = {
     ])) + '\n제작 데이터: `src/game/track/landmarkCatalog.ts`. 배치/형상: `createTrackLandmark.ts`. 도시·거리 표시: `createDistrictScenery.ts`.\n',
   'WORLD_ENVIRONMENTS.md': prefix('월드 환경과 천체') +
     '환경은 [트랙](TRACK_CATALOG.md)과 [랜드마크](LANDMARK_CATALOG.md)에 덧입히는 독립적인 연출입니다. 시간대 때문에 물리·제한시간·해금·기록 버전은 바뀌지 않습니다.\n\n' +
-    '## 선택과 유지\n\n캠페인 24개 트랙은 타임어택/AI 레이스 모두 경기 준비 화면 진입 때 아래 4종을 같은 확률로 선택합니다. 일시정지·재도전에서는 선택된 환경을 유지하고 경기 화면을 나갔다 다시 들어올 때 새로 선택합니다. 캠페인 트랙이 없는 자유 주행은 한밤중을 사용합니다. 현재 낮 환경과 실시간 시간대 전환은 없습니다.\n\n' +
-    table(['환경 ID / 이름', '천체', '겉보기 지름 / 중심 고도 °', '천정 / 지평선 색', '안개 색 / 밀도', '별 강도'], NIGHT_ENVIRONMENTS.map(e => [
-      `\`${e.id}\` / ${e.label}`, e.celestial, `${Math.round(e.celestialRadius * 360 / Math.PI)} / ${Math.round(e.celestialElevation * 180 / Math.PI)}`, `\`${e.zenith}\` / \`${e.horizon}\``, `\`${e.fog}\` / ${e.fogDensity}`, e.stars,
+    `## 선택과 유지\n\n캠페인 24개 트랙은 타임어택/AI 레이스 모두 경기 준비 화면 진입 때 아래 ${NIGHT_ENVIRONMENTS.length}종을 같은 확률로 선택합니다. 일시정지·재도전에서는 선택된 환경을 유지하고 경기 화면을 나갔다 다시 들어올 때 새로 선택합니다. 캠페인 트랙이 없는 자유 주행은 한밤중을 사용합니다. 현재 낮 환경과 실시간 시간대 전환은 없습니다.\n\n` +
+    table(['환경 ID / 이름', '천체', '겉보기 지름 / 중심 고도 °', '천정 / 지평선 색', '안개 색 / 밀도', '별 강도', '날씨'], NIGHT_ENVIRONMENTS.map(e => [
+      `\`${e.id}\` / ${e.label}`, e.celestial, `${Math.round(e.celestialRadius * 360 / Math.PI)} / ${Math.round(e.celestialElevation * 180 / Math.PI)}`, `\`${e.zenith}\` / \`${e.horizon}\``, `\`${e.fog}\` / ${e.fogDensity}`, e.stars, e.rain ? '비 / 번개 / 천둥' : '맑음',
     ])) +
     '\n## 천체 연출\n\n천체는 지평선에 걸쳐 있는 거대한 원반으로 하늘 셰이더에 그립니다. 겉보기 지름은 60° 이상이며 시선 방향과 화면 비율에 따라 화면 밖으로 이어집니다. 도시의 선명한 선과 톤을 맞추기 위해 윤곽은 픽셀 폭으로 안티앨리어싱하고, 큰 표면 패턴과 3단계 명암으로 입체감을 표현합니다. 달에는 어두운 바다·큰 분화구와 좁은 테두리를, 고리 행성에는 분명하게 나뉜 대기 띠와 앞뒤로 겹치는 고리 띠·어두운 간극을 표현합니다. 대기층은 얇은 가장자리에 남기고 지평선 안개는 좁고 옅은 띠로 더합니다. 천체의 아래쪽까지 완전하게 그리며 고정 수평선으로 잘라내지 않습니다. 실제 지형과 건물이 깊이 판정으로 가려주므로 높은 구간·다른 주행 위치에서도 윤곽이 이어집니다. 행성과 고리는 별도 구체 메시나 광원을 추가하지 않으며 하늘 한 번의 렌더링을 공유합니다.\n\n' +
     '하늘은 카메라 위치만 따라가며 천체 방향은 트랙 출발 방위 근처에 월드 기준으로 고정합니다. 전진·좌우 이동으로 천체가 주변 건물처럼 움직이지 않습니다. 곡선에서 시야 밖으로 사라졌다 다시 나타날 수 있으며 루프·노면 회전에서는 수평선과 함께 회전해 보입니다. PIP의 주행 뷰에도 같은 하늘을 유지하고 전체 트랙 뷰에는 표시하지 않습니다.\n\n' +
-    '## 트랙별 사용 범위\n\n' + table(['구역', '사용 트랙', '선택 환경'], Object.entries(DISTRICTS).map(([id, district]) => [district.name, TRACK_CATALOG.filter(t => t.district === id).map(t => `${number(t.order)} ${t.name}`).join(' / '), '한밤중 / 깊은 밤 / 동트기 직전 / 해가 진 직후'])) +
-    '\n제작 데이터: `src/game/environment/raceEnvironment.ts`. 하늘/천체: `createNightSky.ts`. 경기 진입 시 선택과 재도전 유지: `raceApp.ts`. 실제 iPhone의 GPU 프레임 시간·발열은 별도 실기 검증이 필요합니다.\n',
+    '## 폭풍우의 밤\n\n하늘과 월드를 더 어둡게 하고 월드 수직 방향으로 비를 내립니다. 비는 단일 재사용 선 버퍼이며 저품질 240 / 균형 480 / 고품질 800개입니다. 트랙 전체 뷰에는 비를 숨기고 주행 뷰에는 유지합니다. 매 랩 1–4회 번개 위치를 새로 정하고 0.8–2.4초 뒤 천둥을 재생합니다. 일시정지는 비·번개·천둥 시계를 멈추고 재도전은 예약 효과를 초기화합니다. 동작 줄이기는 번개 강도를 20%로 줄입니다. 추가 후처리 패스는 없습니다.\n\n' +
+    '## 트랙별 사용 범위\n\n' + table(['구역', '사용 트랙', '선택 환경'], Object.entries(DISTRICTS).map(([id, district]) => [district.name, TRACK_CATALOG.filter(t => t.district === id).map(t => `${number(t.order)} ${t.name}`).join(' / '), NIGHT_ENVIRONMENTS.map(e => e.label).join(' / ')])) +
+    '\n제작 데이터: `src/game/environment/raceEnvironment.ts`. 하늘/천체: `createNightSky.ts`. 비/번개: `createRaceWeather.ts`. 경기 진입 시 선택과 재도전 유지: `raceApp.ts`. 실제 iPhone의 GPU 프레임 시간·발열은 별도 실기 검증이 필요합니다.\n',
 };
 let stale = false;
 for (const [name, content] of Object.entries(documents)) {

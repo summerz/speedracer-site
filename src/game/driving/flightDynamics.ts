@@ -24,3 +24,18 @@ export function flightAcceleration(speed: number, nominalSpeed: number, thrust: 
   const propulsion = thrust > 0 ? thrust * balance : -5;
   return propulsion - gravity - maneuverDrag;
 }
+
+/** Arcade grip: climbs tighten control, descents loosen it; loops stay bounded. */
+export function slopeHandling(grade: number) {
+  return 1 + Math.max(-1, Math.min(1, grade)) * .22;
+}
+
+/** Resistance upgrades still matter; all contact types lose slightly more speed. */
+export function impactSpeedRetention(loss: number, severity = 1) {
+  return Math.max(.05, 1 - loss * severity * 1.15);
+}
+
+/** A short propulsion dip, rather than a stop or a fixed recovery speed. */
+export function impactAccelerationScale(remaining: number, duration: number) {
+  return 1 - .65 * Math.max(0, Math.min(1, remaining / duration));
+}

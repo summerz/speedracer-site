@@ -1,4 +1,4 @@
-export type NightEnvironmentId = 'midnight' | 'deep-night' | 'predawn' | 'afterglow';
+export type NightEnvironmentId = 'midnight' | 'deep-night' | 'predawn' | 'afterglow' | 'storm-night';
 export interface NightEnvironment {
   id: NightEnvironmentId;
   label: string;
@@ -13,6 +13,7 @@ export interface NightEnvironment {
   celestial: 'moon' | 'ringed-planet' | 'crescent' | 'satellite';
   celestialColor: string;
   stars: number;
+  rain?: boolean;
   /** Apparent angular radius and center elevation in radians, independent of camera distance. */
   celestialRadius: number;
   celestialElevation: number;
@@ -26,12 +27,14 @@ export const NIGHT_ENVIRONMENTS: readonly NightEnvironment[] = [
     ambient: '#b8b3da', ambientIntensity: 3.2, light: '#d1d7ff', lightIntensity: 3.1, celestial: 'crescent', celestialColor: '#c4d9e9', stars: .35, celestialRadius: .58, celestialElevation: .16 },
   { id: 'afterglow', label: '해가 진 직후', zenith: '#18102d', horizon: '#864536', fog: '#362136', fogDensity: .0011,
     ambient: '#c1a2b6', ambientIntensity: 3.1, light: '#ffd4ae', lightIntensity: 3.2, celestial: 'satellite', celestialColor: '#df9e80', stars: .2, celestialRadius: .68, celestialElevation: .10 },
+  { id: 'storm-night', label: '폭풍우의 밤', zenith: '#02050c', horizon: '#131d30', fog: '#0a1422', fogDensity: .0015,
+    ambient: '#7990ae', ambientIntensity: 1.8, light: '#9cb9d9', lightIntensity: 2, celestial: 'moon', celestialColor: '#8798b3', stars: .05, celestialRadius: .53, celestialElevation: .12, rain: true },
 ];
 
 /** Select once when entering a race screen. The same value is reused on every restart. */
 export function selectRaceEnvironment(district?: string, random: () => number = Math.random): NightEnvironment {
   if (!district) return NIGHT_ENVIRONMENTS[0];
   const value = random();
-  const index = Number.isFinite(value) ? Math.min(3, Math.max(0, Math.floor(value * 4))) : 0;
+  const index = Number.isFinite(value) ? Math.min(NIGHT_ENVIRONMENTS.length - 1, Math.max(0, Math.floor(value * NIGHT_ENVIRONMENTS.length))) : 0;
   return NIGHT_ENVIRONMENTS[index];
 }

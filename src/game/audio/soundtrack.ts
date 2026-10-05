@@ -23,11 +23,12 @@ export function createSoundtrack(load: (song: number) => Promise<MidiScore>, con
   const cache = new Map<number, Promise<MidiScore>>();
   const scoreFor = (song: number) => { if (!cache.has(song)) cache.set(song, load(song).catch(error => { cache.delete(song); throw error; })); return cache.get(song)!; };
   let context: AudioContext | undefined; let gain: GainNode; let synth: ReturnType<typeof createMidiSynth>;
+  let ducking = 1;
   let scene: MusicScene = 'menu'; let enabled = true; let disposed = false;
   let song = 0; let orderIndex = 0; let racing = false; let score: MidiScore | undefined;
   let startTime = 0; let endTime = 0; let index = 0; let generation = 0; let pending = false;
   let timer: ReturnType<typeof setInterval> | undefined;
-  const level = () => scene === 'running' || scene === 'countdown' ? .8 : scene === 'paused' ? .30 : .55;
+  const level = () => ducking * (scene === 'running' || scene === 'countdown' ? .8 : scene === 'paused' ? .30 : .55);
   const begin = async () => {
     const current = ++generation; pending = true;
     try {
@@ -107,6 +108,12 @@ export function createSoundtrack(load: (song: number) => Promise<MidiScore>, con
       if (context) gain.gain.setTargetAtTime(enabled ? level() : 0, context.currentTime, .025);
     },
     setEnabled(value: boolean) { enabled = value; if (context) gain.gain.setTargetAtTime(value ? level() : 0, context.currentTime, .025); if (value) activate(); },
+    setDucking(value: number) {
+      const next = Math.max(.1, Math.min(1, value));
+      if (next === ducking) return;
+      ducking = next;
+      if (context) gain.gain.setTargetAtTime(enabled ? level() : 0, context.currentTime, next < 1 ? .012 : .12);
+    },
     get enabled() { return enabled; },
     snapshot() { return { song: SOUNDTRACKS[song].title, scene, racing, enabled, voices: synth?.voiceCount ?? 0, loaded: !!score, state: context?.state ?? 'locked' }; },
     suspend() { if (context) void context.suspend().catch(() => {}); },
@@ -130,6 +137,7 @@ export const soundtrack = {
   setScene(scene: MusicScene) { player?.setScene(scene); },
   setEnabled(enabled: boolean) { player?.setEnabled(enabled); try { localStorage.setItem('speedracer-music', enabled ? 'on' : 'off'); } catch { /* Optional preference. */ } },
   get enabled() { return player?.enabled ?? true; },
+  setDucking(value: number) { player?.setDucking(value); },
   suspend() { player?.suspend(); },
   dispose() { player?.dispose(); player = undefined; },
 };

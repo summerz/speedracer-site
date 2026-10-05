@@ -3,7 +3,7 @@ import { AI_OPPONENT_COUNT } from './game/driving/aiRoster';
 import { RIVAL_ITEMS } from './game/progression/catalog';
 import type { RivalItemId } from './game/progression/catalog';
 import { soundtrack } from './game/audio/soundtrack';
-import { OFF_TRACK_PENALTY_POINTS, COLLISION_PENALTY_POINTS, CLEAN_HALF_LAP_POINTS } from './game/driving/raceScoring';
+import { OFF_TRACK_PENALTY_POINTS, COLLISION_PENALTY_POINTS, OBSTACLE_COLLISION_PENALTY_POINTS, CLEAN_HALF_LAP_POINTS } from './game/driving/raceScoring';
 import { RENDER_QUALITIES } from './platform/renderQuality';
 import type { RenderQuality } from './platform/renderQuality';
 import { DEFAULT_DRONE_CONFIGURATION } from './game/drone/droneConfiguration';
@@ -143,7 +143,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
       const profile = await store.command(outcome ? { kind: 'campaign-result', input, outcome } : { kind: 'reward', input });
       if (screenDisposed || rewardInput?.raceId !== input.raceId) return;
       const r = profile.rewards[input.raceId];
-      get('result-reward').innerHTML = `<p>${outcome?.disqualified ? '실격' : '완주'} ${r.base}P${r.assisted ? ' · 보조 80%' : ''} · 클린 +${r.clean}P · 기록 +${r.best}P${r.bonus ? ` · 첫 통과 +${r.bonus}P` : ''}${r.penalty ? ` · 벌점 -${r.penalty}P` : ''}</p><p><strong>획득 ${r.total} P</strong> · 보유 ${profile.balance.toLocaleString()} P</p>`;
+      get('result-reward').innerHTML = `<p>${outcome?.disqualified ? '실격' : '완주'} ${r.base}P${r.assisted ? ' · 보조 80%' : ''} · 클린 +${r.clean}P · 통과 +${r.obstacles ?? 0}P · 기록 +${r.best}P${r.bonus ? ` · 첫 통과 +${r.bonus}P` : ''}${r.penalty ? ` · 벌점 -${r.penalty}P` : ''}</p><p><strong>획득 ${r.total} P</strong> · 보유 ${profile.balance.toLocaleString()} P</p>`;
       if (campaign) {
         const passed = !!outcome && !outcome.disqualified && outcome.laps.length === campaign.track.laps && (selectedMode === 'competition' ? outcome.rank <= campaignRankLimit(campaign.track) : outcome.laps.every(lap => lap <= outcome.lapLimit));
         const next = TRACK_CATALOG.find(t => t.predecessor === campaign.track.id);
@@ -244,7 +244,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
       get('campaign-result').textContent = campaign ? '캠페인 결과를 저장하고 있습니다…' : '';
       campaignOutcome = campaign ? { mode: selectedMode, trackId: campaign.track.id, revision: campaign.track.revision, total: state.elapsed, laps: attack.lapTimes, rank: competition?.playerRank ?? 1, disqualified: attack.disqualified, assisted: attack.assisted, lapLimit: attack.lapLimit ?? 1 } : undefined;
       get('result-shop').hidden = !onShop;
-      rewardInput = { raceId: attack.raceId, difficulty: selectedDifficulty, collisions: state.collisions, offTrackExits: state.offTrackExits, recoveries: state.recoveries, penaltyPoints: state.penaltyPoints, cleanHalfLaps: attack.cleanHalfLaps, improvedExistingBest: !!attack.result?.improvedExistingBest, assisted: attack.assisted };
+      rewardInput = { raceId: attack.raceId, difficulty: selectedDifficulty, collisions: state.collisions, offTrackExits: state.offTrackExits, recoveries: state.recoveries, penaltyPoints: state.penaltyPoints, obstaclesPassed: state.obstaclesPassed, cleanHalfLaps: attack.cleanHalfLaps, improvedExistingBest: !!attack.result?.improvedExistingBest, assisted: attack.assisted };
       get('result-reward').textContent = store ? '완주 보상을 저장하고 있습니다…' : '';
       void saveReward();
     }
@@ -347,7 +347,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
     }
     const curvature = state.upcomingCurvature;
     corner.textContent = state.upcomingSection === 'vertical-loop' ? '수직 루프 · 자동 추종' : state.upcomingSection === 'helix' ? '스프링 · 자동 추종' : Math.abs(curvature) < 0.004 ? '직선' : `${curvature > 0 ? '우' : '좌'}회전${Math.abs(curvature) > 0.02 ? ' · 급한 코너' : ''}`;
-    const nextNotice = state.notice === 'off-track' ? `코스 이탈 · -${OFF_TRACK_PENALTY_POINTS}P` : state.notice === 'craft-collision' ? `기체 접촉 · -${COLLISION_PENALTY_POINTS}P` : state.notice === 'collision' ? `경계 접촉 · -${COLLISION_PENALTY_POINTS}P` : state.notice === 'height-collision' ? `방전 접촉 · -${COLLISION_PENALTY_POINTS}P` : state.notice === 'recovery' ? '체크포인트 복귀' : '';
+    const nextNotice = state.notice === 'off-track' ? `코스 이탈 · -${OFF_TRACK_PENALTY_POINTS}P` : state.notice === 'craft-collision' ? `기체 접촉 · -${COLLISION_PENALTY_POINTS}P` : state.notice === 'collision' ? `경계 접촉 · -${COLLISION_PENALTY_POINTS}P` : state.notice === 'obstacle-pass' ? '장애물 통과 · +1P' : state.notice === 'height-collision' ? `방전 접촉 · -${OBSTACLE_COLLISION_PENALTY_POINTS}P` : state.notice === 'recovery' ? '체크포인트 복귀' : '';
     if (notice.textContent !== nextNotice) notice.textContent = nextNotice;
     if (state.phase !== lastPhase) {
       lastPhase = state.phase;
