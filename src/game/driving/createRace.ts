@@ -1,3 +1,6 @@
+import { createNightSky } from '../environment/createNightSky';
+import { NIGHT_ENVIRONMENTS } from '../environment/raceEnvironment';
+import type { NightEnvironment } from '../environment/raceEnvironment';
 import { campaignLapLimit } from '../track/trackCatalog';
 import { createCatalogTrack } from '../track/trackRuntime';
 import type { TrackDefinition } from '../track/trackCatalog';
@@ -80,11 +83,13 @@ export function createRace(
   mode: RaceMode = 'time-attack',
   course?: TrackDefinition,
   rivalSlots: readonly RivalItemId[] = [],
+  environment: NightEnvironment = NIGHT_ENVIRONMENTS[0],
 ): Race {
   const config = resolveDroneConfiguration(configuration);
   const visuals = config.speedEffects;
   const renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setClearColor(0x020406);
+  renderer.setClearColor(environment.fog);
+  container.dataset.environment = environment.id;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.1;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -92,11 +97,12 @@ export function createRace(
   renderer.domElement.setAttribute('aria-label', '순환 트랙을 달리는 드론의 추적 시점');
   container.append(renderer.domElement);
   const scene = new THREE.Scene();
-  scene.fog = new THREE.FogExp2(0x020406, 0.0045);
-  scene.add(new THREE.HemisphereLight(0xabcbdc, 0x152435, 2.5));
-  const sun = new THREE.DirectionalLight(0xc8dfed, 3);
+  scene.fog = new THREE.FogExp2(environment.fog, environment.fogDensity);
+  scene.add(new THREE.HemisphereLight(environment.ambient, 0x152435, environment.ambientIntensity));
+  const sun = new THREE.DirectionalLight(environment.light, environment.lightIntensity);
   sun.position.set(-50, 150, -100); scene.add(sun);
   const track = course ? createCatalogTrack(course) : createTrack(altitudeProfile, difficulty);
+  const sky = createNightSky(environment, track.sample(0).tangent); scene.add(sky.object);
   const scenery = course ? createDistrictScenery(track, course) : undefined;
   if (scenery) scene.add(scenery.object);
   const trackVisual = createTrackVisual(track, config.boostStyle.pulseColor);
@@ -117,7 +123,7 @@ export function createRace(
   const model = timeAttack.model;
   const raceGates = createRaceGates(track, timeAttack.snapshot().gatesPerLap);
   scene.add(raceGates.object);
-  const camera = new THREE.PerspectiveCamera(visuals.baseFov, 1, 0.1, 1100);
+  const camera = new THREE.PerspectiveCamera(visuals.baseFov, 1, 0.1, 3200);
   const views = createRaceViews(camera, drone, scene, track, undefined, rivalVisuals.entries);
   const speedLines = createSpeedLines(visuals);
   camera.add(speedLines.object); scene.add(camera);
@@ -385,13 +391,13 @@ export function createRace(
     raceGates.update(timeAttack.snapshot().nextCheckpoint);
     speedLines.update(state.elapsed, state.speed, state.boosting, reducedMotion.matches, state.boostStage === 2);
     views.prepareDriving();
-    scenery?.setOverview(false); scenery?.update(drone.position);
+    scenery?.setOverview(false); scenery?.update(drone.position); sky.update(camera.position);
     exhaustHaze.update(state.elapsed, state.boostStage, phase === 'running' && state.speed > 1, views.view === 'cockpit', reducedMotion.matches);
     composer.render(delta);
     if (layout.track) {
       const linesVisible = speedLines.object.visible;
       speedLines.object.visible = false;
-      views.prepareOverview(); scenery?.setOverview(true); overviewComposer.render(delta); scenery?.setOverview(false);
+      views.prepareOverview(); scenery?.setOverview(true); sky.setOverview(true); overviewComposer.render(delta); scenery?.setOverview(false); sky.setOverview(false);
       speedLines.object.visible = linesVisible;
       views.prepareDriving();
     }
@@ -444,7 +450,7 @@ export function createRace(
       render.dispose(); bloom.dispose(); exhaustHaze.pass.dispose(); boostWarp.pass.dispose(); output.dispose(); composer.dispose();
       overviewRender.dispose(); overviewOutput.dispose(); overviewComposer.dispose();
       blitGeometry.dispose(); blitMaterial.dispose(); pipFrame.remove();
-      renderer.dispose(); renderer.forceContextLoss(); renderer.domElement.remove();
+      renderer.dispose(); renderer.forceContextLoss(); renderer.domElement.remove(); delete container.dataset.environment;
     },
   };
 }

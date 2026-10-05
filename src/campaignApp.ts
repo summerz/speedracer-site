@@ -5,7 +5,7 @@ import { campaignStatus, nextCampaignTrack } from './game/progression/campaign';
 import type { ProgressStore } from './game/progression/progressStore';
 import type { RaceMode } from './game/driving/createRaceSession';
 import { createTrackPreview } from './game/track/createTrackPreview';
-import { describeTrackLandmark } from './game/track/createTrackLandmark';
+import { describeTrackLandmarks } from './game/track/createTrackLandmark';
 import './campaign.css';
 
 export function mountCampaign(root: HTMLDivElement, store: ProgressStore) {
@@ -40,7 +40,7 @@ export function mountCampaign(root: HTMLDivElement, store: ProgressStore) {
     }).join('')}</div></section>`).join('');
     const track = createCatalogTrack(selected), metrics = trackMetrics(track), limit = campaignLapLimit(selected);
     preview?.setTrack(track, DISTRICTS[selected.district].color, selected);
-    get('course-landmark').textContent = `랜드마크 · ${describeTrackLandmark(track, selected).name}`;
+    get('course-landmark').textContent = `랜드마크 · ${describeTrackLandmarks(track, selected).map(landmark => landmark.name).join(' / ')}`;
     get('course-district').textContent = `${DISTRICTS[selected.district].name} · ${String(selected.order).padStart(2, '0')}`;
     get('course-name').textContent = selected.name; get('course-features').textContent = selected.features;
     get('course-metrics').innerHTML = `<div><dt>난이도</dt><dd>${selected.rating}/6</dd></div><div><dt>랩 거리</dt><dd>${(metrics.length / 1000).toFixed(1)} km</dd></div><div><dt>고저차</dt><dd>${Math.round(metrics.heightRange)} m</dd></div><div><dt>고도 / 장애물</dt><dd>${selected.altitudeLevels}단 / ${metrics.obstacles}개</dd></div><div><dt>경기</dt><dd>${selected.laps}랩</dd></div><div><dt>${mode === 'time-attack' ? '매 랩 제한' : '통과 조건'}</dt><dd>${mode === 'time-attack' ? `${Math.floor(limit / 60)}분 ${limit % 60}초` : '1위'}</dd></div>`;

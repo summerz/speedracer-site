@@ -5,7 +5,7 @@ import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { overviewPose } from '../driving/createRaceViews';
 import type { Track } from './createTrack';
 import type { TrackDefinition } from './trackCatalog';
-import { createTrackLandmark, describeTrackLandmark, disposeScenery } from './createTrackLandmark';
+import { createTrackLandmark, describeTrackLandmarks, disposeScenery } from './createTrackLandmark';
 
 /** One lightweight WebGL context for the entire course selection screen. */
 export function createTrackPreview(container: HTMLElement) {
@@ -27,7 +27,8 @@ export function createTrackPreview(container: HTMLElement) {
     setTrack(value: Track, color: string, definition?: TrackDefinition) {
       if (route) { scene.remove(route); route.geometry.dispose(); route.material.dispose(); }
       if (landmark) { disposeScenery(landmark); landmark = undefined; }
-      if (definition) { landmark = createTrackLandmark(describeTrackLandmark(value, definition), true); scene.add(landmark); }
+      if (definition) { landmark = new THREE.Group();
+        landmark.add(...describeTrackLandmarks(value, definition).map(descriptor => createTrackLandmark(descriptor, true))); scene.add(landmark); }
       track = value; const points: number[] = [], colors: number[] = [];
       const normal = new THREE.Color(color);
       const { h, s, l } = normal.getHSL({ h: 0, s: 0, l: 0 }, THREE.SRGBColorSpace);

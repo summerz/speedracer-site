@@ -46,16 +46,62 @@ export function describeTrackLandmark(track: Track, definition: TrackDefinition,
 }
 export type TrackLandmark = ReturnType<typeof describeTrackLandmark>;
 
+/** Pilot: three readable encounters on the first district; other districts retain their layout. */
+export function describeTrackLandmarks(track: Track, definition: TrackDefinition, route = sceneryRoute(track)): TrackLandmark[] {
+  const original = describeTrackLandmark(track, definition, route);
+  if (definition.district !== 'residential') return [original];
+  const result: TrackLandmark[] = [];
+  for (const [index, spec] of [
+    { kind: original.kind, scale: 3.1, fraction: .08 },
+    { kind: 'orbital-ring' as LandmarkKind, scale: 2.15, fraction: .38 },
+    { kind: 'bridge' as LandmarkKind, scale: 1.65, fraction: .72 },
+  ].entries()) {
+    const radius = 72 * spec.scale, height = (spec.kind === 'bridge' || spec.kind === 'orbital-ring' ? 112 : 100) * spec.scale;
+    const margin = radius + track.halfWidth + 42;
+    let best: { position: THREE.Vector3; rotation: number; score: number } | undefined;
+    // Score the approach, not only the closest sideways pass. Fixed candidates keep previews stable.
+    for (const shift of [0, .04, -.04, .09, -.09, .16, -.16]) {
+      const distance = (spec.fraction + shift + 1) % 1 * track.length;
+      const frame = track.sample(distance);
+      if (frame.up.y < .65 || Math.abs(frame.tangent.y) > .6) continue;
+      const side = new THREE.Vector3(frame.tangent.z, 0, -frame.tangent.x).normalize();
+      for (const extra of [0, 70, 170, 300]) for (const sign of [1, -1]) {
+        const position = frame.position.clone().addScaledVector(side, (margin + extra) * sign);
+        if (route.some(p => Math.hypot(p.x - position.x, p.z - position.z) < margin)) continue;
+        if (result.some(p => Math.hypot(p.position.x - position.x, p.position.z - position.z) < p.radius + radius + 30)) continue;
+        position.y = Math.max(0, frame.position.y - height * .12);
+        let score = -Infinity;
+        for (const before of [160, 280, 420, 600, 800]) {
+          const approach = track.sample(distance - before);
+          if (approach.up.y < .65) continue;
+          const target = position.clone().add(new THREE.Vector3(0, height * .45, 0)).sub(approach.position);
+          const range = target.length(), alignment = target.normalize().dot(approach.tangent);
+          // A forward view with a large apparent silhouette wins over an invisible safe position.
+          if (alignment > .70) score = Math.max(score, alignment * 3 + Math.min(1, height / range) - extra / 2500);
+        }
+        if (!best || score > best.score) best = { position, rotation: Math.atan2(frame.tangent.x, frame.tangent.z), score };
+      }
+    }
+    if (!best || !Number.isFinite(best.score)) throw new Error(`No visible landmark approach for ${definition.id}:${index}`);
+    result.push({ ...original, id: `${definition.id}-landmark-${index}`, name: `${labels[spec.kind]} ${index === 0 ? '· 메가스트럭처' : ''}`.trim(),
+      kind: spec.kind, scale: spec.scale, radius, height, position: best.position, rotation: best.rotation });
+  }
+  return result;
+}
+
 /** Seven silhouettes, with course-specific proportions; emissive strips replace point lights. */
 export function createTrackLandmark(descriptor: TrackLandmark, preview = false) {
   const object = new THREE.Group(); object.name = descriptor.id;
   object.position.copy(descriptor.position); object.rotation.y = descriptor.rotation; object.scale.setScalar(descriptor.scale);
   object.userData.landmark = { id: descriptor.id, kind: descriptor.kind, name: descriptor.name };
   const color = new THREE.Color(descriptor.color);
+  const signature = descriptor.id.match(/-landmark-([0-9]+)$/)?.[1];
+  const accent = signature === undefined ? color : new THREE.Color(['#ffca70', '#c6a0ff', '#ff8eb4'][Number(signature) % 3]);
   const body = preview ? new THREE.MeshBasicMaterial({ color: '#223947', side: THREE.DoubleSide })
-    : new THREE.MeshStandardMaterial({ color: '#0b1a24', roughness: .6, metalness: .5, side: THREE.DoubleSide });
-  const glow = new THREE.MeshBasicMaterial({ color: color.clone().multiplyScalar(preview ? .85 : 1.6), toneMapped: false });
-  const dim = new THREE.MeshBasicMaterial({ color: color.clone().multiplyScalar(.35), toneMapped: false });
+    : new THREE.MeshStandardMaterial({ color: signature === undefined ? '#0b1a24' : '#26364a', roughness: .6, metalness: .5, side: THREE.DoubleSide });
+  const glowStrength = signature === undefined || signature === '0' ? 1.8 : 2.8;
+  const glow = new THREE.MeshBasicMaterial({ color: accent.clone().multiplyScalar(preview ? .85 : glowStrength), toneMapped: false });
+  const dim = new THREE.MeshBasicMaterial({ color: color.clone().multiplyScalar(signature === undefined ? .35 : .85), toneMapped: false });
   const add = (geometry: THREE.BufferGeometry, material: THREE.Material, x: number, y: number, z: number) => {
     const mesh = new THREE.Mesh(geometry, material); mesh.position.set(x, y, z); object.add(mesh); return mesh;
   };
@@ -90,7 +136,12 @@ export function createTrackLandmark(descriptor: TrackLandmark, preview = false) 
     }
   } else if (descriptor.kind === 'orbital-ring') {
     const halo = add(new THREE.TorusGeometry(42, 5, 8, 48), body, 0, 62, 0); halo.rotation.x = .3;
-    const edge = add(new THREE.TorusGeometry(42, 1, 6, 48), glow, 0, 62, 5.2); edge.rotation.x = .3;
+    // Both faces and the outer rim stay luminous on approaches from either direction.
+    for (const sign of [-1, 1]) {
+      const edge = add(new THREE.TorusGeometry(42, 1, 6, 48), glow, 0, 62 - Math.sin(.3) * 5.4 * sign, Math.cos(.3) * 5.4 * sign);
+      edge.rotation.x = .3;
+    }
+    const rim = add(new THREE.TorusGeometry(47, .9, 6, 48), glow, 0, 62, 0); rim.rotation.x = .3;
     box(-28, 23, 0, 12, 42, 16); box(28, 23, 0, 12, 42, 16);
     for (const x of [-45, 45]) { box(x, 24, 0, 21, 3, 55); box(x, 26, 0, 21, .8, 55, dim); }
   } else {
@@ -98,7 +149,11 @@ export function createTrackLandmark(descriptor: TrackLandmark, preview = false) 
     for (const [index, x] of towers.entries()) {
       const height = descriptor.kind === 'spire' ? 156 + variation : 70 + index * 12 + variation;
       box(x, height / 2 + 5, 0, 22, height, 32);
-      for (let y = 14; y < height; y += 10) box(x, y, -16.1, 18, 1, .2, glow);
+      for (let y = 14; y < height; y += 10) {
+        box(x, y, -16.1, 18, 1, .2, glow); box(x, y, 16.1, 18, 1, .2, glow);
+        box(x - 11.1, y, 0, .2, 1, 30, glow); box(x + 11.1, y, 0, .2, 1, 30, glow);
+      }
+      for (const z of [-16, 16]) box(x, height / 2 + 5, z, .9, height, .9, glow);
       box(x, height + 13, 0, 12, 16, 18); box(x, height + 22, 0, 13, 1, 19, glow);
     }
     if (descriptor.kind === 'bridge') { box(0, 70, 0, 54, 10, 18); box(0, 76, -9, 54, 1, 1, glow); }

@@ -8,6 +8,7 @@
   },
   "include": [
     "src/platform/gamepadInput.ts",
+    "src/game/environment/createNightSky.ts",
     "src/game/track/createDistrictScenery.ts",
     "src/game/track/trackRuntime.ts",
     "src/game/driving/createTimeAttack.ts",

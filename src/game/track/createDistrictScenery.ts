@@ -3,7 +3,7 @@ import type { Track } from './createTrack.js';
 import { DISTRICTS } from './trackCatalog.js';
 import type { TrackDefinition } from './trackCatalog.js';
 import type { RenderQuality } from '../../platform/renderQuality.js';
-import { createTrackLandmark, describeTrackLandmark, sceneryRoute, scenerySeed } from './createTrackLandmark.js';
+import { createTrackLandmark, describeTrackLandmarks, sceneryRoute, scenerySeed } from './createTrackLandmark.js';
 
 /** Seeded instanced silhouettes and emissive windows; no per-window lights or draw calls. */
 export function createDistrictScenery(track: Track, definition: TrackDefinition) {
@@ -14,8 +14,9 @@ export function createDistrictScenery(track: Track, definition: TrackDefinition)
   route.forEach(p => bounds.expandByPoint(p));
   bounds.expandByScalar(230);
   const object = new THREE.Group(); object.name = `district-${definition.district}`;
-  const landmark = describeTrackLandmark(track, definition, route);
-  const landmarkObject = createTrackLandmark(landmark);
+  const landmarks = describeTrackLandmarks(track, definition, route);
+  const landmark = landmarks[0];
+  const landmarkObjects = landmarks.map(descriptor => createTrackLandmark(descriptor));
   const color = new THREE.Color(DISTRICTS[definition.district].color);
   const bodyMaterial = new THREE.MeshStandardMaterial({ color: '#09131d', roughness: .8, metalness: .45 });
   const windowMaterial = new THREE.MeshBasicMaterial({ color: color.clone().multiplyScalar(1.7), toneMapped: false });
@@ -36,7 +37,16 @@ export function createDistrictScenery(track: Track, definition: TrackDefinition)
     const clearance = radius + track.halfWidth + 36;
     // Horizontal rejection protects the full vertical swept corridor, including upside-down sections.
     if (route.some(p => Math.hypot(p.x - x, p.z - z) < clearance)) continue;
-    if (Math.hypot(landmark.position.x - x, landmark.position.z - z) < radius + landmark.radius + 12) continue;
+    if (landmarks.some(landmark => Math.hypot(landmark.position.x - x, landmark.position.z - z) < radius + landmark.radius + 28)) continue;
+    // Keep the opening approach to each landmark free of tall buildings.
+    if (definition.district === 'residential' && landmarks.some(landmark => route.some((p, i) => {
+      if (i % 20) return false;
+      const delta = landmark.position.clone().sub(p), length = delta.length();
+      if (length > 850) return false;
+      const view = new THREE.Vector3(x - p.x, 0, z - p.z), axis = new THREE.Vector3(delta.x, 0, delta.z);
+      const t = view.dot(axis) / axis.lengthSq();
+      return t > .05 && t < .98 && view.addScaledVector(axis, -t).length() < radius + 35;
+    }))) continue;
     const district = definition.district;
     const height = district === 'skyline' ? 100 + random() * 200 : district === 'orbital' ? 80 + random() * 180 : district === 'industrial' ? 25 + random() * 65 : district === 'stadium' ? 25 + random() * 55 : 40 + random() * 120;
     const floor = district === 'orbital' ? 24 + random() * 40 : 0;
@@ -66,7 +76,7 @@ export function createDistrictScenery(track: Track, definition: TrackDefinition)
   const bodies = mesh(bodyMaterial, boxes, 'city-silhouettes');
   const lights = mesh(windowMaterial, windows, 'city-windows');
   const crowns = mesh(accentMaterial, accents, 'city-crowns');
-  object.add(landmarkObject);
+  object.add(...landmarkObjects);
   let quality: RenderQuality = 'balanced';
   const lastPosition = new THREE.Vector3(Infinity, Infinity, Infinity);
   let dirty = true;
@@ -86,11 +96,15 @@ export function createDistrictScenery(track: Track, definition: TrackDefinition)
     for (const [mesh, count] of [[bodies, bodyCount], [lights, windowCount], [crowns, crownCount]] as const) {
       mesh.count = count; mesh.instanceMatrix.needsUpdate = true;
     }
-    landmarkObject.visible = landmark.position.distanceTo(position) - landmark.height < ranges[0];
+    landmarkObjects.forEach((object, i) => {
+      const descriptor = landmarks[i];
+      const range = definition.district === 'residential' ? (quality === 'low' ? 1400 : 2200) : ranges[0];
+      object.visible = descriptor.position.distanceTo(position) - descriptor.height < range;
+    });
   };
   update(track.sample(0).position);
   return {
-    object, landmark, counts: { buildings: clusters.length, windows: windows.length },
+    object, landmark, landmarks, counts: { buildings: clusters.length, windows: windows.length },
     setQuality(value: RenderQuality) { if (quality !== value) { quality = value; dirty = true; update(lastPosition.clone()); } },
     setOverview(overview: boolean) { object.visible = !overview; },
     update,

@@ -1,3 +1,4 @@
+import { selectRaceEnvironment } from './game/environment/raceEnvironment';
 import { RIVAL_ITEMS } from './game/progression/catalog';
 import type { RivalItemId } from './game/progression/catalog';
 import { soundtrack } from './game/audio/soundtrack';
@@ -114,6 +115,7 @@ export function mountRace(root: HTMLDivElement, onHangar: () => void, configurat
   const heightGuide = root.querySelector<HTMLElement>('.height-guide')!;
   let selectedDifficulty: DifficultyId = campaign ? trackPreset(campaign.track).id : 'beginner';
   let selectedMode: RaceMode = campaign?.mode ?? 'time-attack';
+  const environment = selectRaceEnvironment(campaign?.track.district);
   let itemStates: RaceSnapshot['timeAttack']['items'] = [];
   let equippedRivalSlots: RivalItemId[] = [];
   let campaignOutcome: CampaignOutcome | undefined;
@@ -420,9 +422,9 @@ export function mountRace(root: HTMLDivElement, onHangar: () => void, configurat
     get('race-loadout').textContent = `${selectedMode === 'competition' ? 'AI 3대와 경쟁' : '타임어택'} · ${focusSlots || equippedRivalSlots.length ? `아이템 ${focusSlots + equippedRivalSlots.length}개 · 기본 보상 80%` : '아이템 없음'}`;
     rewardInput = undefined; campaignOutcome = undefined; get('result-reward').textContent = ''; get('reward-retry').hidden = true; get('result-shop').hidden = true;
     race?.dispose(); lastPhase = ''; lastViewKey = ''; previewing = false; lastCollisions = 0; lastBoostStage = 0; lastAnnouncement = 0; impactAnimation?.cancel(); boostFlashAnimation?.cancel();
-    get('difficulty-description').textContent = campaign?.track.features ?? DIFFICULTIES[selectedDifficulty].description;
+    get('difficulty-description').textContent = `${campaign?.track.features ?? DIFFICULTIES[selectedDifficulty].description} · ${environment.label}`;
     try {
-      race = createRace(get<HTMLDivElement>('race-scene'), update, showError, configuration, undefined, campaign ? trackPreset(campaign.track) : DIFFICULTIES[selectedDifficulty], focusSlots, selectedMode, campaign?.track, equippedRivalSlots);
+      race = createRace(get<HTMLDivElement>('race-scene'), update, showError, configuration, undefined, campaign ? trackPreset(campaign.track) : DIFFICULTIES[selectedDifficulty], focusSlots, selectedMode, campaign?.track, equippedRivalSlots, environment);
       race.setQuality(qualitySelect.value as RenderQuality);
       race.setExhaustHaze(hazeButton.getAttribute('aria-pressed') === 'true');
       race.setBloom(bloomButton.getAttribute('aria-pressed') === 'true');
