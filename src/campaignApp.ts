@@ -60,7 +60,7 @@ export function mountCampaign(root: HTMLDivElement, store: ProgressStore, contex
     get('campaign-balance').textContent = `${profile.balance.toLocaleString()} P`;
     const count = TRACK_CATALOG.filter(t => campaignStatus(campaign, mode, t) === 'cleared').length;
     get('campaign-count').textContent = `${count} / ${TRACK_CATALOG.length} CLEARED`;
-    get('campaign-rule').textContent = `${RACE_CHALLENGES[challenge].label} 별점·기록 표시 · ${mode === 'time-attack' ? '매 랩 제한시간' : '통과 순위'}를 지키면 다음 코스가 열립니다.`;
+    get('campaign-rule').textContent = `${RACE_CHALLENGES[challenge].label} 별점·기록 표시 · ${mode === 'time-attack' ? '매 랩 제한시간' : '통과 순위'} 안에 완주하면 다음 코스가 열립니다.`;
     for (const button of root.querySelectorAll<HTMLElement>('[data-mode]')) button.setAttribute('aria-pressed', String(button.dataset.mode === mode));
     get('campaign-list').innerHTML = Object.entries(DISTRICTS).map(([id, district]) => `<section class="course-district"><h3>${district.name}</h3><div>${TRACK_CATALOG.filter(t => t.district === id).map(t => {
       const status = campaignStatus(campaign, mode, t);
