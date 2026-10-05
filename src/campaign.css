@@ -160,3 +160,11 @@
 .course-stars-summary > span:last-child { color:#b5c9d1; font-size:11px; line-height:1.6; }
 .course-stars-summary strong { display:block; color:#92aab5; font-weight:400; }
 #course-challenge-description { color:#a1bcb9; font-size:11px; }
+
+.course-routes { margin:14px 0; border-top:1px solid #58717d50; padding-top:10px; }
+.course-routes .course-route-heading { margin:0 0 8px; color:#c3e4e1; font-size:11px; }
+.course-routes>div { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.course-routes article { display:grid; gap:4px; border-left:2px solid var(--accent,#80ffe0); padding-left:10px; }
+.course-routes strong { font-size:12px; color:#dcf8ef; }
+.course-routes span,.course-routes small { font-size:10px; line-height:1.5; color:#9bb4c1; }
+@media(max-width:480px) { .course-routes>div { grid-template-columns:1fr; gap:10px; } }

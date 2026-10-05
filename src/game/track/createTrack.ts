@@ -4,6 +4,9 @@ import { createDischargeBarrier } from './createDischargeBarrier.js';
 import { altitudeCanPass, resolveAltitudeProfile } from './altitudeProfile.js';
 import type { DifficultyPreset } from './difficulty.js';
 import type { AltitudeProfile } from './altitudeProfile.js';
+import { resolveHeightObstacle, obstacleArrivalTime, corridorCanPass, upcomingCorridor } from './obstacleDynamics.js';
+import { createCorridorVisual } from './createCorridorVisual.js';
+import { roadPaths, routeDistanceScale, type TrackFork } from './trackBranches.js';
 
 export interface TrackFrame {
   position: THREE.Vector3;
@@ -13,9 +16,12 @@ export interface TrackFrame {
   /** Lateral steering curvature; loops and helices follow automatically. */
   curvature: number;
   section: 'course' | 'vertical-loop' | 'helix';
+  /** Physical metres per shared course metre on the selected branch. */
+  distanceScale?: number;
 }
 
 export interface HeightObstacle {
+  readonly routeId?: string;
   readonly distance: number;
   readonly depth: number;
   readonly kind: 'rise' | 'descend' | 'middle';
@@ -24,6 +30,18 @@ export interface HeightObstacle {
   /** Safe craft-center height above the local road, including craft clearance. */
   readonly minAltitude: number;
   readonly maxAltitude: number;
+  readonly motion?: { stepSeconds: number; transitionSeconds: number; phase: number; clearance: number };
+}
+
+export interface CorridorObstacle {
+  readonly routeId?: string;
+  readonly distance: number;
+  readonly depth: number;
+  readonly safeCenter: number;
+  /** Width of the physical opening; collision includes the craft's half width. */
+  readonly safeWidth: number;
+  readonly lane: 'left' | 'center' | 'right';
+  readonly speedRetention: number;
 }
 
 export interface Track {
@@ -33,16 +51,22 @@ export interface Track {
   readonly halfWidth: number;
   readonly checkpointSpacing: number;
   readonly heightObstacles: readonly HeightObstacle[];
+  readonly corridorObstacles?: readonly CorridorObstacle[];
+  readonly branches?: readonly TrackFork[];
+  /** Shared session clock: AI freezes/items must not move the world's openings independently. */
+  obstacleTime?: number;
   randomizeObstacles?(random: () => number): void;
-  sample(distance: number, target?: TrackFrame): TrackFrame;
+  sample(distance: number, target?: TrackFrame, routeId?: string | null): TrackFrame;
 }
 
 /** Includes the obstacle until the entire craft has cleared its rear face. */
-export function upcomingHeightObstacle(track: Track, distance: number) {
+export function upcomingHeightObstacle(track: Track, distance: number, routeId?: string | null) {
   let nearest: { obstacle: HeightObstacle; distance: number } | null = null;
   for (const obstacle of track.heightObstacles) {
+    if (obstacle.routeId && obstacle.routeId !== routeId) continue;
     let gap = obstacle.distance - distance;
-    gap += Math.ceil((-gap - obstacle.depth / 2 - 2.2) / track.length) * track.length;
+    const clearance = (obstacle.depth / 2 + 2.2) / routeDistanceScale(track, obstacle.distance, obstacle.routeId);
+    gap += Math.ceil((-gap - clearance) / track.length) * track.length;
     if (!nearest || gap < nearest.distance) nearest = { obstacle, distance: gap };
   }
   return nearest;
@@ -159,6 +183,7 @@ export function createTrack(profile?: AltitudeProfile, preset?: DifficultyPreset
     length, halfWidth: preset?.layout.halfWidth ?? 11, checkpointSpacing: length / 24,
     heightObstacles,
     sample(distance, target = createTrackFrame()) {
+      target.distanceScale = 1;
       const { index, mix } = at(distance);
       target.position.copy(positions[index]).lerp(positions[index + 1], mix);
       quaternion.copy(orientations[index]).slerp(orientations[index + 1], mix);
@@ -180,78 +205,99 @@ const maxAltitude = (track: Track) => track.altitudeProfile.levels[track.altitud
 export function createTrackVisual(track: Track, lineColor?: string) {
   const group = new THREE.Group();
   group.name = 'neonLoop';
-  const count = Math.ceil(track.length / 1.2);
-  const vertices: number[] = [];
-  const indices: number[] = [];
-  const left: THREE.Vector3[] = [];
-  const right: THREE.Vector3[] = [];
+  const paths = roadPaths(track);
+  const vertices: number[] = [], indices: number[] = [];
+  const left: THREE.Vector3[] = [], right: THREE.Vector3[] = [];
   const frame = createTrackFrame();
-  for (let i = 0; i <= count; i++) {
-    track.sample(i / count * track.length, frame);
-    const a = frame.position.clone().addScaledVector(frame.right, -track.halfWidth);
-    const b = frame.position.clone().addScaledVector(frame.right, track.halfWidth);
-    vertices.push(...a.toArray(), ...b.toArray());
-    left.push(a.clone().addScaledVector(frame.up, 0.12));
-    right.push(b.clone().addScaledVector(frame.up, 0.12));
-    if (i < count) {
-      const n = i * 2;
-      indices.push(n, n + 2, n + 1, n + 1, n + 2, n + 3);
+  const edgeMaterial = new THREE.MeshBasicMaterial({ color: lineColor ? new THREE.Color(lineColor).multiplyScalar(1.3) : new THREE.Color(0.12, 1.3, 1.1) });
+  const dummy = new THREE.Object3D(), basis = new THREE.Matrix4(), back = new THREE.Vector3();
+  const orient = (object: THREE.Object3D) => object.quaternion.setFromRotationMatrix(basis.makeBasis(frame.right, frame.up, back.copy(frame.tangent).negate()));
+  for (const path of paths) {
+    const count = Math.ceil((path.end - path.start) / 1.2);
+    const edges: [THREE.Vector3[], THREE.Vector3[]] = [[], []];
+    const first = vertices.length / 3;
+    for (let i = 0; i <= count; i++) {
+      track.sample(path.start + i / count * (path.end - path.start), frame, path.routeId);
+      const a = frame.position.clone().addScaledVector(frame.right, -track.halfWidth);
+      const b = frame.position.clone().addScaledVector(frame.right, track.halfWidth);
+      vertices.push(...a.toArray(), ...b.toArray()); left.push(a); right.push(b);
+      edges[0].push(a.clone().addScaledVector(frame.up, .12));
+      edges[1].push(b.clone().addScaledVector(frame.up, .12));
+      if (i < count) { const n = first + i * 2; indices.push(n, n + 2, n + 1, n + 1, n + 2, n + 3); }
+    }
+    const closed = paths.length === 1;
+    for (const edge of edges) {
+      if (closed) edge.pop();
+      group.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(edge, closed, 'centripetal'), count, .12, 5, closed), edgeMaterial));
     }
   }
   const roadGeometry = new THREE.BufferGeometry();
   roadGeometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
   roadGeometry.setIndex(indices); roadGeometry.computeVertexNormals();
-  group.add(new THREE.Mesh(roadGeometry, new THREE.MeshStandardMaterial({ color: 0x12242d, roughness: 0.85, metalness: 0.2, side: THREE.DoubleSide })));
-  const edgeMaterial = new THREE.MeshBasicMaterial({ color: lineColor ? new THREE.Color(lineColor).multiplyScalar(1.3) : new THREE.Color(0.12, 1.3, 1.1) });
-  for (const edge of [left, right]) {
-    edge.pop();
-    const edgeCurve = new THREE.CatmullRomCurve3(edge, true, 'centripetal');
-    group.add(new THREE.Mesh(new THREE.TubeGeometry(edgeCurve, count, 0.12, 5, true), edgeMaterial));
-  }
-  // Repeated markings and pillars make nearby movement legible without textures.
-  const dashGeometry = new THREE.BoxGeometry(0.16, 0.035, 3.8);
+  group.add(new THREE.Mesh(roadGeometry, new THREE.MeshStandardMaterial({ color: 0x12242d, roughness: .85, metalness: .2, side: THREE.DoubleSide })));
   const dashMaterial = new THREE.MeshBasicMaterial({ color: lineColor ? new THREE.Color(lineColor).multiplyScalar(.28) : 0x426c76 });
-  const dashCount = Math.floor(track.length / 9);
-  const dashes = new THREE.InstancedMesh(dashGeometry, dashMaterial, dashCount);
-  const dummy = new THREE.Object3D();
-  const basis = new THREE.Matrix4();
-  const back = new THREE.Vector3();
-  const orient = (object: THREE.Object3D) => object.quaternion.setFromRotationMatrix(basis.makeBasis(frame.right, frame.up, back.copy(frame.tangent).negate()));
-  for (let i = 0; i < dashCount; i++) {
-    track.sample(i * 9, frame);
-    dummy.position.copy(frame.position).addScaledVector(frame.up, 0.035);
-    orient(dummy);
-    dummy.updateMatrix(); dashes.setMatrixAt(i, dummy.matrix);
-  }
-  group.add(dashes);
-  // Closely spaced verge marks give nearby motion cues at racing speed.
-  const vergeCount = Math.floor(track.length / 4);
-  const verges = new THREE.InstancedMesh(new THREE.BoxGeometry(0.3, 0.03, 1.8), dashMaterial, vergeCount * 2);
-  for (let i = 0; i < vergeCount; i++) {
-    track.sample(i * 4, frame);
-    for (let side = 0; side < 2; side++) {
-      dummy.position.copy(frame.position).addScaledVector(frame.right, (side === 0 ? -1 : 1) * (track.halfWidth - 2));
-      dummy.position.addScaledVector(frame.up, 0.045);
-      orient(dummy);
-      dummy.updateMatrix(); verges.setMatrixAt(i * 2 + side, dummy.matrix);
+  const marks = (spacing: number, sides: boolean, geometry: THREE.BufferGeometry, material: THREE.Material, height: number, edgeInset: number) => {
+    const samples = paths.flatMap(path => {
+      const result: { distance: number; routeId: string | null }[] = [];
+      for (let d = path.start; d < path.end; d += spacing) {
+        // No posts inside the mouth where the two surfaces still overlap.
+        if (height > 1 && path.routeId && (d - path.start < 70 || path.end - d < 70)) continue;
+        result.push({ distance: d, routeId: path.routeId });
+      }
+      return result;
+    });
+    const mesh = new THREE.InstancedMesh(geometry, material, samples.length * (sides ? 2 : 1));
+    samples.forEach((sample, i) => {
+      track.sample(sample.distance, frame, sample.routeId);
+      for (let side = 0; side < (sides ? 2 : 1); side++) {
+        dummy.position.copy(frame.position).addScaledVector(frame.up, height);
+        if (sides) dummy.position.addScaledVector(frame.right, (side ? 1 : -1) * (track.halfWidth - edgeInset));
+        orient(dummy); dummy.updateMatrix(); mesh.setMatrixAt(i * (sides ? 2 : 1) + side, dummy.matrix);
+      }
+    });
+    group.add(mesh);
+  };
+  marks(9, false, new THREE.BoxGeometry(.16, .035, 3.8), dashMaterial, .035, 0);
+  marks(4, true, new THREE.BoxGeometry(.3, .03, 1.8), dashMaterial, .045, 2);
+  marks(18, true, new THREE.BoxGeometry(.4, 3, 1), new THREE.MeshBasicMaterial({ color: 0x285e67 }), 1.5, 0);
+  // Near structures frame the technical lane; the other branch keeps open sky.
+  const ribMaterial = new THREE.MeshStandardMaterial({ color: 0x12202c, metalness: .5, roughness: .6 });
+  for (const fork of track.branches ?? []) {
+    for (const u of [.27, .47, .67]) {
+      track.sample(fork.start + (fork.end - fork.start) * u, frame, fork.routes[0].id);
+      const rib = new THREE.Group();
+      for (const side of [-1, 1]) {
+        const post = new THREE.Mesh(new THREE.BoxGeometry(2, 16, 3), ribMaterial);
+        post.position.set(side * (track.halfWidth + 10), 8, 0); rib.add(post);
+        const strip = new THREE.Mesh(new THREE.BoxGeometry(.25, 14, .3), edgeMaterial);
+        strip.position.set(side * (track.halfWidth + 8.8), 8, 1.6); rib.add(strip);
+      }
+      const roof = new THREE.Mesh(new THREE.BoxGeometry(track.halfWidth * 2 + 22, 2, 3), ribMaterial);
+      roof.position.y = 17; rib.add(roof);
+      rib.position.copy(frame.position); orient(rib); group.add(rib);
     }
-  }
-  group.add(verges);
-  const railGeometry = new THREE.BoxGeometry(0.4, 3, 1);
-  const railMaterial = new THREE.MeshBasicMaterial({ color: 0x285e67 });
-  const railCount = Math.floor(track.length / 18);
-  const rails = new THREE.InstancedMesh(railGeometry, railMaterial, railCount * 2);
-  for (let i = 0; i < railCount; i++) {
-    track.sample(i * 18, frame);
-    for (let side = 0; side < 2; side++) {
-      dummy.position.copy(frame.position).addScaledVector(frame.right, (side === 0 ? -1 : 1) * track.halfWidth);
-      dummy.position.addScaledVector(frame.up, 1.5); orient(dummy);
-      dummy.updateMatrix(); rails.setMatrixAt(i * 2 + side, dummy.matrix);
+    track.sample(fork.start - 95, frame);
+    const sign = new THREE.Group(); sign.name = `junction-sign-${fork.id}`;
+    const arrows = fork.kind === 'horizontal' ? ['←', '→'] : ['↓', '↑'];
+    if (typeof document !== 'undefined') {
+      const canvas = document.createElement('canvas'); canvas.width = 1024; canvas.height = 144;
+      const context = canvas.getContext('2d');
+      if (context) {
+        context.fillStyle = '#07131ef0'; context.fillRect(0, 0, 1024, 144);
+        context.strokeStyle = lineColor ?? '#67dcd0'; context.lineWidth = 5; context.strokeRect(3, 3, 1018, 138);
+        context.fillStyle = '#eaffff'; context.font = 'bold 34px sans-serif'; context.textAlign = 'center';
+        fork.routes.forEach((r, i) => { context.fillText(`${arrows[i]} ${r.name}`, 256 + i * 512, 60);
+          context.font = '24px sans-serif'; context.fillStyle = '#91aebd'; context.fillText(i ? '전망 · 연속 가속' : '굽이 · 고도 대응', 256 + i * 512, 108);
+          context.font = 'bold 34px sans-serif'; context.fillStyle = '#eaffff'; });
+        const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace;
+        const panel = new THREE.Mesh(new THREE.PlaneGeometry(36, 5), new THREE.MeshBasicMaterial({ map: texture, transparent: true, side: THREE.DoubleSide, toneMapped: false }));
+        panel.position.y = maxAltitude(track) + 8; sign.add(panel);
+      }
     }
+    sign.position.copy(frame.position); orient(sign); group.add(sign);
   }
-  group.add(rails);
   const makeBarriers = () => track.heightObstacles.map(obstacle => {
-    track.sample(obstacle.distance, frame);
+    track.sample(obstacle.distance, frame, obstacle.routeId);
     const barrier = createDischargeBarrier(obstacle, track.halfWidth, maxAltitude(track));
     barrier.object.position.copy(frame.position);
     orient(barrier.object);
@@ -259,6 +305,9 @@ export function createTrackVisual(track: Track, lineColor?: string) {
     return barrier;
   });
   let barriers = makeBarriers();
+  const corridors = (track.corridorObstacles ?? []).map(obstacle => {
+    const visual = createCorridorVisual(track, obstacle); group.add(visual.object); return visual;
+  });
   const refreshObstacles = () => {
     const geometries = new Set<THREE.BufferGeometry>(), materials = new Set<THREE.Material>();
     for (const barrier of barriers) {
@@ -282,20 +331,36 @@ export function createTrackVisual(track: Track, lineColor?: string) {
   return {
     object: group,
     refreshObstacles,
-    hit(distance: number) {
-      const next = upcomingHeightObstacle(track, distance);
+    hit(distance: number, routeId?: string | null) {
+      const next = upcomingHeightObstacle(track, distance, routeId);
       if (next && Math.abs(next.distance) <= next.obstacle.depth / 2 + 3.2) {
         barriers[track.heightObstacles.indexOf(next.obstacle)].hit();
       }
+      const corridor = upcomingCorridor(track, distance, routeId);
+      if (corridor && Math.abs(corridor.distance) <= corridor.obstacle.depth / 2 + 3.2)
+        corridors[(track.corridorObstacles ?? []).indexOf(corridor.obstacle)].hit();
     },
-    update(time: number, reducedMotion: boolean, distance = 0, altitude = 1.8, speed = 0) {
+    update(time: number, reducedMotion: boolean, distance = 0, altitude = 1.8, speed = 0, offset = 0, routeId?: string | null) {
       const lap = Math.floor(distance / track.length);
       barriers.forEach((barrier, index) => {
         const obstacle = track.heightObstacles[index];
         let ahead = obstacle.distance + lap * track.length - distance;
         if (ahead < -obstacle.depth / 2 - 2.2) ahead += track.length;
-        const nearby = ahead < Math.max(120, speed * 3.5);
-        barrier.update(time, reducedMotion, nearby ? altitudeCanPass(altitude, obstacle) ? 'ready' : 'blocked' : 'neutral');
+        const nearby = ahead < Math.max(120, speed * 3.5) && (!obstacle.routeId || obstacle.routeId === routeId);
+        const actual = resolveHeightObstacle(obstacle, track.altitudeProfile.levels, track.obstacleTime ?? time);
+        if (obstacle.motion) {
+          const later = resolveHeightObstacle(obstacle, track.altitudeProfile.levels, (track.obstacleTime ?? time) + obstacle.motion.stepSeconds);
+          barrier.object.userData.movingDirection = Math.sign(later.minAltitude + later.maxAltitude - actual.minAltitude - actual.maxAltitude);
+        }
+        const forecast = resolveHeightObstacle(obstacle, track.altitudeProfile.levels, obstacleArrivalTime(track, time, ahead, speed, obstacle.depth, distance, routeId));
+        barrier.update(time, reducedMotion, nearby ? altitudeCanPass(altitude, forecast) ? 'ready' : 'blocked' : 'neutral', actual);
+      });
+      corridors.forEach((visual, index) => {
+        const obstacle = track.corridorObstacles![index];
+        let ahead = obstacle.distance + lap * track.length - distance;
+        if (ahead < -obstacle.depth / 2 - 2.2) ahead += track.length;
+        visual.update(time, reducedMotion, ahead < Math.max(180, speed * 3.5) && (!obstacle.routeId || obstacle.routeId === routeId)
+          ? corridorCanPass(offset, obstacle) ? 'ready' : 'blocked' : 'neutral');
       });
     },
   };

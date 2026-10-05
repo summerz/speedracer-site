@@ -1,4 +1,15 @@
 export type NightEnvironmentId = 'midnight' | 'deep-night' | 'predawn' | 'afterglow' | 'storm-night';
+export type RainIntensity = 'light' | 'moderate' | 'heavy';
+export const RAIN_INTENSITIES: Record<RainIntensity, { label: string; density: number; volume: number }> = {
+  light: { label: '약한 비', density: .45, volume: .045 },
+  moderate: { label: '보통 비', density: .7, volume: .075 },
+  heavy: { label: '강한 비', density: 1, volume: .11 },
+};
+export function selectRainIntensity(random: () => number = Math.random): RainIntensity {
+  const value = random();
+  const index = Number.isFinite(value) ? Math.min(2, Math.max(0, Math.floor(value * 3))) : 0;
+  return (['light', 'moderate', 'heavy'] as const)[index];
+}
 export interface NightEnvironment {
   id: NightEnvironmentId;
   label: string;
@@ -14,6 +25,7 @@ export interface NightEnvironment {
   celestialColor: string;
   stars: number;
   rain?: boolean;
+  rainIntensity?: RainIntensity;
   /** Apparent angular radius and center elevation in radians, independent of camera distance. */
   celestialRadius: number;
   celestialElevation: number;

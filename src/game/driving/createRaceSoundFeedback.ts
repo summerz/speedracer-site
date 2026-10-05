@@ -1,6 +1,7 @@
 import type { DrivingState } from './createDrivingModel.js';
 import type { RacePhase } from './createTimeAttack.js';
 import { upcomingHeightObstacle, type Track } from '../track/createTrack.js';
+import { resolveHeightObstacle, obstacleArrivalTime, upcomingCorridor } from '../track/obstacleDynamics.js';
 
 export type AltitudeWarning = 'up' | 'down' | null;
 export type BoostSoundCue = 'boost-full' | 'boost-complete';
@@ -22,14 +23,17 @@ export function createRaceSoundFeedback(track: Track, warningSeconds = 1.5) {
       if (state.charge > 0 && !state.boosting) fullUse = false;
       if (charge < .999999 && state.charge >= .999999) cues.push('boost-full');
       charge = state.charge;
-      const next = upcomingHeightObstacle(track, state.distance);
+      const next = upcomingHeightObstacle(track, state.distance, state.routeId);
       // Keep challenge-specific reaction distance even when speed reaches the warning cap.
       const range = Math.min(240, Math.max(85, state.speed * 1.5)) * warningSeconds / 1.5;
       const target = state.targetAltitude;
       const current = state.altitude;
       let warning: AltitudeWarning = null;
-      if (next && next.distance >= 0 && next.distance <= range) {
-        const { minAltitude, maxAltitude } = next.obstacle;
+      const corridor = upcomingCorridor(track, state.distance, state.routeId);
+      if (next && (!corridor || next.distance < corridor.distance) && next.distance >= 0 && next.distance <= range) {
+        const { minAltitude, maxAltitude } = resolveHeightObstacle(next.obstacle,
+          next.obstacle.motion ? track.altitudeProfile.levels : [],
+          obstacleArrivalTime(track, state.elapsed, next.distance, state.speed, next.obstacle.depth, state.distance, state.routeId));
         // Warn about the actual position first, then a wrongly selected target.
         if (current < minAltitude) warning = 'up';
         else if (current > maxAltitude) warning = 'down';

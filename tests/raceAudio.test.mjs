@@ -22,7 +22,7 @@ class Node {
 class Context {
   static instances = [];
   currentTime = 0; sampleRate = 100; state = 'running'; destination = new Node();
-  gains = []; oscillators = []; sources = [];
+  gains = []; oscillators = []; sources = []; decoded = [];
   constructor() { Context.instances.push(this); }
   createGain() { const node = new Node(); this.gains.push(node); return node; }
   createOscillator() { const node = new Node(); this.oscillators.push(node); return node; }
@@ -31,9 +31,105 @@ class Context {
   createDynamicsCompressor() { return new Node(); }
   createDelay() { return new Node(); }
   createBuffer(_, frames) { return { getChannelData: () => new Float32Array(frames) }; }
+  async decodeAudioData(bytes) { const buffer = { duration: new Uint8Array(bytes)[0] / 10 }; this.decoded.push(buffer); return buffer; }
   resume() { this.state = 'running'; return Promise.resolve(); }
   close() { this.state = 'closed'; return Promise.resolve(); }
 }
+
+test('file effects use the alert bus, cancel earlier impacts, preserve the engine, and stop with race lifecycle', async () => {
+  const originalContext = globalThis.AudioContext, originalFetch = globalThis.fetch;
+  globalThis.AudioContext = Context;
+  globalThis.fetch = async url => new Response(new Uint8Array([url.includes('collision') ? 5 : 9]));
+  const audio = createRaceAudio({
+    impact: { url: '/audio-test-collision.mp3', level: .65 },
+    'off-track': { url: '/audio-test-departure.mp3', level: .5 },
+  });
+  try {
+    audio.activate(); await new Promise(resolve => setImmediate(resolve));
+    const ctx = Context.instances.at(-1), engine = ctx.oscillators[0];
+    audio.update('running', 0, 0, 1, false);
+    audio.play('electric-impact');
+    const collision = ctx.sources.find(source => source.buffer?.duration === .5);
+    assert.ok(collision); assert.equal(collision.starts.length, 1);
+    const alertBus = collision.connections[0].connections[0];
+    assert.notEqual(alertBus, engine.connections[0].connections[0].connections[0]);
+    ctx.currentTime = .1; audio.play('off-track');
+    assert.ok(collision.stops.includes(0)); assert.equal(collision.connections.length, 0);
+    const departure = ctx.sources.find(source => source.buffer?.duration === .9);
+    assert.ok(departure); assert.equal(departure.connections[0].connections[0], alertBus);
+    assert.equal(engine.starts.length, 1); assert.equal(engine.stops.length, 0);
+    ctx.currentTime = .2; audio.pause(); assert.ok(departure.stops.some(at => Math.abs(at - .24) < 1e-8));
+    ctx.currentTime = 1; audio.update('running', 0, 0, 1, false); audio.play('impact');
+    const muted = ctx.sources.at(-1);
+    audio.setEnabled(false); assert.ok(muted.stops.includes(1.04));
+    const count = ctx.sources.length; audio.play('impact'); assert.equal(ctx.sources.length, count);
+    audio.setEnabled(true); ctx.currentTime = 2; audio.play('impact');
+    const disposed = ctx.sources.at(-1); audio.dispose();
+    assert.ok(disposed.stops.includes(0)); assert.equal(disposed.connections.length, 0);
+    assert.equal(ctx.state, 'closed');
+  } finally { audio.dispose(); globalThis.AudioContext = originalContext; globalThis.fetch = originalFetch; }
+});
+
+test('an early collision falls back immediately; finishing a download never plays a stale cue', async () => {
+  const originalContext = globalThis.AudioContext, originalFetch = globalThis.fetch;
+  globalThis.AudioContext = Context;
+  let finish;
+  globalThis.fetch = () => new Promise(resolve => { finish = resolve; });
+  const audio = createRaceAudio({ impact: { url: '/audio-test-delayed.mp3', level: .6 } });
+  try {
+    audio.activate(); const ctx = Context.instances.at(-1);
+    audio.update('running', 0, 0, 1, false); audio.play('impact');
+    assert.equal(ctx.sources.filter(source => !source.loop).length, 2);
+    const before = ctx.sources.length;
+    finish(new Response(new Uint8Array([5]))); await new Promise(resolve => setImmediate(resolve));
+    assert.equal(ctx.sources.length, before);
+    ctx.currentTime = 1; audio.play('impact');
+    assert.equal(ctx.sources.at(-1).buffer.duration, .5);
+  } finally { audio.dispose(); globalThis.AudioContext = originalContext; globalThis.fetch = originalFetch; }
+});
+
+test('unavailable files retain synthesized collision and off-track feedback', async () => {
+  const originalContext = globalThis.AudioContext, originalFetch = globalThis.fetch;
+  globalThis.AudioContext = Context;
+  globalThis.fetch = async () => { throw new Error('Offline'); };
+  const audio = createRaceAudio({
+    impact: { url: '/audio-test-missing-impact.mp3', level: .6 },
+    'off-track': { url: '/audio-test-missing-departure.mp3', level: .5 },
+  });
+  try {
+    audio.activate(); await new Promise(resolve => setImmediate(resolve));
+    const ctx = Context.instances.at(-1);
+    audio.play('impact'); assert.equal(ctx.sources.filter(source => !source.loop).length, 2);
+    const before = ctx.sources.length; audio.play('off-track');
+    assert.equal(ctx.sources.length, before + 1);
+    assert.ok(ctx.oscillators.some(source => source.type === 'triangle' && source.frequency.values.includes(520)));
+  } finally { audio.dispose(); globalThis.AudioContext = originalContext; globalThis.fetch = originalFetch; }
+});
+
+test('rain runs continuously through impacts, follows intensity, ducks warnings, and stops on pause/mute/dispose', () => {
+  const original = globalThis.AudioContext; globalThis.AudioContext = Context;
+  try {
+    const audio = createRaceAudio(); audio.setRainIntensity('light'); audio.activate();
+    const ctx = Context.instances.at(-1);
+    const rain = ctx.sources.find(source => source.loop && source.buffer !== ctx.sources[0].buffer);
+    assert.ok(rain);
+    const gain = rain.connections[0].connections[0];
+    const bus = gain.connections[0];
+    audio.update('ready', 0, 0, 1, false); assert.equal(gain.gain.value, 0);
+    audio.update('running', 0, 0, 1, false); const lightVolume = gain.gain.value;
+    assert.ok(lightVolume > 0);
+    audio.setRainIntensity('heavy'); assert.ok(gain.gain.value > lightVolume);
+    audio.play('electric-impact'); audio.update('running', 0, 0, 1, false);
+    assert.equal(rain.starts.length, 1); assert.equal(rain.stops.length, 0);
+    ctx.currentTime = 1; audio.setAltitudeWarning('up'); assert.ok(bus.gain.value < 1);
+    audio.pause(); assert.equal(gain.gain.value, 0);
+    audio.update('running', 0, 0, 1, false); assert.ok(gain.gain.value > 0);
+    audio.setEnabled(false); audio.update('running', 0, 0, 1, false); assert.equal(gain.gain.value, 0);
+    audio.setEnabled(true); audio.update('running', 0, 0, 1, false); assert.ok(gain.gain.value > 0);
+    audio.setRainIntensity(null); assert.equal(gain.gain.value, 0);
+    audio.dispose(); assert.equal(rain.stops.length, 1); assert.equal(ctx.state, 'closed');
+  } finally { globalThis.AudioContext = original; }
+});
 
 test('cruise engine stays audible after boost release; collision drops pitch then recovers without restarting music', () => {
   const original = globalThis.AudioContext;

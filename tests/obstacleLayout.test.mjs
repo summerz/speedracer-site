@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { expandObstacleLayout } from '../output/test/game/track/obstacleLayout.js';
 import { TRACK_CATALOG } from '../output/test/game/track/trackCatalog.js';
+import { physicalDistance } from '../output/test/game/track/trackBranches.js';
 import { createCatalogTrack } from '../output/test/game/track/trackRuntime.js';
 import { createRaceSession } from '../output/test/game/driving/createRaceSession.js';
 import { createRaceRecords } from '../output/test/game/driving/raceRecords.js';
@@ -13,7 +14,12 @@ test('every campaign course has more fields and random safe levels with unchange
     assert.ok(track.heightObstacles.length > definition.obstacleLevels.length);
     const positions = track.heightObstacles.map(o => o.distance);
     assert.ok(positions[0] >= 140);
-    for (let i = 1; i < positions.length; i++) assert.ok(positions[i] - positions[i - 1] >= 90);
+    for (const routeId of [null, ...(track.branches ?? []).flatMap(f => f.routes.map(r => r.id))]) {
+      const reachable = track.heightObstacles.filter(o => !o.routeId || o.routeId === routeId);
+      for (let i = 1; i < reachable.length; i++) assert.ok(
+        physicalDistance(track, reachable[i-1].distance, reachable[i].distance-reachable[i-1].distance, routeId) >= 90,
+        `${definition.name}: fields on the same route need 90m clearance`);
+    }
     for (const random of [() => 0, () => .5, () => .999]) {
       track.randomizeObstacles(random);
       assert.deepEqual(track.heightObstacles.map(o => o.distance), positions);

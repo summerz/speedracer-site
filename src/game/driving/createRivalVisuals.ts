@@ -29,7 +29,7 @@ export function createRivalVisuals(scene: THREE.Scene, track: Track, rivals: Ret
         const finished = entry.rival.controller.phase === 'finished';
         // Keep the overview position, but clear the finish line for active racers.
         entry.object.visible = !finished;
-        track.sample(state.distance, frame);
+        track.sample(state.distance, frame, state.routeId);
         entry.object.position.copy(frame.position).addScaledVector(frame.right, state.offset).addScaledVector(frame.up, state.altitude);
         forward.copy(frame.tangent).multiplyScalar(Math.cos(state.heading)).addScaledVector(frame.right, Math.sin(state.heading));
         right.copy(frame.right).multiplyScalar(Math.cos(state.heading)).addScaledVector(frame.tangent, -Math.sin(state.heading));

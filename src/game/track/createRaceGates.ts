@@ -1,3 +1,4 @@
+import { forkAt } from './trackBranches.js';
 import * as THREE from 'three';
 import { createTrackFrame } from './createTrack.js';
 import type { Track } from './createTrack.js';
@@ -28,7 +29,7 @@ export function createRaceGates(track: Track, count: number) {
       const gap = Math.abs(distance - obstacle.distance);
       return Math.min(gap, track.length - gap) < obstacle.depth / 2 + 18;
     });
-    if (!overlapsObstacle && distance > 35) gates.set(i, arch(distance, 'Checkpoint arch ' + i, new THREE.MeshBasicMaterial({ color: inactiveColor })));
+    if (!overlapsObstacle && !forkAt(track, distance) && distance > 35) gates.set(i, arch(distance, 'Checkpoint arch ' + i, new THREE.MeshBasicMaterial({ color: inactiveColor })));
   }
   let previous = -1;
   return { object, update(nextDistance: number) {

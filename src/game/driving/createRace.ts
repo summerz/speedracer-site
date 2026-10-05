@@ -27,6 +27,7 @@ import { createSpeedLines } from './createSpeedLines';
 import { createTouchControls } from './createTouchControls';
 import { createBoostPulse } from './createBoostPulse';
 import { createRaceAudio } from './createRaceAudio';
+import { RACE_EFFECT_FILES } from '../audio/raceEffectFiles';
 import { createRaceFeedback } from './createRaceFeedback';
 import { createRaceSoundFeedback } from './createRaceSoundFeedback.js';
 import type { RaceAnnouncement } from './createRaceFeedback';
@@ -39,9 +40,11 @@ import { createRivalVisuals } from './createRivalVisuals';
 import type { RacePhase } from './createTimeAttack';
 import { createRaceRecords } from './raceRecords';
 import { createRaceGates } from '../track/createRaceGates';
+import { forkAt, upcomingFork, physicalDistance, branchChoiceOpen } from '../track/trackBranches';
 import type { DrivingState, DrivingInput } from './createDrivingModel';
 import type { AltitudeProfile } from '../track/altitudeProfile';
 import type { TrackFrame } from '../track/createTrack';
+import { configureExtraObstacles, corridorCanPass, obstacleArrivalTime, resolveHeightObstacle, upcomingCorridor } from '../track/obstacleDynamics';
 
 export type DrivingPhase = RacePhase;
 export interface RaceSnapshot extends DrivingState {
@@ -55,7 +58,9 @@ export interface RaceSnapshot extends DrivingState {
   boostStage2Seconds: number;
   upcomingCurvature: number;
   upcomingSection: TrackFrame['section'];
+  fork: { kind: 'horizontal' | 'vertical'; names: readonly string[]; selected: string | null; distance: number } | null;
   heightObstacle: { kind: 'rise' | 'descend' | 'middle'; distance: number; minAltitude: number; maxAltitude: number } | null;
+  corridor: { distance: number; lane: 'left' | 'center' | 'right'; safe: boolean } | null;
   timeAttack: ReturnType<ReturnType<typeof createRaceSession>['snapshot']>;
 }
 export interface Race {
@@ -104,9 +109,10 @@ export function createRace(
   const ambient = new THREE.HemisphereLight(environment.ambient, 0x152435, environment.ambientIntensity); scene.add(ambient);
   const sun = new THREE.DirectionalLight(environment.light, environment.lightIntensity);
   sun.position.set(-50, 150, -100); scene.add(sun);
-  const track = course ? createCatalogTrack(course, challenge) : createTrack(altitudeProfile, difficulty);
+  const track = course ? createCatalogTrack(course, challenge) : configureExtraObstacles(createTrack(altitudeProfile, difficulty), challenge);
   const sky = createNightSky(environment, track.sample(0).tangent); scene.add(sky.object);
-  const weather = createRaceWeather(!!environment.rain, track.length); scene.add(weather.object);
+  const weather = createRaceWeather(!!environment.rain, track.length, Math.random, environment.rainIntensity); scene.add(weather.object);
+  container.dataset.rainIntensity = environment.rain ? weather.intensity : 'none';
   const scenery = course ? createDistrictScenery(track, course) : undefined;
   if (scenery) scene.add(scenery.object);
   const trackVisual = createTrackVisual(track, config.boostStyle.pulseColor);
@@ -115,7 +121,8 @@ export function createRace(
   scene.add(drone);
   const thrusters = createThrusterEffect(drone, scene, config.boostStyle);
   const boostPulse = createBoostPulse(drone, config.boostStyle.pulseColor);
-  const raceAudio = createRaceAudio();
+  const raceAudio = createRaceAudio(RACE_EFFECT_FILES);
+  raceAudio.setRainIntensity(environment.rain ? weather.intensity : null);
   const feedback = createRaceFeedback();
   const soundFeedback = createRaceSoundFeedback(track, RACE_CHALLENGES[challenge].warningSeconds);
   const boostHaptics = createBoostHaptics(typeof navigator.vibrate === 'function' ? navigator.vibrate.bind(navigator) : undefined);
@@ -187,11 +194,23 @@ export function createRace(
   let craftShake = 0;
 
   const notify = () => {
-    track.sample(model.state.distance + Math.max(22, model.state.speed * 1.1), upcoming);
-    const next = upcomingHeightObstacle(track, model.state.distance);
-    const heightObstacle = next ? { ...next.obstacle, distance: Math.max(0, next.distance) } : null;
+    track.sample(model.state.distance + Math.max(22, model.state.speed * 1.1), upcoming, model.state.routeId);
+    const next = upcomingHeightObstacle(track, model.state.distance, model.state.routeId);
+    const passage = upcomingCorridor(track, model.state.distance, model.state.routeId);
+    const corridor = passage ? { distance: passage.distance, lane: passage.obstacle.lane,
+      safe: corridorCanPass(model.state.offset, passage.obstacle) } : null;
+    const heightObstacle = next && (!passage || next.distance < passage.distance) ? {
+      ...resolveHeightObstacle(next.obstacle, model.altitudeProfile.levels,
+        obstacleArrivalTime(track, model.state.elapsed, next.distance, model.state.speed, next.obstacle.depth, model.state.distance, model.state.routeId)),
+      distance: Math.max(0, next.distance),
+    } : null;
     const session = timeAttack.snapshot();
-    onUpdate({ ...model.state, competition: session.competition, announcement: feedback.announcement, boostStage2Seconds: model.boostStage2Seconds, altitudeProfile: model.altitudeProfile, phase: timeAttack.phase, timeAttack: session, view: views.view, trackDisplay: views.trackDisplay, trackLength: track.length, upcomingCurvature: upcoming.curvature, upcomingSection: upcoming.section, heightObstacle });
+    const junction = forkAt(track, model.state.distance) ?? upcomingFork(track, model.state.distance, Math.max(170, model.state.speed * 2.5));
+    const choosing = branchChoiceOpen(track, model.state.distance);
+    const selected = choosing ? undefined : junction?.routes.find(r => r.id === model.state.routeId);
+    const fork = junction ? { kind: junction.kind, names: junction.routes.map(r => r.name), selected: selected?.name ?? null,
+      distance: physicalDistance(track, model.state.distance, (selected ? junction.end : junction.start + junction.junctionLength) - model.state.distance % track.length, model.state.routeId) } : null;
+    onUpdate({ ...model.state, competition: session.competition, announcement: feedback.announcement, boostStage2Seconds: model.boostStage2Seconds, altitudeProfile: model.altitudeProfile, phase: timeAttack.phase, timeAttack: session, view: views.view, trackDisplay: views.trackDisplay, trackLength: track.length, upcomingCurvature: upcoming.curvature, upcomingSection: upcoming.section, heightObstacle, corridor, fork });
   };
   const heightRequests: number[] = [];
   const touchControls = createTouchControls(container.parentElement ?? container, {
@@ -333,7 +352,7 @@ export function createRace(
     for (const cue of cues) raceAudio.play(cue);
     if (cues.length) notify();
     if (heightChanged) raceAudio.play('height');
-    if (model.state.collisions > oldCollisions) raceAudio.play(model.state.notice === 'height-collision' ? 'electric-impact' : 'impact');
+    if (model.state.collisions > oldCollisions) raceAudio.play(model.state.notice === 'height-collision' || model.state.notice === 'corridor-collision' ? 'electric-impact' : 'impact');
     if (model.state.offTrackExits > oldExits) raceAudio.play('off-track');
     if (model.state.recoveries > oldRecoveries) raceAudio.play('recovery');
     if (phase !== oldPhase) {
@@ -346,8 +365,8 @@ export function createRace(
     const simulationDelta = phase === 'running' ? delta : 0;
     boostEntryAge += simulationDelta;
     if (phase === 'running' && state.boostStage === 2 && oldBoostStage !== 2) { boostPulse.trigger(); boostEntryAge = 0; notify(); }
-    if (state.collisions > oldCollisions && state.notice === 'height-collision') {
-      trackVisual.hit(state.distance); notify();
+    if (state.collisions > oldCollisions && (state.notice === 'height-collision' || state.notice === 'corridor-collision')) {
+      trackVisual.hit(state.distance, state.routeId); notify();
     }
     // Quick pullback, then a smooth catch-up over 450 ms. Release cancels the impulse.
     const entry = !reducedMotion.matches && state.boostStage === 2 && boostEntryAge < 0.45
@@ -356,7 +375,7 @@ export function createRace(
     const fov = THREE.MathUtils.lerp(camera.fov, targetFov, 1 - Math.exp(-delta * (entry > 0 ? Math.max(18, visuals.fovResponse) : visuals.fovResponse)));
     if (Math.abs(camera.fov - fov) > 0.001) { camera.fov = fov; camera.updateProjectionMatrix(); }
     const cameraScale = Math.tan(THREE.MathUtils.degToRad(visuals.baseFov / 2)) / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
-    track.sample(state.distance, frame);
+    track.sample(state.distance, frame, state.routeId);
     drone.position.copy(frame.position).addScaledVector(frame.right, state.offset).addScaledVector(frame.up, state.altitude);
     flightForward.copy(frame.tangent).multiplyScalar(Math.cos(state.heading)).addScaledVector(frame.right, Math.sin(state.heading));
     flightRight.copy(frame.right).multiplyScalar(Math.cos(state.heading)).addScaledVector(frame.tangent, -Math.sin(state.heading));
@@ -385,7 +404,7 @@ export function createRace(
         .addScaledVector(flightUp, Math.sin(boostEntryAge * 87 + 1) * shake);
     }
     lookAt.copy(drone.position).addScaledVector(flightForward, 9).addScaledVector(flightUp, cameraAltitude - state.altitude - 0.5); camera.up.copy(flightUp); camera.lookAt(lookAt);
-    views.update(flightForward, flightUp, bank, state.elapsed, state.boosting, reducedMotion.matches);
+    views.update(flightForward, flightUp, bank, state.elapsed, state.boosting, reducedMotion.matches, state.routeId);
     thrusters.setMode(state.boostStage === 2 ? 'boost-stage2' : phase === 'running' && state.boosting ? 'boost' : phase === 'running' && input.throttle && state.speed > 1 ? 'accelerate' : 'idle');
     thrusters.setBoostCharge(state.boostStageProgress);
     thrusters.update(simulationDelta, reducedMotion.matches);
@@ -395,7 +414,7 @@ export function createRace(
     if (heightChanged && coarsePointer.matches && !reducedMotion.matches) boostHaptics.altitudeStep();
     hudElapsed += delta;
     if (hudElapsed >= 0.08) { hudElapsed = 0; notify(); }
-    trackVisual.update(state.elapsed, reducedMotion.matches, state.distance, state.altitude, state.speed);
+    trackVisual.update(track.obstacleTime ?? state.elapsed, reducedMotion.matches, state.distance, state.altitude, state.speed, state.offset, state.routeId);
     raceGates.update(timeAttack.snapshot().nextCheckpoint);
     speedLines.update(state.elapsed, state.speed, state.boosting, reducedMotion.matches, state.boostStage === 2);
     views.prepareDriving();
@@ -452,14 +471,19 @@ export function createRace(
       touchControls.dispose(); rivalVisuals.dispose(); thrusters.dispose(); boostPulse.dispose(); raceAudio.dispose(); boostHaptics.dispose();
       const geometries = new Set<THREE.BufferGeometry>();
       const materials = new Set<THREE.Material>();
+      const signTextures = new Set<THREE.Texture>();
       scene.traverse((object) => {
         if (object instanceof THREE.Mesh || object instanceof THREE.LineSegments) {
           geometries.add(object.geometry);
-          (Array.isArray(object.material) ? object.material : [object.material]).forEach((material) => materials.add(material));
+          (Array.isArray(object.material) ? object.material : [object.material]).forEach((material) => {
+            materials.add(material);
+            if (object.name.startsWith('junction-sign-') && material instanceof THREE.MeshBasicMaterial && material.map) signTextures.add(material.map);
+          });
           if (object instanceof THREE.InstancedMesh) object.dispose();
         }
       });
       geometries.forEach((geometry) => geometry.dispose()); materials.forEach((material) => material.dispose());
+      signTextures.forEach(texture => texture.dispose());
       render.dispose(); bloom.dispose(); exhaustHaze.pass.dispose(); boostWarp.pass.dispose(); output.dispose(); composer.dispose();
       overviewRender.dispose(); overviewOutput.dispose(); overviewComposer.dispose();
       blitGeometry.dispose(); blitMaterial.dispose(); pipFrame.remove();

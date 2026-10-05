@@ -10,7 +10,8 @@ export interface CourseLayout {
   waves: number;
   rotation: number;
   bank: number;
-  stunts: readonly { kind: 'loop' | 'helix' | 'roll'; start: number; span: number; radius: number; turns: number }[];
+  /** +1: upward loop / original winding, -1: downward loop / opposite winding. */
+  stunts: readonly { kind: 'loop' | 'helix' | 'roll'; start: number; span: number; radius: number; turns: number; direction?: 1 | -1 }[];
 }
 
 /** Closed footprints and local stunts are independent: a loop need not force a long return road. */
@@ -51,15 +52,16 @@ export function authorClosedTrack(layout: CourseLayout): TrackControlPoint[] {
     let up = worldUp.clone(), section: TrackControlPoint['section'] = 'course';
     const stunt = layout.stunts.find(s => u >= s.start && u <= s.start+s.span);
     if (stunt) {
-      const v = (u-stunt.start)/stunt.span, a = v*Math.PI*2*stunt.turns;
+      const v = (u-stunt.start)/stunt.span, direction = stunt.direction ?? 1;
+      const phase = v*Math.PI*2*stunt.turns, a = phase*direction;
       // Smooth radius envelopes give each stunt a flat, tangent-continuous entrance/exit.
       const ramp = Math.min(1,v*stunt.turns/.25,(1-v)*stunt.turns/.25);
       const envelope = ramp*ramp*(3-2*ramp);
       if (stunt.kind === 'loop') {
-        position.addScaledVector(tangent,stunt.radius*Math.sin(a)*envelope);
+        position.addScaledVector(tangent,stunt.radius*Math.sin(phase)*envelope);
         // Opposite side offsets separate the rising/falling roads at the loop's projected crossing.
         position.addScaledVector(right,100*Math.sin(v*Math.PI*2)*Math.sin(v*Math.PI)**2);
-        position.y += stunt.radius*(1-Math.cos(a));
+        position.y += direction*stunt.radius*(1-Math.cos(phase));
         // Projecting the up hint onto the actual tangent is handled below.
         up.copy(worldUp).multiplyScalar(Math.cos(a)).addScaledVector(tangent,-Math.sin(a));
         section = 'vertical-loop';
@@ -77,6 +79,9 @@ export function authorClosedTrack(layout: CourseLayout): TrackControlPoint[] {
     }
     points.push({position,up,section});
   }
+  // Downward loops hang below the approach; lift the entire closed route above the city floor.
+  const lift = Math.max(0, 24 - Math.min(...points.map(point => point.position.y)));
+  if (lift) for (const point of points) point.position.y += lift;
   // Loop normals follow the local vertical trajectory, even where forward motion reverses.
   for (let i = 0; i < points.length; i++) if (points[i].section === 'vertical-loop') {
     const direction = points[(i+1)%points.length].position.clone().sub(points[(i-1+points.length)%points.length].position).normalize();

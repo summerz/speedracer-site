@@ -1,23 +1,25 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { TRACK_CATALOG, DISTRICTS, campaignRankLimit } from '../output/test/game/track/trackCatalog.js';
-import { createCatalogTrack } from '../output/test/game/track/trackRuntime.js';
+import { createCatalogTrack, trackMetrics } from '../output/test/game/track/trackRuntime.js';
 import { describeTrackLandmarks } from '../output/test/game/track/createTrackLandmark.js';
 import { LANDMARK_TYPES, LANDMARK_DISTRICTS, LANDMARK_ENCOUNTERS } from '../output/test/game/track/landmarkCatalog.js';
+import { roadPaths } from '../output/test/game/track/trackBranches.js';
 import { NIGHT_ENVIRONMENTS } from '../output/test/game/environment/raceEnvironment.js';
 
 const { version } = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
 const courses = TRACK_CATALOG.map(definition => {
   const track = createCatalogTrack(definition);
   const landmarks = describeTrackLandmarks(track, definition);
-  return { definition, track, landmarks };
+  return { definition, track, landmarks, metrics: trackMetrics(track) };
 });
 const prefix = title => `# ${title}\n\n현재 v${version} 제작 데이터에서 생성한 문서입니다. 수정은 카탈로그와 이 문서 생성 스크립트에 반영하고 \`npm run docs:world\`로 갱신합니다. \`npm run docs:world:check\`는 데이터와 문서의 일치를 확인합니다.\n\n`;
 const table = (columns, rows) => `| ${columns.join(' | ')} |\n| ${columns.map(() => '---').join(' | ')} |\n${rows.map(row => `| ${row.join(' | ')} |`).join('\n')}\n`;
 const number = n => String(n).padStart(2, '0');
+const stuntDirections = definition => definition.layout ? definition.layout.stunts.map(s => `${Math.round(s.start*100)}% ${s.kind === 'loop' ? (s.direction === -1 ? '하향 루프' : '상향 루프') : `${s.kind === 'helix' ? '코일' : '노면 회전'} ${s.direction === -1 ? '역회전' : '정회전'}`} ×${s.turns}`).join(' / ') : '상향 루프 / 정회전 코일 ×2';
 const nearestFraction = (track, landmark) => {
   let nearest = 0, distance = Infinity;
-  for (let d = 0; d < track.length; d += 12) {
-    const p = track.sample(d).position;
+  for (const path of roadPaths(track)) for (let d = path.start; d < path.end; d += 12) {
+    const p = track.sample(d, undefined, path.routeId).position;
     const delta = Math.hypot(p.x - landmark.position.x, p.z - landmark.position.z);
     if (delta < distance) { distance = delta; nearest = d; }
   }
@@ -25,12 +27,20 @@ const nearestFraction = (track, landmark) => {
 };
 const documents = {
   'TRACK_CATALOG.md': prefix('트랙 카탈로그') +
-    '캠페인 규칙과 저장/해금은 [트랙 제작과 캠페인](TRACK_CAMPAIGN.md), 주변 구조물은 [랜드마크 카탈로그](LANDMARK_CATALOG.md), 하늘·안개·천체는 [월드 환경](WORLD_ENVIRONMENTS.md)을 참조합니다.\n\n' +
+    '캠페인 규칙과 저장/해금은 [트랙 제작과 캠페인](TRACK_CAMPAIGN.md), 경로별 구성은 [갈림길 카탈로그](TRACK_BRANCHES.md), 주변 구조물은 [랜드마크 카탈로그](LANDMARK_CATALOG.md), 하늘·안개·천체는 [월드 환경](WORLD_ENVIRONMENTS.md)을 참조합니다.\n\n' +
     '## 제작 원칙\n\n24개 코스는 각각 닫힌 경로와 최소 1개 특수 구간을 갖습니다. 길이와 난이도는 별도로 조정하며 새 구역 입구에서 난이도가 낮아집니다. 아래 거리와 시간은 1랩 기준이고 모든 경기는 3랩입니다. 기체에 따른 트랙 주색, 구역별 배경색, 난이도에 따른 고도 단계를 사용합니다. 환경 연출 변경만으로 기록 제작 버전을 올리지 않습니다.\n\n' +
-    table(['번호 / ID', '이름', '구역', '길이 km', '난이도 /6', '고도 단계', '랩 제한 초', 'AI 통과 순위', '전체 형태 / 특수 구간'], courses.map(({ definition: d, track }) => [
-      `${number(d.order)} / \`${d.id}\``, d.name, DISTRICTS[d.district].name, (track.length / 1000).toFixed(1), d.rating, d.altitudeLevels, d.lapLimit, `${campaignRankLimit(d)}위 이내`, d.features,
+    table(['번호 / ID', '이름', '구역', '길이 km', '난이도 /6', '고도 단계', '랩 제한 초', 'AI 통과 순위', '전체 형태 / 특수 구간'], courses.map(({ definition: d, metrics }) => [
+      `${number(d.order)} / \`${d.id}\``, d.name, DISTRICTS[d.district].name, `${(metrics.lengthMin / 1000).toFixed(1)}${(metrics.lengthMin / 1000).toFixed(1) !== (metrics.lengthMax / 1000).toFixed(1) ? `–${(metrics.lengthMax / 1000).toFixed(1)}` : ''}`, d.rating, d.altitudeLevels, d.lapLimit, `${campaignRankLimit(d)}위 이내`, d.features,
     ])) +
-    '\n## 추가 코스\n\n`trackCatalog.ts`에 고유 ID·선행 ID·구역·경로·고도·제한시간을 추가합니다. 기존 ID는 보존합니다. 구역이 늘어나면 `landmarkCatalog.ts`의 대표 형태·동반 형태·발광색도 지정합니다. 문서 갱신과 접근 시야·경로 간격·기본 기체 완주 검증을 실행합니다.\n',
+    '\n## 특수 구간 방향\n\n방향은 코스 제작 데이터에 고정합니다. 각 종류의 정·역방향을 캠페인 초반부터 섞고 구역마다 균형을 유지합니다. `direction: 1`은 상향 루프·정회전, `-1`은 하향 루프·역회전입니다. 코일은 경로와 노면을 함께 반대로 돌리고 노면 회전은 경로를 유지한 채 자세만 반대로 돌립니다. 하향 루프는 진입부 아래로 내려가며 코스 전체를 높여 최저 노면을 도시 바닥 위에 둡니다. 방향이 바뀐 코스는 제작 버전을 올리며 기존 해금·통과 기록은 보존합니다. 위치 %는 특수 구간을 넣기 전 기본 경로 기준입니다.\n\n' +
+    table(['코스', '제작 버전', '위치 / 방향 / 회전 수'], courses.map(({ definition: d }) => [`${number(d.order)} ${d.name}`, d.revision, stuntDirections(d)])) +
+    '\n## 추가 코스\n\n`trackCatalog.ts`에 고유 ID·선행 ID·구역·경로·고도·제한시간·특수 구간 방향을 추가합니다. 기존 ID는 보존합니다. 구역이 늘어나면 `landmarkCatalog.ts`의 대표 형태·동반 형태·발광색도 지정합니다. 문서 갱신과 접근 시야·경로 간격·기본 기체 완주 검증을 실행합니다.\n',
+  'TRACK_BRANCHES.md': prefix('갈림길 카탈로그') +
+    '15개 코스에 분기와 합류를 배치했습니다. 01 WINDOW RUN은 좌우 조향, 02 TERRACE FLOW는 진입 고도로 선택합니다. 여섯 구역에 모두 배치하되 같은 수나 순서를 강제하지 않습니다. 아래 길이는 분기부터 합류까지 실제 거리이며 위치 %는 두 길이 공유하는 랩 진행도입니다.\n\n' +
+    table(['코스', '선택 / 분기–합류', '경로', '길이 m', '특징 / 시야'], courses.flatMap(({ definition: d, track }) => (track.branches ?? []).flatMap(f => f.routes.map((r, i) => [
+      `${number(d.order)} ${d.name}`, `${f.kind === 'vertical' ? '상하 고도' : '좌우 조향'} / ${Math.round(f.start / track.length * 100)}–${Math.round(f.end / track.length * 100)}%`, `${f.kind === 'vertical' ? i ? '위' : '아래' : i ? '오른쪽' : '왼쪽'} · ${r.name}`, Math.round(r.length), `${r.features.join(' · ')} / ${r.description}`,
+    ])))) +
+    '\n## 조작과 공통 판정\n\n입구의 35m 공통 도로에서는 좌우 위치 또는 선택 고도로 경로를 바꿀 수 있습니다. 두 길이 갈라지기 시작하는 지점에서 선택을 고정하고, 출구의 35m 공통 도로로 부드럽게 합류합니다. 입구·출구의 위치·방향·노면은 양쪽 경로가 공유하며, 경로를 선택한 첫 프레임부터 실제 선택 경로를 표시합니다. 경로 안의 고도 조작은 선택한 노면을 기준으로 유지합니다. 매 랩 다시 선택할 수 있고 AI도 양쪽 길을 사용합니다. 긴 길에서는 같은 실제 속도라도 공유 진행도가 더 느리게 증가하며, 랩·순위·보상은 공통 분기/합류에 연결합니다. 경로별 장애물만 충돌·통과·경고 대상으로 삼습니다.\n\n짧은 경로에는 가까운 구조물과 두 개의 고도 장애물, 긴 경로에는 트인 전망과 한 개의 고도 장애물을 둡니다. 일부 코스는 서로 감기는 코일에 한쪽 노면 회전을 더합니다. 양쪽 코일의 중앙부 도로 간격과 접합 위치·방향·노면 연속성, 물리 거리, 재선택과 AI 완주를 자동 검증합니다. 캠페인 미리보기와 PIP에는 두 도로를 그리며 현재 경로를 강조하고 분기 앞 표지와 주행 HUD에 경로 이름을 표시합니다.\n\n제작 데이터: `trackCatalog.ts`의 `branches`. 형상과 경로 선택/거리 계산: `trackBranches.ts`. 기체별 최적 경로와 모바일 실기 성능은 후속 체감 검증에서 조정합니다.\n',
   'LANDMARK_CATALOG.md': prefix('랜드마크 카탈로그') +
     '주변 건물보다 큰 구조물을 24개 트랙에 각 3곳, 총 72곳 배치합니다. 형태는 재사용하고 코스 ID에 따른 위치·회전·규모는 재현됩니다. [트랙 카탈로그](TRACK_CATALOG.md)와 [월드 환경](WORLD_ENVIRONMENTS.md)을 함께 참고합니다.\n\n' +
     '## 재사용하는 형태\n\n' + table(['종류 ID', '이름', '구조와 조명', '제작 높이 기준 m'], Object.entries(LANDMARK_TYPES).map(([id, spec]) => [id, spec.name, spec.description, spec.height])) +

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { RenderQuality } from '../../platform/renderQuality.js';
+import { RAIN_INTENSITIES, selectRainIntensity, type RainIntensity } from './raceEnvironment.js';
 
 /** Lap-distance scheduling guarantees 1–4 strikes, independent of pace or frame rate. */
 export function createStormClock(length: number, random: () => number = Math.random) {
@@ -36,32 +37,34 @@ export function createStormClock(length: number, random: () => number = Math.ran
   };
 }
 
-const DROP_COUNTS: Record<RenderQuality, number> = { low: 240, balanced: 480, high: 800 };
+const DROP_COUNTS: Record<RenderQuality, number> = { low: 384, balanced: 768, high: 1280 };
 /** One reusable line buffer; no sprites, textures or additional postprocessing pass. */
-export function createRaceWeather(rain: boolean, length: number, random: () => number = Math.random) {
+export function createRaceWeather(rain: boolean, length: number, random: () => number = Math.random, intensity: RainIntensity = selectRainIntensity(random)) {
   const object = new THREE.Group(); object.name = 'race-weather'; object.visible = rain;
   const positions = new Float32Array(DROP_COUNTS.high * 6);
   const seeds = Array.from({ length: DROP_COUNTS.high }, () => [Math.random() * 100 - 50, Math.random() * 64 - 32, Math.random() * 100 - 50]);
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3).setUsage(THREE.DynamicDrawUsage));
-  geometry.setDrawRange(0, DROP_COUNTS.balanced * 2);
-  const material = new THREE.LineBasicMaterial({ color: 0x95bddd, transparent: true, opacity: .40, depthWrite: false, toneMapped: false });
+  const density = RAIN_INTENSITIES[intensity].density;
+  const material = new THREE.LineBasicMaterial({ color: 0x95bddd, transparent: true, opacity: .48, depthWrite: false, toneMapped: false });
   const drops = new THREE.LineSegments(geometry, material); drops.name = 'rain-drops'; drops.frustumCulled = false; object.add(drops);
   const storm = createStormClock(length, random);
-  let elapsed = 0, count = DROP_COUNTS.balanced;
+  let elapsed = 0, count = Math.round(DROP_COUNTS.balanced * density);
+  geometry.setDrawRange(0, count * 2);
   const wrap = (value: number, size: number) => ((value % size) + size) % size - size / 2;
   return {
     object,
+    intensity,
     reset() { elapsed = 0; storm.reset(); },
-    setQuality(quality: RenderQuality) { count = DROP_COUNTS[quality]; geometry.setDrawRange(0, count * 2); },
+    setQuality(quality: RenderQuality) { count = Math.round(DROP_COUNTS[quality] * density); geometry.setDrawRange(0, count * 2); },
     update(camera: THREE.Vector3, distance: number, delta: number, active: boolean, reducedMotion: boolean) {
       object.position.copy(camera);
       if (!rain) return { flash: 0, thunders: 0, strikes: 0 };
       if (active) elapsed += delta;
       for (let i = 0; i < count; i++) {
         const [x, y, z] = seeds[i]; const index = i * 6;
-        positions[index] = wrap(x - elapsed * 4, 100); positions[index + 1] = wrap(y - elapsed * 34, 64); positions[index + 2] = z;
-        positions[index + 3] = positions[index] + .2; positions[index + 4] = positions[index + 1] + 1.7; positions[index + 5] = z;
+        positions[index] = wrap(x - elapsed * 10, 100); positions[index + 1] = wrap(y - elapsed * 100, 64); positions[index + 2] = z;
+        positions[index + 3] = positions[index] + .35; positions[index + 4] = positions[index + 1] + 3.4; positions[index + 5] = z;
       }
       geometry.attributes.position.needsUpdate = true;
       return storm.update(distance, delta, active, reducedMotion);

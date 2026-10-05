@@ -81,8 +81,8 @@ test('crossing the finish exactly at the limit is valid and a millisecond less d
   assert.equal(finish(make(deadline-.001)).snapshot().disqualified, true);
 });
 
-for (const definition of TRACK_CATALOG) test(`${definition.name}: five stock craft finish all laps under the limit with continuous orthogonal frames`, () => {
-  const track = createCatalogTrack(definition), metrics = trackMetrics(track), limit = campaignLapLimit(definition, track.length);
+for (const definition of TRACK_CATALOG) test(`${definition.name}: five stock craft clear easy static fields under the limit with continuous orthogonal frames`, () => {
+  const track = createCatalogTrack(definition, 'easy'), metrics = trackMetrics(track), limit = campaignLapLimit(definition, track.length);
   assert.ok(metrics.length > 1000); assert.equal(track.altitudeProfile.levels.length, definition.altitudeLevels);
   for (let d=0;d<track.length;d+=13) {
     const f=track.sample(d);

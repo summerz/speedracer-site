@@ -1,3 +1,4 @@
+import { roadPoints } from './trackBranches.js';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { Track } from './createTrack.js';
@@ -12,7 +13,7 @@ export function scenerySeed(id: string) {
 }
 export function sceneryRoute(track: Track) {
   const route: THREE.Vector3[] = [];
-  for (let d = 0; d < track.length; d += 12) route.push(track.sample(d).position.clone());
+  route.push(...roadPoints(track, 12));
   return route;
 }
 

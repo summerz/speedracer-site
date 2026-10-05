@@ -17,8 +17,9 @@ test('every course has three distinct deadlines and obstacle densities that surv
     assert.ok(challengeLapLimit(course,'easy')>challengeLapLimit(course));
     assert.ok(challengeLapLimit(course)>challengeLapLimit(course,'hard'));
     const tracks=['easy','normal','hard'].map(c=>createCatalogTrack(course,c));
-    assert.ok(tracks[0].heightObstacles.length<tracks[1].heightObstacles.length,course.id);
-    assert.ok(tracks[1].heightObstacles.length<tracks[2].heightObstacles.length,course.id);
+    const count = track => track.heightObstacles.length + (track.corridorObstacles?.length ?? 0);
+    assert.ok(count(tracks[0]) < count(tracks[1]), course.id);
+    assert.ok(count(tracks[1]) < count(tracks[2]), course.id);
     for(const track of tracks){
       const distances=track.heightObstacles.map(o=>o.distance);
       track.randomizeObstacles(()=>.4);

@@ -1,7 +1,9 @@
+import { upcomingFork, forkAt, branchChoiceOpen } from '../track/trackBranches.js';
 import { RACE_CHALLENGES, type RaceChallengeId } from '../track/raceChallenge.js';
 import { DRONE_CATALOG } from '../drone/droneCatalog.js';
 import type { DroneConfiguration } from '../drone/droneConfiguration.js';
 import { upcomingHeightObstacle } from '../track/createTrack.js';
+import { resolveHeightObstacle, obstacleArrivalTime, upcomingCorridor } from '../track/obstacleDynamics.js';
 import type { Track } from '../track/createTrack.js';
 import { steeringYawRate } from './createDrivingModel.js';
 import type { DrivingInput, DrivingState } from './createDrivingModel.js';
@@ -67,10 +69,13 @@ export function craftContact(a0: ContactPose, a1: ContactPose, b0: ContactPose, 
 export function aiDrivingInput(track: Track, configuration: DroneConfiguration, state: DrivingState,
   index: number, opponents: readonly DrivingState[], profile?: AiDrivingProfile, speedScale = 1): DrivingInput {
   const p = configuration.performance;
-  const curvature = track.sample(state.distance).curvature;
+  const fork = branchChoiceOpen(track, state.distance) ? forkAt(track, state.distance) : upcomingFork(track, state.distance, Math.max(150, state.speed * 2));
+  const branchSide = (index + Math.floor(state.distance / track.length) + (p.topSpeed > 100 ? 1 : 0)) % 2;
+  const routeId = state.routeId ?? fork?.routes[branchSide].id;
+  const curvature = track.sample(state.distance, undefined, routeId).curvature;
   let bend = Math.abs(curvature);
   // Short sampling intervals catch tight bends between the old lookahead points.
-  for (let ahead = 10; ahead <= 60; ahead += 10) bend = Math.max(bend, Math.abs(track.sample(state.distance + ahead).curvature));
+  for (let ahead = 10; ahead <= 60; ahead += 10) bend = Math.max(bend, Math.abs(track.sample(state.distance + ahead, undefined, routeId).curvature));
   const difficulty = track.altitudeProfile.levels.length;
   const pace = (difficulty === 2 ? .96 : 1) * (profile?.pace ?? 1);
   const boost = bend < (profile?.boostCurvature ?? .003) && !state.boostNeedsRelease &&
@@ -81,13 +86,14 @@ export function aiDrivingInput(track: Track, configuration: DroneConfiguration, 
   // A fast craft needs more than 60m to brake for a hairpin. Work backwards from
   // each bend using braking distance rather than slowing immediately for far bends.
   for (let ahead = 70; ahead <= 280; ahead += 10) {
-    const turnSpeed = cornerLimit / Math.max(.001, Math.abs(track.sample(state.distance + ahead).curvature));
+    const turnSpeed = cornerLimit / Math.max(.001, Math.abs(track.sample(state.distance + ahead, undefined, routeId).curvature));
     goalSpeed = Math.min(goalSpeed, Math.sqrt(turnSpeed ** 2 + 2 * p.braking * .7 * (ahead - 25)));
   }
   const edge = track.halfWidth - 3.5;
   const laneWidth = Math.min(5.2, edge * .7);
   const preferredLane = (index % 3 - 1) * laneWidth + Math.sin(state.distance / 210 + index * 2) * .65;
   const traffic = opponents.filter(other => {
+    if ((other.routeId ?? null) !== (state.routeId ?? null)) return false;
     const ahead = ((other.distance - state.distance) % track.length + track.length) % track.length;
     const lookAhead = Math.max(35, (desiredSpeed - other.speed) * 1.3 + 12);
     // Start a pass before the speed difference closes the gap; hold clearance until fully past.
@@ -96,14 +102,26 @@ export function aiDrivingInput(track: Track, configuration: DroneConfiguration, 
   let lane = [preferredLane, -laneWidth, laneWidth, 0].find(candidate =>
     traffic.every(other => Math.abs(other.offset - candidate) >= 4.2)) ?? preferredLane;
   lane = Math.max(-edge, Math.min(edge, lane));
-  const next = upcomingHeightObstacle(track, state.distance);
+  const corridor = upcomingCorridor(track, state.distance, state.routeId);
+  const enteringCorridor = corridor && corridor.distance < Math.max(80, state.speed * 1.2);
+  if (enteringCorridor) lane = corridor.obstacle.safeCenter;
+  const next = upcomingHeightObstacle(track, state.distance, state.routeId);
   let lift = 0;
   if (next && next.distance < Math.max(70, state.speed * 2.2)) {
-    const level = track.altitudeProfile.levels.findIndex(h => h >= next.obstacle.minAltitude && h <= next.obstacle.maxAltitude);
+    const opening = resolveHeightObstacle(next.obstacle, track.altitudeProfile.levels,
+      obstacleArrivalTime(track, state.elapsed, next.distance, state.speed, next.obstacle.depth, state.distance, state.routeId));
+    const level = track.altitudeProfile.levels.map((height, index) => ({ height, index }))
+      .filter(({ height }) => height >= opening.minAltitude && height <= opening.maxAltitude)
+      .sort((a, b) => Math.abs(a.index - state.altitudeLevel) - Math.abs(b.index - state.altitudeLevel))[0]?.index ?? -1;
     if (level >= 0) lift = Math.sign(level - state.altitudeLevel);
   }
+  if (fork) {
+    if (fork.kind === 'horizontal') lane = branchSide ? 3.5 : -3.5;
+    else if (!next || next.distance > fork.start - state.distance % track.length)
+      lift = Math.sign((branchSide ? track.altitudeProfile.levels.length - 1 : 0) - state.altitudeLevel);
+  }
   return { throttle: true, brake: state.speed > goalSpeed + 1, boost,
-    steer: (curvature * state.speed - state.heading * 2.8 + (lane - state.offset) * .14) / Math.max(.1, steeringYawRate(state.speed, p)), lift };
+    steer: (curvature * state.speed - state.heading * (enteringCorridor ? 8 : 2.8) + (lane - state.offset) * .14) / Math.max(.1, steeringYawRate(state.speed, p)), lift };
 }
 
 /** One clock, countdown and pause lifecycle for both modes; completed pilots become ghosts. */
@@ -141,7 +159,7 @@ export function createRaceSession(track: Track, configuration: DroneConfiguratio
   const contacts = new Map<string, number>();
   let clock = 0;
   const grid = () => {
-    contacts.clear(); clock = 0; itemCooldown = 0; itemUsed.length = 0;
+    contacts.clear(); clock = 0; track.obstacleTime = 0; itemCooldown = 0; itemUsed.length = 0;
     rivals.forEach((rival, index) => {
       rival.effects.freeze = 0; rival.effects.jam = 0;
       rival.controller.model.state.distance = -(index + 1) * 7;
@@ -201,7 +219,17 @@ export function createRaceSession(track: Track, configuration: DroneConfiguratio
     step(delta: number, input: DrivingInput) {
       const dt = Math.max(0, Math.min(Number.isFinite(delta) ? delta : 0, .1));
       if (player.phase === 'ready' || player.phase === 'paused' || dt === 0) return;
-      if (!rivals.length) { player.step(dt, input); if (player.phase === 'running') itemCooldown = Math.max(0, itemCooldown - dt); return; }
+      if (!rivals.length) {
+        let remaining = dt, first = true;
+        while (remaining > 1e-8) {
+          const step = Math.min(remaining, 1 / 120); remaining -= step;
+          const before = player.model.state.elapsed;
+          player.step(step, { ...input, lift: first ? input.lift : 0 }); first = false;
+          clock += player.model.state.elapsed - before; track.obstacleTime = clock;
+          if (player.phase === 'running') itemCooldown = Math.max(0, itemCooldown - step);
+        }
+        return;
+      }
       // Small shared substeps keep contact decisions stable across rendering frame rates.
       let remaining = dt; let firstStep = true;
       while (remaining > 1e-8) {
@@ -217,13 +245,21 @@ export function createRaceSession(track: Track, configuration: DroneConfiguratio
           rival.effects.freeze = Math.max(0, rival.effects.freeze - step);
           rival.effects.jam = Math.max(0, rival.effects.jam - step);
         });
-        if (participants.some(p => p.controller.phase === 'running')) clock += step;
+        clock += Math.max(0, ...participants.map((p, i) => p.controller.model.state.elapsed - before[i].elapsed));
+        track.obstacleTime = clock;
         if (player.phase === 'running') itemCooldown = Math.max(0, itemCooldown - step);
         for (let a = 0; a < participants.length; a++) for (let b = a + 1; b < participants.length; b++) {
           if (!active[a] || !active[b] || participants[a].controller.phase !== 'running' || participants[b].controller.phase !== 'running') continue;
           const key = `${a}:${b}`;
           const sa = participants[a].controller.model.state, sb = participants[b].controller.model.state;
           if (clock < (contacts.get(key) ?? 0) || !craftContact(before[a], sa, before[b], sb, track.length)) continue;
+          // Separate branches can share progress/altitude while being metres apart in world space.
+          if (sa.routeId !== sb.routeId || sa.routeId || sb.routeId) {
+            const fa = track.sample(sa.distance, undefined, sa.routeId), fb = track.sample(sb.distance, undefined, sb.routeId);
+            const pa = fa.position.addScaledVector(fa.right, sa.offset).addScaledVector(fa.up, sa.altitude);
+            const pb = fb.position.addScaledVector(fb.right, sb.offset).addScaledVector(fb.up, sb.altitude);
+            if (pa.distanceToSquared(pb) > 6 ** 2) continue;
+          }
           participants[a].controller.model.contact(); participants[b].controller.model.contact();
           contacts.set(key, clock + .7);
         }

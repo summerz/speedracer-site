@@ -1,3 +1,4 @@
+import { roadPaths, roadPoints } from '../track/trackBranches.js';
 import * as THREE from 'three';
 import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
@@ -26,7 +27,7 @@ export const DEFAULT_COCKPIT_SETTINGS: CockpitSettings = { rollStrength: 0.35, s
 /** Overview fits the sampled road and arches, independently of the scenery plane. */
 export function overviewPose(track: Track, aspect: number, fov = 50) {
   const bounds = new THREE.Box3();
-  for (let d = 0; d < track.length; d += 8) bounds.expandByPoint(track.sample(d).position);
+  for (const point of roadPoints(track, 8)) bounds.expandByPoint(point);
   bounds.expandByScalar(track.halfWidth + 18);
   const center = bounds.getCenter(new THREE.Vector3());
   const radius = bounds.getSize(new THREE.Vector3()).length() / 2;
@@ -57,15 +58,15 @@ export function createRaceViews(camera: THREE.PerspectiveCamera, drone: THREE.Gr
     return { object, rival };
   });
   // Pixel-width overview route remains readable when world-space neon tubes become subpixel.
-  const positions: number[] = [];
-  for (let d = 0; d < track.length; d += 3) {
-    const frame = track.sample(d);
-    positions.push(...frame.position.clone().addScaledVector(frame.up, .1).toArray());
-  }
-  positions.push(...track.sample(0).position.toArray());
-  const route = new Line2(new LineGeometry().setPositions(positions),
-    new LineMaterial({ color: 0x159b9b, linewidth: 2.2, toneMapped: false }));
-  route.name = 'overviewRoute'; scene.add(route);
+  const route = new THREE.Group(); route.name = 'overviewRoute'; scene.add(route);
+  const routeLines = roadPaths(track).map(path => {
+    const positions: number[] = [];
+    for (let d = path.start; d < path.end; d += 3) positions.push(...track.sample(d, undefined, path.routeId).position.toArray());
+    positions.push(...track.sample(path.end, undefined, path.routeId).position.toArray());
+    const line = new Line2(new LineGeometry().setPositions(positions),
+      new LineMaterial({ color: path.routeId ? 0x44bcb0 : 0x159b9b, linewidth: 2.2, toneMapped: false }));
+    route.add(line); return { line, routeId: path.routeId };
+  });
   let view: RaceView = 'chase';
   let trackDisplay: TrackDisplay = 'hidden';
   // A distant camera needs a farther near plane to keep road/route depth precise.
@@ -91,7 +92,7 @@ export function createRaceViews(camera: THREE.PerspectiveCamera, drone: THREE.Gr
       overviewCamera.aspect = width / height;
       const pose = overviewPose(track, overviewCamera.aspect);
       overviewCamera.position.copy(pose.position); overviewCamera.lookAt(pose.center); overviewCamera.updateProjectionMatrix();
-      route.material.resolution.set(width, height);
+      routeLines.forEach(r => r.line.material.resolution.set(width, height));
     },
     prepareDriving,
     prepareOverview() {
@@ -101,7 +102,8 @@ export function createRaceViews(camera: THREE.PerspectiveCamera, drone: THREE.Gr
       if (panel && panelColor) panel.material.color.copy(panelColor);
       scene.fog = null;
     },
-    update(flightForward: THREE.Vector3, flightUp: THREE.Vector3, bank: number, time: number, boost: boolean, reduced: boolean) {
+    update(flightForward: THREE.Vector3, flightUp: THREE.Vector3, bank: number, time: number, boost: boolean, reduced: boolean, selectedRoute?: string | null) {
+      routeLines.forEach(r => { r.line.material.color.set(r.routeId && r.routeId === selectedRoute ? 0xffffff : r.routeId ? 0x44bcb0 : 0x159b9b); r.line.material.linewidth = r.routeId && r.routeId === selectedRoute ? 4 : 2.2; });
       marker.position.copy(drone.position);
       for (const m of rivalMarkers) {
         m.object.position.copy(m.rival.object.position);

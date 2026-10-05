@@ -1,15 +1,18 @@
 import { soundtrack } from '../audio/soundtrack.js';
+import { createSoundEffectBank, type FileSoundCue, type RaceEffectFiles } from '../audio/soundEffectBank.js';
 import type { RacePhase } from './createTimeAttack.js';
 import type { AltitudeWarning } from './createRaceSoundFeedback.js';
 import type { RaceCue } from './createRaceFeedback.js';
+import { RAIN_INTENSITIES, type RainIntensity } from '../environment/raceEnvironment.js';
 
 export type SoundCue = RaceCue | 'impact' | 'electric-impact' | 'off-track' | 'recovery' | 'height' | 'thunder' | 'boost-full' | 'boost-complete';
 interface Voice { source: AudioScheduledSourceNode; nodes: AudioNode[]; music: boolean }
 const frequency = (midi: number) => 440 * 2 ** ((midi - 69) / 12);
 const STEP_SECONDS = 60 / 144 / 4;
 
-/** Drone engine and transient effects; the app owns the MIDI soundtrack. Scheduling runs on the race frame, with no timers. */
-export function createRaceAudio() {
+/** Drone engine and transient effects; the app owns the streaming soundtrack. Scheduling runs on the race frame, with no timers. */
+export function createRaceAudio(files: RaceEffectFiles = {}) {
+  const samples = createSoundEffectBank(files);
   let context: AudioContext | undefined;
   let effects: GainNode;
   let music: GainNode;
@@ -29,6 +32,9 @@ export function createRaceAudio() {
   let turbineGain: GainNode;
   let windFilter: BiquadFilterNode;
   let noise: AudioBuffer;
+  let rainIntensity: RainIntensity | null = null;
+  let rainSource: AudioBufferSourceNode | undefined;
+  let rainGain: GainNode | undefined;
   let enabled = true;
   let musicEnabled = true;
   let disposed = false;
@@ -91,6 +97,31 @@ export function createRaceAudio() {
     own(source, [source, filter, gain], isMusic, at, duration);
   };
   const active = () => phase === 'running' || phase === 'countdown';
+  const sample = (cue: FileSoundCue, at: number) => {
+    const sound = samples.get(cue);
+    if (!sound) return false;
+    const source = context!.createBufferSource(); source.buffer = sound.buffer;
+    const gain = context!.createGain(); gain.gain.value = sound.level;
+    source.connect(gain); gain.connect(notification);
+    alertVoices.add(own(source, [source, gain], false, at, sound.buffer.duration));
+    return true;
+  };
+  const ensureRain = () => {
+    if (!context || rainSource || !rainIntensity) return;
+    const buffer = context.createBuffer(1, context.sampleRate * 4, context.sampleRate);
+    const samples = buffer.getChannelData(0);
+    let patter = 0;
+    const decay = Math.exp(-1 / (context.sampleRate * .012));
+    for (let i = 0; i < samples.length; i++) {
+      patter *= decay;
+      if (Math.random() < 160 / context.sampleRate) patter = Math.random();
+      samples[i] = (Math.random() * 2 - 1) * (.35 + patter * .65);
+    }
+    rainSource = context.createBufferSource(); rainSource.buffer = buffer; rainSource.loop = true;
+    const filter = context.createBiquadFilter(); filter.type = 'bandpass'; filter.frequency.value = 2800; filter.Q.value = .3;
+    rainGain = context.createGain(); rainGain.gain.value = 0;
+    rainSource.connect(filter); filter.connect(rainGain); rainGain.connect(background); rainSource.start();
+  };
   const activate = () => {
     if (disposed || (!enabled && !musicEnabled) || typeof AudioContext === 'undefined') return;
     try {
@@ -129,7 +160,9 @@ export function createRaceAudio() {
         windGain = context.createGain(); windGain.gain.value = 0;
         wind.connect(windFilter); windFilter.connect(windGain); windGain.connect(background); wind.start();
       }
+      ensureRain();
       void context.resume().catch(() => {});
+      void samples.prepare(context);
     } catch { /* Optional audio never prevents playing. */ }
   };
   const emit = (cue: SoundCue) => {
@@ -140,13 +173,15 @@ export function createRaceAudio() {
       engineRestartAt = now;
       if (cue === 'off-track') {
         // A falling skid/scrape, distinct from the short electrical impact.
-        hiss(now, .42, .38, 850, false, 'bandpass');
+        if (!sample('off-track', now)) hiss(now, .42, .38, 850, false, 'bandpass');
         tone(520, now, .34, .20, 'triangle', false, 85);
         tone(72, now + .04, .30, .24, 'sine', false, 32);
       } else {
         tone(110, now, .30, .32, 'sine', false, 26);
-        hiss(now, .12, .45, 1800, false, 'highpass');
-        hiss(now + .035, .30, .34, cue === 'impact' ? 650 : 2600, false, 'bandpass');
+        if (!sample('impact', now)) {
+          hiss(now, .12, .45, 1800, false, 'highpass');
+          hiss(now + .035, .30, .34, cue === 'impact' ? 650 : 2600, false, 'bandpass');
+        }
         if (cue === 'electric-impact') for (let i = 0; i < 4; i++) tone(2100 - i * 390, now + i * .032, .065, .12, 'sawtooth');
       }
     } else if (cue === 'boost-full') {
@@ -205,8 +240,9 @@ export function createRaceAudio() {
     if (!context || context.state !== 'running' || !enabled || disposed) return;
     if (cue === 'impact' || cue === 'electric-impact' || cue === 'off-track') {
       cancelAlerts(); clearWarning(); pending.clear();
-      alertUntil = context.currentTime + .32; alertPriority = 5;
-      duckUntil = context.currentTime + .42; mix(); notificationRouting = true; emit(cue); notificationRouting = false;
+      const duration = Math.max(.32, samples.get(cue === 'off-track' ? 'off-track' : 'impact')?.buffer.duration ?? 0);
+      alertUntil = context.currentTime + duration; alertPriority = 5;
+      duckUntil = alertUntil + .1; mix(); notificationRouting = true; emit(cue); notificationRouting = false;
     } else if (cue === 'height' || cue === 'thunder' || cue === 'recovery') {
       // Mechanical/weather sounds stay under the notification bus.
       if (cue !== 'height' || context.currentTime >= alertUntil) emit(cue);
@@ -248,6 +284,7 @@ export function createRaceAudio() {
       clearWarning(); resetMix();
       phase = 'paused'; previousStage = 0; stopVoices(false, true); soundtrack.setScene('paused');
       if (context) {
+        rainGain?.gain.setTargetAtTime(0, context.currentTime, .03);
         effects.gain.setTargetAtTime(0, context.currentTime, 0.015);
         music.gain.setTargetAtTime(0, context.currentTime, 0.035);
       }
@@ -255,7 +292,13 @@ export function createRaceAudio() {
     setEnabled(value: boolean) {
       enabled = value;
       if (value) activate();
-      else { clearWarning(); resetMix(); if (context) effects.gain.setTargetAtTime(0, context.currentTime, 0.015); }
+      else { clearWarning(); stopVoices(false, true); resetMix(); if (context) effects.gain.setTargetAtTime(0, context.currentTime, 0.015); }
+    },
+    setRainIntensity(value: RainIntensity | null) {
+      rainIntensity = value;
+      if (disposed) return;
+      ensureRain();
+      if (context) rainGain?.gain.setTargetAtTime(enabled && active() && value ? RAIN_INTENSITIES[value].volume : 0, context.currentTime, .15);
     },
     setMusicEnabled(value: boolean) {
       musicEnabled = value; soundtrack.setEnabled(value);
@@ -276,6 +319,7 @@ export function createRaceAudio() {
       turbineGain.gain.setTargetAtTime(racing ? (0.012 + stage * 0.004) * restart : 0, now, 0.04);
       windFilter.frequency.setTargetAtTime(450 + speedRatio * 1400 + (braking ? 1100 : 0), now, 0.1);
       windGain.gain.setTargetAtTime(racing ? Math.min(speedRatio, 2) * 0.025 + (braking ? 0.03 : 0) : 0, now, 0.06);
+      rainGain?.gain.setTargetAtTime(enabled && active() && rainIntensity ? RAIN_INTENSITIES[rainIntensity].volume : 0, now, .15);
       charge.frequency.setTargetAtTime(260 + progress * 540, now, 0.04);
       chargeGain.gain.setTargetAtTime(racing && stage === 1 ? progress ** 2 * 0.05 : 0, now, 0.025);
       if (racing && enabled && stage > previousStage) {
@@ -287,7 +331,8 @@ export function createRaceAudio() {
 
     },
     dispose() {
-      disposed = true; resetMix(); stopVoices();
+      disposed = true; samples.dispose(); resetMix(); stopVoices();
+      rainSource?.stop();
       if (context) void context.close().catch(() => {});
     },
   };

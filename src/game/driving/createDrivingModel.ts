@@ -2,15 +2,18 @@ import { DEFAULT_DRONE_CONFIGURATION } from '../drone/droneConfiguration.js';
 import type { DronePerformance } from '../drone/droneConfiguration.js';
 import type { Track } from '../track/createTrack';
 import { createTrackFrame } from '../track/createTrack.js';
+import { forkAt, selectBranch, routeDistanceScale, branchChoiceOpen, advanceTrackDistance } from '../track/trackBranches.js';
 import { flightAcceleration, slopeHandling, impactSpeedRetention, impactAccelerationScale } from './flightDynamics.js';
 import { ALTITUDE_PROFILES, resolveAltitudeProfile } from '../track/altitudeProfile.js';
 import type { TravelSegment } from './raceProgress.js';
+import { resolveHeightObstacle, corridorCanPass } from '../track/obstacleDynamics.js';
 import { OFF_TRACK_PENALTY_POINTS, COLLISION_PENALTY_POINTS, OBSTACLE_COLLISION_PENALTY_POINTS } from './raceScoring.js';
 export { OFF_TRACK_PENALTY_POINTS, COLLISION_PENALTY_POINTS, OBSTACLE_COLLISION_PENALTY_POINTS } from './raceScoring.js';
 
 /** lift is a single tap impulse (-1 / 0 / 1), never a held key. */
 export interface DrivingInput { throttle: boolean; brake: boolean; steer: number; lift: number; boost: boolean; targetSpeedScale?: number }
 export interface DrivingState {
+  routeId?: string | null;
   distance: number;
   offset: number;
   heading: number;
@@ -31,7 +34,7 @@ export interface DrivingState {
   offTrackExits: number;
   penaltyPoints: number;
   obstaclesPassed: number;
-  notice: 'collision' | 'craft-collision' | 'height-collision' | 'off-track' | 'recovery' | 'obstacle-pass' | null;
+  notice: 'collision' | 'craft-collision' | 'height-collision' | 'corridor-collision' | 'off-track' | 'recovery' | 'obstacle-pass' | null;
 }
 
 export const DRIVING_TUNING = {
@@ -54,6 +57,7 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
   const { levels, initialLevel, transitionSeconds } = altitudeProfile;
   const initialAltitude = levels[initialLevel];
   const state: DrivingState = {
+    routeId: null,
     distance: 0, offset: 0, heading: 0, altitude: initialAltitude, targetAltitude: initialAltitude, altitudeLevel: initialLevel,
     speed: 0, charge: 1, boosting: false, boostStage: 0, boostElapsed: 0, boostStageProgress: 0, boostNeedsRelease: false, checkpoint: 0, elapsed: 0,
     collisions: 0, recoveries: 0, offTrackExits: 0, penaltyPoints: 0, obstaclesPassed: 0, notice: null,
@@ -72,9 +76,9 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
     // A craft contact cannot shorten an outstanding obstacle recovery.
     if (duration >= accelerationRecovery) { accelerationRecovery = duration; recoveryDuration = duration; }
   };
-  const completedPassages = new Map<number, number>();
+  const completedPassages = new Map<string, number>();
   // One penalty per field passage, even when the craft remains inside its volume.
-  const fieldPassages = new Map<number, number>();
+  const fieldPassages = new Map<string, number>();
   const tuning = { ...DRIVING_TUNING, ...performance };
   const boostStage2Seconds = tuning.boostStage2Threshold / tuning.boostDrain;
   const interruptBoost = () => {
@@ -93,6 +97,17 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
     state.speed = Math.min(state.speed, 12); interruptBoost();
     state.recoveries++; state.notice = 'recovery'; noticeRemaining = 1.8;
     rechargeDelay = Math.max(rechargeDelay, 0.6);
+  };
+  const fieldImpact = (retention: number, notice: 'height-collision' | 'corridor-collision') => {
+    const severity = (1 - retention) / DEFAULT_DRONE_CONFIGURATION.performance.collisionSpeedLoss;
+    state.speed *= impactSpeedRetention(tuning.collisionSpeedLoss, severity);
+    impairAcceleration(1.6); damageBoost(.18); state.collisions++;
+    state.penaltyPoints += OBSTACLE_COLLISION_PENALTY_POINTS;
+    state.notice = notice; noticeRemaining = 1.2;
+  };
+  const passedField = () => {
+    state.obstaclesPassed++;
+    if (!state.notice || state.notice === 'obstacle-pass') { state.notice = 'obstacle-pass'; noticeRemaining = .8; }
   };
   return {
     state,
@@ -156,9 +171,13 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
           if (rechargeDelay === 0) state.charge = Math.min(1, state.charge + tuning.boostRecovery * dt);
         }
         const oldSpeed = state.speed;
-        const sampled = track.sample(state.distance, frame);
+        const fork = forkAt(track, state.distance);
+        if (!fork) state.routeId = null;
+        else if (branchChoiceOpen(track, state.distance) || !fork.routes.some(r => r.id === state.routeId))
+          state.routeId = selectBranch(track, state.distance, state.offset, state.altitudeLevel);
+        const sampled = track.sample(state.distance, frame, state.routeId);
         const curvature = sampled.curvature;
-        const bend = sampled.tangent ? sampled.tangent.distanceTo(track.sample(state.distance + 2, aheadFrame).tangent) / 2 : Math.abs(curvature);
+        const bend = sampled.tangent ? sampled.tangent.distanceTo(track.sample(state.distance + 2, aheadFrame, state.routeId).tangent) / (2 * (sampled.distanceScale ?? 1)) : Math.abs(curvature);
         const grade = clamp((sampled.tangent?.y ?? 0) * Math.cos(state.heading) + (sampled.right?.y ?? 0) * Math.sin(state.heading), -1, 1);
         const steer = clamp(input.steer, -1, 1);
         const altitudeSpeed = Math.min(heightSwitchSpeed, Math.abs(state.targetAltitude - state.altitude) / dt);
@@ -191,34 +210,57 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
         state.heading = clamp(oldHeading + (yaw - curvature * travel) * dt, -1.1, 1.1);
         state.offset += speed * Math.sin((oldHeading + state.heading) * 0.5) * dt;
         const oldDistance = state.distance;
-        state.distance += travel * dt;
+        state.distance = advanceTrackDistance(track, state.distance, travel * dt, state.routeId);
+        // Commit the choice in the same tick that crosses the entrance, before
+        // any renderer, obstacle or rival can observe an unselected route.
+        const enteredFork = forkAt(track, state.distance);
+        if (!enteredFork) state.routeId = null;
+        else if (!fork || enteredFork.id !== fork.id || branchChoiceOpen(track, state.distance))
+          state.routeId = selectBranch(track, state.distance, state.offset, state.altitudeLevel);
         state.altitude += clamp(state.targetAltitude - state.altitude, -heightSwitchSpeed * dt, heightSwitchSpeed * dt);
         // Swept travel catches boost-speed crossings. Fields let the craft continue.
         for (let i = 0; i < track.heightObstacles.length; i++) {
-          const obstacle = track.heightObstacles[i];
+          if (track.heightObstacles[i].routeId && track.heightObstacles[i].routeId !== state.routeId) continue;
+          const obstacle = resolveHeightObstacle(track.heightObstacles[i], levels, track.obstacleTime ?? state.elapsed);
+          const key = `height-${i}`;
           const lap = Math.floor(oldDistance / track.length);
           const center = obstacle.distance + lap * track.length;
-          const front = center - obstacle.depth / 2 - tuning.craftHalfLength;
-          const rear = center + obstacle.depth / 2 + tuning.craftHalfLength;
-          if (oldDistance <= rear && state.distance >= front && fieldPassages.get(i) !== lap
+          const clearance = (obstacle.depth / 2 + tuning.craftHalfLength) / routeDistanceScale(track, obstacle.distance, obstacle.routeId);
+          const front = center - clearance;
+          const rear = center + clearance;
+          if (oldDistance <= rear && state.distance >= front && fieldPassages.get(key) !== lap
             && Math.abs(state.offset) < track.halfWidth + tuning.craftHalfWidth
             && (state.altitude < obstacle.minAltitude || state.altitude > obstacle.maxAltitude)) {
-            fieldPassages.set(i, lap);
-            const severity = (1 - obstacle.speedRetention) / DEFAULT_DRONE_CONFIGURATION.performance.collisionSpeedLoss;
-            state.speed *= impactSpeedRetention(tuning.collisionSpeedLoss, severity);
-            impairAcceleration(1.6);
-            damageBoost(.18);
-            state.collisions++;
-            state.penaltyPoints += OBSTACLE_COLLISION_PENALTY_POINTS;
-            state.notice = 'height-collision'; noticeRemaining = 1.2;
+            fieldPassages.set(key, lap);
+            fieldImpact(obstacle.speedRetention, 'height-collision');
           }
-          if (oldDistance <= rear && state.distance > rear && completedPassages.get(i) !== lap) {
-            completedPassages.set(i, lap);
-            if (fieldPassages.get(i) !== lap && Math.abs(state.offset) <= track.halfWidth - tuning.craftHalfWidth
+          if (oldDistance <= rear && state.distance > rear && completedPassages.get(key) !== lap) {
+            completedPassages.set(key, lap);
+            if (fieldPassages.get(key) !== lap && Math.abs(state.offset) <= track.halfWidth - tuning.craftHalfWidth
               && state.altitude >= obstacle.minAltitude && state.altitude <= obstacle.maxAltitude) {
-              state.obstaclesPassed++;
-              if (!state.notice || state.notice === 'obstacle-pass') { state.notice = 'obstacle-pass'; noticeRemaining = .8; }
+              passedField();
             }
+          }
+        }
+        for (let i = 0; i < (track.corridorObstacles?.length ?? 0); i++) {
+          const obstacle = track.corridorObstacles![i], key = `corridor-${i}`;
+          if (obstacle.routeId && obstacle.routeId !== state.routeId) continue;
+          const lap = Math.floor(oldDistance / track.length), center = obstacle.distance + lap * track.length;
+          const clearance = (obstacle.depth / 2 + tuning.craftHalfLength) / routeDistanceScale(track, obstacle.distance, obstacle.routeId);
+          const front = center - clearance;
+          const rear = center + clearance;
+          if (oldDistance > rear || state.distance < front) continue;
+          const swept = state.distance - oldDistance;
+          const at = (distance: number) => swept > 0 ? offsetFrom + (state.offset - offsetFrom)
+            * clamp((distance - oldDistance) / swept, 0, 1) : state.offset;
+          const safe = corridorCanPass(at(Math.max(oldDistance, front)), obstacle, tuning.craftHalfWidth)
+            && corridorCanPass(at(Math.min(state.distance, rear)), obstacle, tuning.craftHalfWidth);
+          if (!safe && fieldPassages.get(key) !== lap && Math.abs(state.offset) < track.halfWidth + tuning.craftHalfWidth) {
+            fieldPassages.set(key, lap); fieldImpact(obstacle.speedRetention, 'corridor-collision');
+          }
+          if (state.distance > rear && completedPassages.get(key) !== lap) {
+            completedPassages.set(key, lap);
+            if (safe && fieldPassages.get(key) !== lap) passedField();
           }
         }
         const boundary = track.halfWidth - tuning.craftHalfWidth;
