@@ -8,9 +8,10 @@ import { createCatalogTrack } from '../output/test/game/track/trackRuntime.js';
 import { describeTrackLandmarks, createTrackLandmark, disposeScenery, sceneryRoute } from '../output/test/game/track/createTrackLandmark.js';
 import { createDistrictScenery } from '../output/test/game/track/createDistrictScenery.js';
 
-test('first district selects all four night environments; later districts have a stable default', () => {
+test('all campaign districts select four night environments; free driving keeps its default', () => {
   assert.deepEqual([0, .25, .5, .75, 1].map(n => selectRaceEnvironment('residential', () => n).id), ['midnight', 'deep-night', 'predawn', 'afterglow', 'afterglow']);
-  for (const district of ['industrial', 'research', undefined]) assert.equal(selectRaceEnvironment(district, () => { throw Error('random should not be called'); }).id, 'midnight');
+  for (const district of new Set(TRACK_CATALOG.map(t => t.district))) assert.equal(selectRaceEnvironment(district, () => .75).id, 'afterglow');
+  assert.equal(selectRaceEnvironment(undefined, () => { throw Error('random should not be called'); }).id, 'midnight');
   assert.equal(selectRaceEnvironment('residential', () => NaN).id, 'midnight');
   assert.equal(new Set(NIGHT_ENVIRONMENTS.map(e => e.horizon)).size, 4);
 });
@@ -21,8 +22,13 @@ test('sky follows position with world-fixed orientation, hides in overview and r
     sky.update(new THREE.Vector3(100, 20, 30));
     assert.deepEqual(sky.object.position.toArray(), [100, 20, 30]);
     assert.deepEqual(sky.object.rotation.toArray().slice(0, 3), [0, 0, 0]);
-    assert.ok(sky.object.getObjectByName(environment.celestial));
-    assert.equal(!!sky.object.getObjectByName('planet-rings'), environment.celestial === 'ringed-planet');
+    assert.equal(sky.object.children.length, 1, 'planet, atmosphere and rings share one sky draw');
+    const mesh = sky.object.getObjectByName('celestial-sky');
+    assert.equal(mesh.userData.celestial, environment.celestial);
+    assert.equal(mesh.material.uniforms.ringed.value, environment.celestial === 'ringed-planet' ? 1 : 0);
+    assert.ok(environment.celestialRadius * 2 > Math.PI / 3, 'apparent diameter exceeds 60 degrees');
+    assert.ok(environment.celestialElevation < environment.celestialRadius, 'body straddles the horizon');
+    assert.equal(mesh.material.depthWrite, false);
     assert.ok(sky.object.children.every(o => o.material.fog === false));
     sky.setOverview(true); assert.equal(sky.object.visible, false);
     sky.setOverview(false); assert.equal(sky.object.visible, true);
@@ -32,8 +38,8 @@ test('sky follows position with world-fixed orientation, hides in overview and r
   }
 });
 
-test('each pilot course has three safe, separated landmarks with sustained forward-view encounters', () => {
-  for (const definition of TRACK_CATALOG.filter(t => t.district === 'residential')) {
+test('each campaign course has three safe, separated landmarks with sustained forward-view encounters', () => {
+  for (const definition of TRACK_CATALOG) {
     const track = createCatalogTrack(definition), route = sceneryRoute(track), descriptors = describeTrackLandmarks(track, definition, route);
     assert.equal(descriptors.length, 3); assert.ok(descriptors[0].height >= 300);
     assert.deepEqual(descriptors, describeTrackLandmarks(track, { ...definition, name: 'renamed' }, route));
@@ -50,7 +56,7 @@ test('each pilot course has three safe, separated landmarks with sustained forwa
       assert.ok(longest >= 100, `${definition.id}:${index} should remain prominent ahead for at least 100m, got ${longest}`);
       const race = createTrackLandmark(descriptor), preview = createTrackLandmark(descriptor, true);
       const light = race.getObjectByName('landmark-lights').material.color;
-      assert.ok(light.r * .2126 + light.g * .7152 + light.b * .0722 > .95, 'every pilot accent crosses the bloom threshold');
+      assert.ok(light.r * .2126 + light.g * .7152 + light.b * .0722 > .95, 'every district accent crosses the bloom threshold');
       assert.deepEqual(race.children[0].geometry.attributes.position.array, preview.children[0].geometry.attributes.position.array);
       race.updateMatrixWorld(true);
       for (const mesh of race.children) {

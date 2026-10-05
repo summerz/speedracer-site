@@ -39,7 +39,7 @@ export function createDistrictScenery(track: Track, definition: TrackDefinition)
     if (route.some(p => Math.hypot(p.x - x, p.z - z) < clearance)) continue;
     if (landmarks.some(landmark => Math.hypot(landmark.position.x - x, landmark.position.z - z) < radius + landmark.radius + 28)) continue;
     // Keep the opening approach to each landmark free of tall buildings.
-    if (definition.district === 'residential' && landmarks.some(landmark => route.some((p, i) => {
+    if (landmarks.some(landmark => route.some((p, i) => {
       if (i % 20) return false;
       const delta = landmark.position.clone().sub(p), length = delta.length();
       if (length > 850) return false;
@@ -98,7 +98,7 @@ export function createDistrictScenery(track: Track, definition: TrackDefinition)
     }
     landmarkObjects.forEach((object, i) => {
       const descriptor = landmarks[i];
-      const range = definition.district === 'residential' ? (quality === 'low' ? 1400 : 2200) : ranges[0];
+      const range = quality === 'low' ? 1400 : 2200;
       object.visible = descriptor.position.distanceTo(position) - descriptor.height < range;
     });
   };

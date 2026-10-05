@@ -14,6 +14,7 @@ npm run dev
 - [로컬 개발과 실행](docs/LOCAL_DEVELOPMENT.md)
 - [게임 개발 계획](docs/GAME_PLAN.md)
 - [진행 체크리스트](docs/DEVELOPMENT_CHECKLIST.md)
+- [트랙 카탈로그](docs/TRACK_CATALOG.md) · [랜드마크 카탈로그](docs/LANDMARK_CATALOG.md) · [월드 환경](docs/WORLD_ENVIRONMENTS.md)
 
 배포: <https://speedracer.summerz.net> · 저장소: <https://github.com/summerz/speedracer-site>. `main` 푸시 시 테스트와 빌드를 통과하면 GitHub Pages에 배포한다. v0.2.0부터 웹앱 설치·로딩 표시·수동 업데이트를 지원한다. 모바일은 자동 가속하며 왼쪽 원형 조이스틱으로 조향·대각선 감속, 오른쪽 ㅏ 모양 컨트롤로 고도·부스트를 조작한다. 지원 기기에서는 부스트 단계별 진동과 고도 변경 시 짧은 진동을 제공한다. [배포 안내](docs/DEPLOYMENT.md)를 참고한다.
 

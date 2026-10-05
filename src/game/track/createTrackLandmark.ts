@@ -2,17 +2,11 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { Track } from './createTrack.js';
 import { DISTRICTS } from './trackCatalog.js';
-import type { DistrictId, TrackDefinition } from './trackCatalog.js';
+import type { TrackDefinition } from './trackCatalog.js';
 
-export type LandmarkKind = 'terrace' | 'bridge' | 'reactor' | 'arena' | 'dome' | 'spire' | 'orbital-ring';
-const forms: Record<DistrictId, readonly LandmarkKind[]> = {
-  residential: ['terrace', 'bridge'], industrial: ['reactor', 'spire'], stadium: ['arena', 'dome'],
-  skyline: ['spire', 'bridge'], research: ['dome', 'reactor'], orbital: ['orbital-ring', 'bridge'],
-};
-const labels: Record<LandmarkKind, string> = {
-  terrace: '계단형 주거 타워', bridge: '쌍둥이 연결교', reactor: '전력 코어', arena: '원형 경기장',
-  dome: '발광 돔', spire: '첨탑', 'orbital-ring': '궤도 링',
-};
+import { LANDMARK_TYPES, LANDMARK_DISTRICTS, LANDMARK_ENCOUNTERS } from './landmarkCatalog.js';
+import type { LandmarkKind } from './landmarkCatalog.js';
+export type { LandmarkKind } from './landmarkCatalog.js';
 export function scenerySeed(id: string) {
   return [...id].reduce((n, c) => Math.imul(n ^ c.charCodeAt(0), 16777619), 2166136261) >>> 0;
 }
@@ -24,9 +18,9 @@ export function sceneryRoute(track: Track) {
 
 /** The same deterministic placement is used by the race and course preview. */
 export function describeTrackLandmark(track: Track, definition: TrackDefinition, route = sceneryRoute(track)) {
-  const seed = scenerySeed(definition.id), choices = forms[definition.district];
+  const seed = scenerySeed(definition.id), choices = LANDMARK_DISTRICTS[definition.district].signature;
   const kind = choices[seed % choices.length], scale = .82 + (seed % 997) / 997 * .32;
-  const radius = 72 * scale, height = (kind === 'spire' ? 217 : kind === 'bridge' || kind === 'orbital-ring' ? 112 : 100) * scale;
+  const radius = 72 * scale, height = LANDMARK_TYPES[kind].height * scale;
   const margin = radius + track.halfWidth + 36;
   // Try both sides near the opening stretch; reject against the ENTIRE swept route,
   // including distant sections that cross over or under this candidate.
@@ -38,7 +32,7 @@ export function describeTrackLandmark(track: Track, definition: TrackDefinition,
       const position = frame.position.clone().addScaledVector(side, offset * sign);
       if (route.some(p => Math.hypot(p.x - position.x, p.z - position.z) < margin)) continue;
       position.y = Math.max(definition.district === 'orbital' ? 20 : 0, frame.position.y - height * .45);
-      return { id: `${definition.id}-landmark`, name: `${definition.name} · ${labels[kind]}`, kind, scale,
+      return { district: definition.district, id: `${definition.id}-landmark`, name: `${definition.name} · ${LANDMARK_TYPES[kind].name}`, kind, scale,
         radius, height, position, rotation: Math.atan2(frame.tangent.x, frame.tangent.z), color: DISTRICTS[definition.district].color };
     }
   }
@@ -46,21 +40,20 @@ export function describeTrackLandmark(track: Track, definition: TrackDefinition,
 }
 export type TrackLandmark = ReturnType<typeof describeTrackLandmark>;
 
-/** Pilot: three readable encounters on the first district; other districts retain their layout. */
+/** Three readable encounters in every district, with safe, deterministic approach placement. */
 export function describeTrackLandmarks(track: Track, definition: TrackDefinition, route = sceneryRoute(track)): TrackLandmark[] {
   const original = describeTrackLandmark(track, definition, route);
-  if (definition.district !== 'residential') return [original];
   const result: TrackLandmark[] = [];
-  for (const [index, spec] of [
-    { kind: original.kind, scale: 3.1, fraction: .08 },
-    { kind: 'orbital-ring' as LandmarkKind, scale: 2.15, fraction: .38 },
-    { kind: 'bridge' as LandmarkKind, scale: 1.65, fraction: .72 },
-  ].entries()) {
-    const radius = 72 * spec.scale, height = (spec.kind === 'bridge' || spec.kind === 'orbital-ring' ? 112 : 100) * spec.scale;
+  const kinds = [original.kind, ...LANDMARK_DISTRICTS[definition.district].companions];
+  for (const [index, encounter] of LANDMARK_ENCOUNTERS.entries()) {
+    const kind = kinds[index];
+    // Tall spires retain a similar skyline height rather than tripling their already tall shape.
+    const spec = { ...encounter, kind, scale: kind === 'spire' ? encounter.scale * .7 : encounter.scale };
+    const radius = 72 * spec.scale, height = LANDMARK_TYPES[spec.kind].height * spec.scale;
     const margin = radius + track.halfWidth + 42;
     let best: { position: THREE.Vector3; rotation: number; score: number } | undefined;
     // Score the approach, not only the closest sideways pass. Fixed candidates keep previews stable.
-    for (const shift of [0, .04, -.04, .09, -.09, .16, -.16]) {
+    for (const shift of [0, .04, -.04, .09, -.09, .16, -.16, .24, -.24, .32, -.32]) {
       const distance = (spec.fraction + shift + 1) % 1 * track.length;
       const frame = track.sample(distance);
       if (frame.up.y < .65 || Math.abs(frame.tangent.y) > .6) continue;
@@ -70,6 +63,16 @@ export function describeTrackLandmarks(track: Track, definition: TrackDefinition
         if (route.some(p => Math.hypot(p.x - position.x, p.z - position.z) < margin)) continue;
         if (result.some(p => Math.hypot(p.position.x - position.x, p.position.z - position.z) < p.radius + radius + 30)) continue;
         position.y = Math.max(0, frame.position.y - height * .12);
+        // Reject fleeting silhouettes: require a continuous, useful forward approach.
+        let visible = 0, longest = 0;
+        for (let before = 900; before >= -100; before -= 20) {
+          const approach = track.sample(distance - before);
+          const delta = position.clone().add(new THREE.Vector3(0, height * .45, 0)).sub(approach.position);
+          const range = delta.length(), alignment = delta.normalize().dot(approach.tangent);
+          visible = approach.up.y > .65 && alignment > .70 && range < 1000 && height / range > .18 ? visible + 20 : 0;
+          longest = Math.max(longest, visible);
+        }
+        if (longest < 120) continue;
         let score = -Infinity;
         for (const before of [160, 280, 420, 600, 800]) {
           const approach = track.sample(distance - before);
@@ -83,7 +86,7 @@ export function describeTrackLandmarks(track: Track, definition: TrackDefinition
       }
     }
     if (!best || !Number.isFinite(best.score)) throw new Error(`No visible landmark approach for ${definition.id}:${index}`);
-    result.push({ ...original, id: `${definition.id}-landmark-${index}`, name: `${labels[spec.kind]} ${index === 0 ? '· 메가스트럭처' : ''}`.trim(),
+    result.push({ ...original, id: `${definition.id}-landmark-${index}`, name: `${LANDMARK_TYPES[spec.kind].name} ${index === 0 ? '· 메가스트럭처' : ''}`.trim(),
       kind: spec.kind, scale: spec.scale, radius, height, position: best.position, rotation: best.rotation });
   }
   return result;
@@ -96,7 +99,7 @@ export function createTrackLandmark(descriptor: TrackLandmark, preview = false) 
   object.userData.landmark = { id: descriptor.id, kind: descriptor.kind, name: descriptor.name };
   const color = new THREE.Color(descriptor.color);
   const signature = descriptor.id.match(/-landmark-([0-9]+)$/)?.[1];
-  const accent = signature === undefined ? color : new THREE.Color(['#ffca70', '#c6a0ff', '#ff8eb4'][Number(signature) % 3]);
+  const accent = signature === undefined ? color : new THREE.Color(LANDMARK_DISTRICTS[descriptor.district].accents[Number(signature) % 3]);
   const body = preview ? new THREE.MeshBasicMaterial({ color: '#223947', side: THREE.DoubleSide })
     : new THREE.MeshStandardMaterial({ color: signature === undefined ? '#0b1a24' : '#26364a', roughness: .6, metalness: .5, side: THREE.DoubleSide });
   const glowStrength = signature === undefined || signature === '0' ? 1.8 : 2.8;

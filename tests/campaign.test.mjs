@@ -104,7 +104,7 @@ for (const definition of TRACK_CATALOG) test(`${definition.name}: five stock cra
 test('district scenery is deterministic, instanced and omitted in the track overview', () => {
   for(const definition of TRACK_CATALOG.filter(t => t.order % 4 === 1)) {
     const track = createCatalogTrack(definition), a = createDistrictScenery(track, definition), b = createDistrictScenery(track, definition);
-    assert.equal(a.object.children.length, definition.district === 'residential' ? 6 : 4); assert.ok(a.counts.buildings > 20); assert.ok(a.counts.windows > 50);
+    assert.equal(a.object.children.length, 6); assert.ok(a.counts.buildings > 20); assert.ok(a.counts.windows > 50);
     assert.deepEqual(a.object.children[0].instanceMatrix.array, b.object.children[0].instanceMatrix.array);
     a.setOverview(true); assert.equal(a.object.visible,false); a.setOverview(false); assert.equal(a.object.visible,true);
     a.setQuality('low'); assert.ok(a.object.children[1].count < b.object.children[1].count);
