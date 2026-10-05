@@ -144,3 +144,17 @@
   .campaign-craft img { width:56px; }
   .campaign-craft-copy strong { font-size:17px; }
 }
+
+.course-challenges { display:flex; gap:6px; margin:12px 0 8px; }
+.course-challenges button { flex:1; min-height:44px; padding:10px 12px; border:1px solid #58717d70; border-radius:5px; background:#0b1c28; color:#c9dadf; font:inherit; font-size:13px; cursor:pointer; }
+.course-challenges button[aria-pressed=true] { border-color:#80ffe0; background:#12312f; color:#baffeb; }
+.course-challenges button:focus-visible { outline:2px solid #80ffe0; outline-offset:3px; }
+.course-card-status { margin-left:auto; display:grid; justify-items:end; gap:6px; flex-shrink:0; }
+.course-stars { display:inline-flex; gap:3px; white-space:nowrap; font-size:15px; line-height:1; }
+.course-stars [data-earned=false] { color:#475d6b; }
+.course-stars [data-earned=true] { color:#ffe29a; text-shadow:0 0 10px #ffbd4930; }
+.course-stars-summary { display:flex; align-items:center; gap:12px; padding:10px 0; }
+.course-stars-summary > .course-stars { font-size:24px; }
+.course-stars-summary > span:last-child { color:#b5c9d1; font-size:11px; line-height:1.6; }
+.course-stars-summary strong { display:block; color:#92aab5; font-weight:400; }
+#course-challenge-description { color:#a1bcb9; font-size:11px; }

@@ -166,7 +166,7 @@ test('warnings duck engine/weather, use distinct directions, and defer boost chi
     ctx.currentTime = .4; audio.setAltitudeWarning('down');
     assert.ok(up.every(n => n.connections.length === 0));
     assert.deepEqual(ctx.oscillators.slice(-2).map(n => n.frequency.values[0]), [440, 330]);
-    assert.ok(ctx.oscillators.slice(-2).every(n => n.type === 'square'));
+    assert.ok(ctx.oscillators.slice(-2).every(n => n.type === 'sine'));
     ctx.currentTime = .8; audio.setAltitudeWarning(null);
     assert.equal(ctx.oscillators.at(-3).frequency.values[0], 1568, 'queued recharge plays once warning stops');
     ctx.currentTime = 1.6; audio.update('running', 0, 0, 1, false);
@@ -178,4 +178,23 @@ test('warnings duck engine/weather, use distinct directions, and defer boost chi
     audio.pause(); assert.equal(engineBus.gain.value, 1);
     audio.dispose();
   } finally { globalThis.AudioContext = original; }
+});
+
+
+test('offtrack and electric impacts keep the engine alive and foreground their distinct voices', () => {
+  const original = globalThis.AudioContext; globalThis.AudioContext = Context;
+  try {
+    const audio = createRaceAudio(); audio.activate(); const ctx = Context.instances.at(-1);
+    audio.update('running',0,0,1,false);
+    const engine = ctx.oscillators.slice(0,3);
+    let before=ctx.oscillators.length; audio.play('off-track');
+    const departure=ctx.oscillators.slice(before);
+    assert.deepEqual(departure.map(n=>n.frequency.values[0]),[520,72]);
+    assert.deepEqual(departure.map(n=>n.type),['triangle','sine']);
+    ctx.currentTime=1; before=ctx.oscillators.length; audio.play('electric-impact');
+    assert.equal(ctx.oscillators.slice(before).filter(n=>n.type==='sawtooth').length,4);
+    assert.ok(engine.every(n=>n.connections.length>0));
+    audio.setEnabled(false); before=ctx.oscillators.length; audio.play('off-track');
+    assert.equal(ctx.oscillators.length,before); audio.dispose();
+  } finally { globalThis.AudioContext=original; }
 });

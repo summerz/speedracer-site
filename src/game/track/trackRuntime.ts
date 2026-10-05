@@ -1,5 +1,6 @@
+import { RACE_CHALLENGES, type RaceChallengeId } from './raceChallenge.js';
 import { createTrack, createTrackFrame } from './createTrack.js';
-import type { Track } from './createTrack.js';
+import type { HeightObstacle, Track } from './createTrack.js';
 import { authorClosedTrack } from './trackAuthoring.js';
 import { ALTITUDE_PROFILES } from './altitudeProfile.js';
 import type { DifficultyPreset } from './difficulty.js';
@@ -10,8 +11,19 @@ export function trackPreset(definition: TrackDefinition): DifficultyPreset {
   return { id, label: `난이도 ${definition.rating}/6`, description: definition.features, altitude: ALTITUDE_PROFILES[id],
     layout: { halfWidth: definition.halfWidth, helixTurns: 1, helixPitch: 300, corners: 'gentle' }, obstacleLevels: definition.obstacleLevels };
 }
-export function createCatalogTrack(definition: TrackDefinition): Track {
-  return createTrack(undefined, trackPreset(definition), definition.layout ? authorClosedTrack(definition.layout) : undefined);
+export function createCatalogTrack(definition: TrackDefinition, challenge: RaceChallengeId = 'normal'): Track {
+  const track = createTrack(undefined, trackPreset(definition), definition.layout ? authorClosedTrack(definition.layout) : undefined);
+  const obstacles = track.heightObstacles as HeightObstacle[];
+  const scale = RACE_CHALLENGES[challenge].obstacleScale;
+  if (scale < 1) obstacles.splice(0, obstacles.length, ...obstacles.filter((_, i) => i % 5 !== 4));
+  else if (scale > 1) {
+    const extra = obstacles.slice(0, -1).flatMap((obstacle, i) => {
+      if (i % 3 || obstacles[i + 1].distance - obstacle.distance < 180) return [];
+      return [{ ...obstacle, distance: (obstacle.distance + obstacles[i + 1].distance) / 2 }];
+    });
+    obstacles.push(...extra); obstacles.sort((a, b) => a.distance - b.distance);
+  }
+  return track;
 }
 export function trackMetrics(track: Track) {
   const frame = createTrackFrame(); let maxCurvature = 0, minHeight = Infinity, maxHeight = -Infinity, rollingMetres = 0;

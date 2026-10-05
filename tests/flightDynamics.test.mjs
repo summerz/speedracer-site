@@ -202,7 +202,7 @@ test('boost incidents remove additional charge, zero charge stops boost, and obs
     contact.state.charge = .04; contact.contact();
     assert.equal(contact.state.charge, 0); assert.equal(contact.state.boosting, false);
     assert.equal(contact.state.boostNeedsRelease, true);
-    contact.reset(); contact.contact(); assert.equal(contact.state.charge, 1);
+    contact.reset(); contact.contact(); assert.equal(contact.state.charge, .98);
     for (const [offset, penalty, notice] of [[12, .15, 'off-track'], [9, .1, 'collision']]) {
       const model = createDrivingModel({ ...road(), halfWidth: 10 });
       Object.assign(model.state, { offset, speed: 64 });

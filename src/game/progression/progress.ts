@@ -82,7 +82,7 @@ export function calculateReward(input: RewardInput): Reward {
   const obstacles = (input.obstaclesPassed ?? 0) * OBSTACLE_PASS_POINTS;
   return { base, clean, best, obstacles, penalty: input.penaltyPoints, total: Math.max(0, base + clean + best + obstacles - input.penaltyPoints), assisted: input.assisted };
 }
-export type ProgressCommand = { kind: 'campaign-select'; mode: CampaignOutcome['mode']; trackId: string }
+export type ProgressCommand = { kind: 'campaign-select'; mode: CampaignOutcome['mode']; trackId: string; challenge?: CampaignOutcome['challenge'] }
   | { kind: 'campaign-result'; input: RewardInput; outcome: CampaignOutcome } | { kind: 'reward'; input: RewardInput } | { kind: 'craft'; id: string }
   | { kind: 'equip'; id: string } | { kind: 'sell-craft'; id: string } | { kind: 'upgrade'; id: string; upgrade: UpgradeId }
   | { kind: 'focus' } | { kind: 'slots'; count: number } | { kind: 'consume-focus'; id: string } | { kind: 'refund-focus'; id: string } | { kind: 'confirm-focus'; id: string }
@@ -96,7 +96,8 @@ export function applyCommand(current: Progress, command: ProgressCommand): Progr
   switch (command.kind) {
     case 'campaign-select': {
       if (!trackDefinition(command.trackId) || !['time-attack', 'competition'].includes(command.mode)) throw new Error('알 수 없는 트랙입니다.');
-      next.campaign.last = { mode: command.mode, trackId: command.trackId };
+      if (command.challenge !== undefined && !['easy', 'normal', 'hard'].includes(command.challenge)) throw new Error('잘못된 난이도');
+      next.campaign.last = { mode: command.mode, trackId: command.trackId, challenge: command.challenge };
       if (!next.campaign.knownTracks.includes(command.trackId)) next.campaign.knownTracks.push(command.trackId); break;
     }
     case 'campaign-result': {

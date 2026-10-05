@@ -64,6 +64,16 @@ test('warnings point down above the safe band, including a wrong selected target
   assert.equal(feedback.update('running', state({ distance: 210, altitude: 5, targetAltitude: 7 })).warning, null);
 });
 
+test('challenge reaction distances stay distinct at boost speeds', () => {
+  const feedback = seconds => createRaceSoundFeedback(track, seconds);
+  const early = state({ distance: 20, speed: 300 });
+  assert.equal(feedback(1.9).update('running', early).warning, 'up');
+  assert.equal(feedback(1.5).update('running', early).warning, null);
+  const close = state({ distance: 80, speed: 300 });
+  assert.equal(feedback(1.5).update('running', close).warning, 'up');
+  assert.equal(feedback(1.15).update('running', close).warning, null);
+});
+
 test('collision and off-track battery losses never count as a successful full boost use', () => {
   for (const incident of [{ collisions: 1 }, { offTrackExits: 1 }]) {
     const feedback = createRaceSoundFeedback(track);

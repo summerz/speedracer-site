@@ -97,3 +97,13 @@ test('stage configuration rejects unreachable thresholds and keeps speed tiers o
   const config = resolveDroneConfiguration(base, [{ performanceMultiplier: { topSpeed: 2 } }]);
   assert.equal(config.performance.boostStage2Speed, config.performance.boostSpeed);
 });
+
+
+test('stored boost loses a small amount on contacts and departures even without boosting',()=>{
+  const model=createDrivingModel(track);model.state.speed=100;
+  model.contact();assert.ok(Math.abs(model.state.charge-.98)<1e-8);
+  model.reset(); model.state.speed=100;model.state.altitude=5;model.state.offset=track.halfWidth+5;
+  model.step(1/120,NEUTRAL_INPUT);
+  assert.equal(model.state.offTrackExits,1);assert.ok(Math.abs(model.state.charge-.9625)<.001);
+  const charge=model.state.charge;model.step(1/120,NEUTRAL_INPUT);assert.equal(model.state.charge,charge);
+});

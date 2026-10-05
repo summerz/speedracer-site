@@ -3,7 +3,7 @@ import type { RacePhase } from './createTimeAttack.js';
 import type { AltitudeWarning } from './createRaceSoundFeedback.js';
 import type { RaceCue } from './createRaceFeedback.js';
 
-export type SoundCue = RaceCue | 'impact' | 'electric-impact' | 'recovery' | 'height' | 'thunder' | 'boost-full' | 'boost-complete';
+export type SoundCue = RaceCue | 'impact' | 'electric-impact' | 'off-track' | 'recovery' | 'height' | 'thunder' | 'boost-full' | 'boost-complete';
 interface Voice { source: AudioScheduledSourceNode; nodes: AudioNode[]; music: boolean }
 const frequency = (midi: number) => 440 * 2 ** ((midi - 69) / 12);
 const STEP_SECONDS = 60 / 144 / 4;
@@ -86,7 +86,7 @@ export function createRaceAudio() {
   const hiss = (at: number, duration: number, level: number, hz: number, isMusic = false, type: BiquadFilterType = 'highpass') => {
     const source = context!.createBufferSource(); source.buffer = noise;
     const filter = context!.createBiquadFilter(); filter.type = type; filter.frequency.value = hz; filter.Q.value = 0.7;
-    const gain = envelope(at, duration, level, isMusic ? music : background);
+    const gain = envelope(at, duration, level, isMusic ? music : notificationRouting ? notification : background);
     source.connect(filter); filter.connect(gain);
     own(source, [source, filter, gain], isMusic, at, duration);
   };
@@ -136,11 +136,19 @@ export function createRaceAudio() {
     if (!context || context.state !== 'running' || !enabled || disposed) return;
     const now = context.currentTime;
     effects.gain.setTargetAtTime(0.75, now, 0.01);
-    if (cue === 'impact' || cue === 'electric-impact') {
+    if (cue === 'impact' || cue === 'electric-impact' || cue === 'off-track') {
       engineRestartAt = now;
-      tone(90, now, 0.23, 0.22, 'sine', false, 28);
-      hiss(now, 0.26, 0.3, cue === 'impact' ? 650 : 2600, false, 'bandpass');
-      if (cue === 'electric-impact') for (let i = 0; i < 3; i++) tone(1800 - i * 430, now + i * 0.035, 0.055, 0.07, 'sawtooth');
+      if (cue === 'off-track') {
+        // A falling skid/scrape, distinct from the short electrical impact.
+        hiss(now, .42, .38, 850, false, 'bandpass');
+        tone(520, now, .34, .20, 'triangle', false, 85);
+        tone(72, now + .04, .30, .24, 'sine', false, 32);
+      } else {
+        tone(110, now, .30, .32, 'sine', false, 26);
+        hiss(now, .12, .45, 1800, false, 'highpass');
+        hiss(now + .035, .30, .34, cue === 'impact' ? 650 : 2600, false, 'bandpass');
+        if (cue === 'electric-impact') for (let i = 0; i < 4; i++) tone(2100 - i * 390, now + i * .032, .065, .12, 'sawtooth');
+      }
     } else if (cue === 'boost-full') {
       // One high metallic bell: simultaneous inharmonic partials, long tail.
       tone(1568, now, .55, .12);
@@ -195,10 +203,10 @@ export function createRaceAudio() {
   };
   const play = (cue: SoundCue) => {
     if (!context || context.state !== 'running' || !enabled || disposed) return;
-    if (cue === 'impact' || cue === 'electric-impact') {
+    if (cue === 'impact' || cue === 'electric-impact' || cue === 'off-track') {
       cancelAlerts(); clearWarning(); pending.clear();
       alertUntil = context.currentTime + .32; alertPriority = 5;
-      duckUntil = 0; mix(); emit(cue);
+      duckUntil = context.currentTime + .42; mix(); notificationRouting = true; emit(cue); notificationRouting = false;
     } else if (cue === 'height' || cue === 'thunder' || cue === 'recovery') {
       // Mechanical/weather sounds stay under the notification bus.
       if (cue !== 'height' || context.currentTime >= alertUntil) emit(cue);
@@ -230,9 +238,9 @@ export function createRaceAudio() {
       const now = context.currentTime;
       if (now >= nextWarningAt && now >= alertUntil) {
         const notes = direction === 'up' ? [660, 990, 1320] : [440, 330, 220];
-        // Two rising whistle pulses vs two falling low square pulses.
-        warningVoices.add(tone(notes[0], now, .10, .095, direction === 'up' ? 'triangle' : 'square', false, notes[1], true));
-        warningVoices.add(tone(notes[1], now + .14, .10, .095, direction === 'up' ? 'triangle' : 'square', false, notes[2], true));
+        // Two rising whistle pulses vs a softer falling sine pair.
+        warningVoices.add(tone(notes[0], now, .10, .095, direction === 'up' ? 'triangle' : 'sine', false, notes[1], true));
+        warningVoices.add(tone(notes[1], now + .14, .10, .095, direction === 'up' ? 'triangle' : 'sine', false, notes[2], true));
         nextWarningAt = now + .8; alertUntil = now + .3; alertPriority = 3; duckUntil = now + .38; mix();
       }
     },

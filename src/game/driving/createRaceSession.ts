@@ -1,3 +1,4 @@
+import { RACE_CHALLENGES, type RaceChallengeId } from '../track/raceChallenge.js';
 import { DRONE_CATALOG } from '../drone/droneCatalog.js';
 import type { DroneConfiguration } from '../drone/droneConfiguration.js';
 import { upcomingHeightObstacle } from '../track/createTrack.js';
@@ -108,7 +109,7 @@ export function aiDrivingInput(track: Track, configuration: DroneConfiguration, 
 /** One clock, countdown and pause lifecycle for both modes; completed pilots become ghosts. */
 export function createRaceSession(track: Track, configuration: DroneConfiguration,
   records: ReturnType<typeof createRaceRecords>, focusSlots = 0, mode: RaceMode = 'time-attack',
-  random: () => number = Math.random, controlMode: AiControlMode = 'desktop', rules: RaceRules = {}, rating?: number, rivalSlots: readonly RivalItemId[] = []) {
+  random: () => number = Math.random, controlMode: AiControlMode = 'desktop', rules: RaceRules = {}, rating?: number, rivalSlots: readonly RivalItemId[] = [], challenge: RaceChallengeId = 'normal') {
   if (rivalSlots.length && mode !== 'competition' || rivalSlots.length + focusSlots > 2 || !rivalSlots.every(isRivalItem)) throw new Error('Invalid race item loadout');
   let itemCooldown = 0;
   const itemUsed: RivalItemId[] = [];
@@ -120,15 +121,17 @@ export function createRaceSession(track: Track, configuration: DroneConfiguratio
   const baseRating = rating ?? 3;
   const fieldRatings = [6, 5, Math.min(6, baseRating + 1), baseRating, baseRating, Math.max(1, baseRating - 1), 1];
   const rivals = candidates.map((entry, index) => {
-    const racer = selectAiRacer(entry.configuration.modelVariant, playerColor, random, fieldRatings[index], usedRacers);
+    const racer = selectAiRacer(entry.configuration.modelVariant, playerColor, random, Math.max(1, Math.min(6, fieldRatings[index] + RACE_CHALLENGES[challenge].aiRating)), usedRacers);
     usedRacers.add(racer.id);
     const { color } = racer;
+    const profile = aiDrivingProfile(racer, controlMode);
+    profile.pace *= RACE_CHALLENGES[challenge].aiPace;
     const rivalConfiguration = { ...entry.configuration, boostStyle: {
       core: '#ffffff', body: color, tail: color, afterglow: color, pulseColor: color,
     } };
     return {
       id: `ai-${racer.id}`, name: racer.name, craftName: entry.name, color, racer, effects: { freeze: 0, jam: 0 },
-      style: AI_STYLE_LABELS[racer.style], rating: racer.rating, profile: aiDrivingProfile(racer, controlMode), configuration: rivalConfiguration,
+      style: AI_STYLE_LABELS[racer.style], rating: racer.rating, profile, configuration: rivalConfiguration,
       controller: createTimeAttack(track, rivalConfiguration.performance,
         createRaceRecords({ trackId: 'ai-memory', laps: rules.laps, configurationId: racer.id }), focusSlots, { laps: rules.laps }),
     };

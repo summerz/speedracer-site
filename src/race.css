@@ -232,9 +232,13 @@ button:focus-visible { outline:2px solid #c9f9f2; outline-offset:3px; }
 .restart-actions button { flex:1; min-height:48px; padding:12px; border:1px solid #58717d70; background:#0b1c28; color:#c9dadf; }
 .restart-actions .primary-action { background:var(--accent); color:#041117; border-color:var(--accent); }
 
-.race-flow-actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin:18px 0 12px; }
+.race-flow-actions { display:grid; grid-template-columns:minmax(0,1fr); gap:8px; margin:18px 0 12px; }
 .drive-dialog .race-flow-actions .primary-action { grid-column:1/-1; width:100%; margin:0; }
 .race-flow-actions .race-exit { margin:0; width:100%; min-height:44px; }
-.race-flow-actions:has(#campaign-next:not([hidden])) #drive-start { grid-column:auto; min-height:48px; padding:10px; border:1px solid #58717d70; background:#0b1c28; color:#c9dadf; font-size:13px; }
-.race-flow-actions:has(#campaign-next:not([hidden])) #race-hangar { grid-column:auto; }
+.race-flow-actions:has(#campaign-next:not([hidden])) #drive-start { grid-column:1/-1; min-height:48px; padding:10px; border:1px solid #58717d70; background:#0b1c28; color:#c9dadf; font-size:13px; }
+.race-flow-actions:has(#campaign-next:not([hidden])) #race-hangar { grid-column:1/-1; }
 .race-flow-actions:has(#campaign-next:not([hidden])) #result-shop { grid-column:1/-1; }
+
+.drive-dialog .race-course-name { margin:8px 0 4px; font-family:'Barlow Condensed',sans-serif; font-size:clamp(28px,4vw,42px); line-height:1.05; letter-spacing:.035em; color:#edfff9; overflow-wrap:anywhere; }
+.drive-dialog #drive-overlay-title { margin:8px 0 12px; font-size:18px; color:#a9c9c8; }
+.drive-dialog #race-mode-title { color:#80ffe0; font-size:12px; }

@@ -81,8 +81,9 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
     state.boosting = false; state.boostStage = 0; state.boostElapsed = 0; state.boostStageProgress = 0;
   };
   const damageBoost = (loss: number) => {
-    if (!state.boosting) return;
-    state.charge = Math.max(0, state.charge - loss);
+    const appliedLoss = state.boosting ? loss : loss * .25;
+    state.charge = Math.max(0, state.charge - appliedLoss);
+    rechargeDelay = Math.max(rechargeDelay, .45);
     if (state.charge === 0) { state.boostNeedsRelease = true; interruptBoost(); }
   };
   const recover = () => {

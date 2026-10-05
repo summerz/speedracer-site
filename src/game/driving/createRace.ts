@@ -1,8 +1,8 @@
+import { RACE_CHALLENGES, challengeLapLimit, type RaceChallengeId } from '../track/raceChallenge';
 import { createRaceWeather } from '../environment/createRaceWeather';
 import { createNightSky } from '../environment/createNightSky';
 import { NIGHT_ENVIRONMENTS } from '../environment/raceEnvironment';
 import type { NightEnvironment } from '../environment/raceEnvironment';
-import { campaignLapLimit } from '../track/trackCatalog';
 import { createCatalogTrack } from '../track/trackRuntime';
 import type { TrackDefinition } from '../track/trackCatalog';
 import { createDistrictScenery } from '../track/createDistrictScenery';
@@ -86,6 +86,7 @@ export function createRace(
   course?: TrackDefinition,
   rivalSlots: readonly RivalItemId[] = [],
   environment: NightEnvironment = NIGHT_ENVIRONMENTS[0],
+  challenge: RaceChallengeId = 'normal',
 ): Race {
   const config = resolveDroneConfiguration(configuration);
   const visuals = config.speedEffects;
@@ -103,7 +104,7 @@ export function createRace(
   const ambient = new THREE.HemisphereLight(environment.ambient, 0x152435, environment.ambientIntensity); scene.add(ambient);
   const sun = new THREE.DirectionalLight(environment.light, environment.lightIntensity);
   sun.position.set(-50, 150, -100); scene.add(sun);
-  const track = course ? createCatalogTrack(course) : createTrack(altitudeProfile, difficulty);
+  const track = course ? createCatalogTrack(course, challenge) : createTrack(altitudeProfile, difficulty);
   const sky = createNightSky(environment, track.sample(0).tangent); scene.add(sky.object);
   const weather = createRaceWeather(!!environment.rain, track.length); scene.add(weather.object);
   const scenery = course ? createDistrictScenery(track, course) : undefined;
@@ -116,13 +117,13 @@ export function createRace(
   const boostPulse = createBoostPulse(drone, config.boostStyle.pulseColor);
   const raceAudio = createRaceAudio();
   const feedback = createRaceFeedback();
-  const soundFeedback = createRaceSoundFeedback(track);
+  const soundFeedback = createRaceSoundFeedback(track, RACE_CHALLENGES[challenge].warningSeconds);
   const boostHaptics = createBoostHaptics(typeof navigator.vibrate === 'function' ? navigator.vibrate.bind(navigator) : undefined);
   const coarsePointer = window.matchMedia('(any-pointer: coarse)');
   let storage: Storage | undefined;
   try { storage = window.localStorage; } catch { /* Private browsing can deny storage. */ }
-  const records = createRaceRecords({ laps: course?.laps, trackId: course ? `${course.id}:v${course.revision}` : `neon-circuit-v1:${difficulty?.id ?? 'beginner'}`, configurationId: JSON.stringify({ performance: config.performance, altitude: track.altitudeProfile, ...(focusSlots || rivalSlots.length ? { assisted: true } : {}), ...(mode === 'competition' ? { mode } : {}) }) }, storage);
-  const timeAttack = createRaceSession(track, config, records, focusSlots, mode, Math.random, coarsePointer.matches ? 'touch' : 'desktop', course ? { laps: course.laps, ...(mode === 'time-attack' ? { lapLimit: campaignLapLimit(course) } : {}) } : {}, course?.rating, rivalSlots);
+  const records = createRaceRecords({ laps: course?.laps, trackId: course ? `${course.id}:v${course.revision}` : `neon-circuit-v1:${difficulty?.id ?? 'beginner'}`, configurationId: JSON.stringify({ ...(challenge !== 'normal' ? { challenge } : {}), performance: config.performance, altitude: track.altitudeProfile, ...(focusSlots || rivalSlots.length ? { assisted: true } : {}), ...(mode === 'competition' ? { mode } : {}) }) }, storage);
+  const timeAttack = createRaceSession(track, config, records, focusSlots, mode, Math.random, coarsePointer.matches ? 'touch' : 'desktop', course ? { laps: course.laps, ...(mode === 'time-attack' ? { lapLimit: challengeLapLimit(course, challenge) } : {}) } : {}, course?.rating, rivalSlots, challenge);
   const rivalVisuals = createRivalVisuals(scene, track, timeAttack.rivals);
   const model = timeAttack.model;
   const raceGates = createRaceGates(track, timeAttack.snapshot().gatesPerLap);
@@ -303,6 +304,7 @@ export function createRace(
     const delta = Math.min((now - previous) / 1000, 0.1); previous = now;
     const oldRecoveries = model.state.recoveries;
     const oldCollisions = model.state.collisions;
+    const oldExits = model.state.offTrackExits;
     const oldBoostStage = model.state.boostStage;
     const oldPhase = timeAttack.phase;
     let heightChanged = false;
@@ -332,6 +334,7 @@ export function createRace(
     if (cues.length) notify();
     if (heightChanged) raceAudio.play('height');
     if (model.state.collisions > oldCollisions) raceAudio.play(model.state.notice === 'height-collision' ? 'electric-impact' : 'impact');
+    if (model.state.offTrackExits > oldExits) raceAudio.play('off-track');
     if (model.state.recoveries > oldRecoveries) raceAudio.play('recovery');
     if (phase !== oldPhase) {
       touchControls.setRunning(phase === 'running');

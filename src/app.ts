@@ -1,3 +1,4 @@
+import { raceChallenge } from './game/track/raceChallenge';
 import { soundtrack } from './game/audio/soundtrack';
 import { DRONE_CATALOG } from './game/drone/droneCatalog';
 import { createProgressStore, indexedProgressRepository } from './game/progression/progressStore';
@@ -43,6 +44,7 @@ export function mountApp(root: HTMLDivElement): () => void {
     const [screen, query = ''] = location.hash.slice(1).split('?');
     const params = new URLSearchParams(query);
     const track = trackDefinition(params.get('track') ?? '');
+    const challenge = raceChallenge(params.get('challenge'));
     const mode = params.get('mode') === 'competition' ? 'competition' : 'time-attack';
     soundtrack.setScene(screen === 'drive' ? 'ready' : 'menu');
     const profile = store.snapshot();
@@ -50,8 +52,8 @@ export function mountApp(root: HTMLDivElement): () => void {
     const selected = { ...entry, configuration: upgradedConfiguration(profile.equipped, profile.upgrades[profile.equipped]) };
     if (screen === 'drive' && params.has('track') && (!track || campaignStatus(profile.campaign, mode, track) === 'locked')) { location.hash = 'campaign'; return; }
     const mount = screen === 'drive'
-      ? () => import('./raceApp').then(({ mountRace }) => () => mountRace(root, () => { location.hash = track ? `campaign?track=${track.id}&mode=${mode}` : 'campaign'; }, selected.configuration, store, () => { location.hash = 'shop'; }, track ? { track, mode } : undefined))
-      : screen === 'campaign' ? () => import('./campaignApp').then(({ mountCampaign }) => () => mountCampaign(root, store, params.has('mode') ? { mode, trackId: params.get('track') ?? undefined } : undefined))
+      ? () => import('./raceApp').then(({ mountRace }) => () => mountRace(root, () => { location.hash = track ? `campaign?track=${track.id}&mode=${mode}&challenge=${challenge}` : 'campaign'; }, selected.configuration, store, () => { location.hash = 'shop'; }, track ? { track, mode, challenge } : undefined))
+      : screen === 'campaign' ? () => import('./campaignApp').then(({ mountCampaign }) => () => mountCampaign(root, store, params.has('mode') ? { mode, trackId: params.get('track') ?? undefined, challenge } : undefined))
       : screen === 'shop' ? () => import('./shopApp').then(({ mountShop }) => () => mountShop(root, store, () => { location.hash = ''; }))
       : () => import('./hangarApp').then(({ mountHangar }) => () => mountHangar(root, selected, () => {}, () => { location.hash = 'campaign'; }, store));
     try {

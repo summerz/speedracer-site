@@ -6,7 +6,7 @@ export type AltitudeWarning = 'up' | 'down' | null;
 export type BoostSoundCue = 'boost-full' | 'boost-complete';
 
 /** Edge-triggered boost cues, and an altitude warning within the approaching field's sight range. */
-export function createRaceSoundFeedback(track: Track) {
+export function createRaceSoundFeedback(track: Track, warningSeconds = 1.5) {
   let charge = 1;
   let fullUse = false;
   let collisions = 0, exits = 0;
@@ -23,8 +23,8 @@ export function createRaceSoundFeedback(track: Track) {
       if (charge < .999999 && state.charge >= .999999) cues.push('boost-full');
       charge = state.charge;
       const next = upcomingHeightObstacle(track, state.distance);
-      // Roughly 1.5 seconds of reaction time, bounded to avoid warnings for distant fields.
-      const range = Math.min(240, Math.max(85, state.speed * 1.5));
+      // Keep challenge-specific reaction distance even when speed reaches the warning cap.
+      const range = Math.min(240, Math.max(85, state.speed * 1.5)) * warningSeconds / 1.5;
       const target = state.targetAltitude;
       const current = state.altitude;
       let warning: AltitudeWarning = null;
