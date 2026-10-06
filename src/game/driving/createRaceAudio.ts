@@ -97,14 +97,15 @@ export function createRaceAudio(files: RaceEffectFiles = {}) {
     own(source, [source, filter, gain], isMusic, at, duration);
   };
   const active = () => phase === 'running' || phase === 'countdown';
-  const sample = (cue: FileSoundCue, at: number) => {
+  const sample = (cue: FileSoundCue, at: number, isAlert = notificationRouting) => {
     const sound = samples.get(cue);
     if (!sound) return false;
     const source = context!.createBufferSource(); source.buffer = sound.buffer;
     const gain = context!.createGain(); gain.gain.value = sound.level;
-    source.connect(gain); gain.connect(notification);
-    alertVoices.add(own(source, [source, gain], false, at, sound.buffer.duration));
-    return true;
+    source.connect(gain); gain.connect(isAlert ? notification : background);
+    const voice = own(source, [source, gain], false, at, sound.buffer.duration);
+    if (isAlert) alertVoices.add(voice);
+    return voice;
   };
   const ensureRain = () => {
     if (!context || rainSource || !rainIntensity) return;
@@ -169,6 +170,9 @@ export function createRaceAudio(files: RaceEffectFiles = {}) {
     if (!context || context.state !== 'running' || !enabled || disposed) return;
     const now = context.currentTime;
     effects.gain.setTargetAtTime(0.75, now, 0.01);
+    // Collisions still interrupt the continuous engine envelope, never its sources.
+    if (cue === 'impact' || cue === 'electric-impact' || cue === 'off-track') engineRestartAt = now;
+    if (sample(cue, now)) return;
     if (cue === 'impact' || cue === 'electric-impact' || cue === 'off-track') {
       engineRestartAt = now;
       if (cue === 'off-track') {
@@ -231,8 +235,8 @@ export function createRaceAudio(files: RaceEffectFiles = {}) {
     if (!cue || (warningDirection && priority(cue) < 3)
       || (now < alertUntil && priority(cue) <= alertPriority)) return;
     cancelAlerts(); pending.delete(cue);
-    const duration = cue === 'boost-full' ? .62 : cue === 'boost-complete' ? .75
-      : cue === 'finish' ? .85 : cue === 'final-lap' ? .75 : cue === 'lap' ? .6 : .45;
+    const duration = samples.get(cue)?.buffer.duration ?? (cue === 'boost-full' ? .62 : cue === 'boost-complete' ? .75
+      : cue === 'finish' ? .85 : cue === 'final-lap' ? .75 : cue === 'lap' ? .6 : .45);
     alertUntil = now + duration; alertPriority = priority(cue); duckUntil = alertUntil;
     notificationRouting = true; emit(cue); notificationRouting = false; mix();
   };
@@ -240,7 +244,7 @@ export function createRaceAudio(files: RaceEffectFiles = {}) {
     if (!context || context.state !== 'running' || !enabled || disposed) return;
     if (cue === 'impact' || cue === 'electric-impact' || cue === 'off-track') {
       cancelAlerts(); clearWarning(); pending.clear();
-      const duration = Math.max(.32, samples.get(cue === 'off-track' ? 'off-track' : 'impact')?.buffer.duration ?? 0);
+      const duration = Math.max(.32, (samples.get(cue) ?? samples.get(cue === 'electric-impact' ? 'impact' : cue))?.buffer.duration ?? 0);
       alertUntil = context.currentTime + duration; alertPriority = 5;
       duckUntil = alertUntil + .1; mix(); notificationRouting = true; emit(cue); notificationRouting = false;
     } else if (cue === 'height' || cue === 'thunder' || cue === 'recovery') {
@@ -273,6 +277,15 @@ export function createRaceAudio(files: RaceEffectFiles = {}) {
       if (direction !== warningDirection) { clearWarning(); warningDirection = direction; }
       const now = context.currentTime;
       if (now >= nextWarningAt && now >= alertUntil) {
+        const cue = direction === 'up' ? 'warning-up' : 'warning-down';
+        const warning = sample(cue, now, true);
+        if (warning) {
+          warningVoices.add(warning);
+          const duration = samples.get(cue)!.buffer.duration;
+          nextWarningAt = now + Math.max(.8, duration + .15);
+          alertUntil = now + duration; alertPriority = 3; duckUntil = alertUntil + .08; mix();
+          return;
+        }
         const notes = direction === 'up' ? [660, 990, 1320] : [440, 330, 220];
         // Two rising whistle pulses vs a softer falling sine pair.
         warningVoices.add(tone(notes[0], now, .10, .095, direction === 'up' ? 'triangle' : 'sine', false, notes[1], true));
@@ -322,7 +335,7 @@ export function createRaceAudio(files: RaceEffectFiles = {}) {
       rainGain?.gain.setTargetAtTime(enabled && active() && rainIntensity ? RAIN_INTENSITIES[rainIntensity].volume : 0, now, .15);
       charge.frequency.setTargetAtTime(260 + progress * 540, now, 0.04);
       chargeGain.gain.setTargetAtTime(racing && stage === 1 ? progress ** 2 * 0.05 : 0, now, 0.025);
-      if (racing && enabled && stage > previousStage) {
+      if (racing && enabled && stage > previousStage && !sample(stage === 2 ? 'boost-stage2' : 'boost-on', now, false)) {
         hiss(now, stage === 2 ? 0.38 : 0.2, stage === 2 ? 0.27 : 0.1, 1800, false, 'bandpass');
         tone(stage === 2 ? 110 : 160, now, 0.28, 0.15, 'sine', false, stage === 2 ? 330 : 220);
       }

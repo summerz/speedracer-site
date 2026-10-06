@@ -1,6 +1,6 @@
 {
   "name": "speedracer",
-  "version": "0.16.2",
+  "version": "0.16.5",
   "private": true,
   "type": "module",
   "scripts": {

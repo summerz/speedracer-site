@@ -36,6 +36,76 @@ class Context {
   close() { this.state = 'closed'; return Promise.resolve(); }
 }
 
+test('generated cues replace synthesis, use their complete duration, and route mechanical sounds beneath alerts', async () => {
+  const originalContext = globalThis.AudioContext, originalFetch = globalThis.fetch;
+  globalThis.AudioContext = Context;
+  globalThis.fetch = async () => new Response(new Uint8Array([11]));
+  const cues = ['impact', 'electric-impact', 'off-track', 'countdown', 'start', 'half-lap', 'lap',
+    'final-lap', 'finish', 'boost-full', 'boost-complete', 'height', 'recovery', 'thunder'];
+  const audio = createRaceAudio(Object.fromEntries(cues.map(cue => [cue, { url: `/generated-${cue}.mp3`, level: .3 }])));
+  try {
+    audio.activate(); await new Promise(resolve => setImmediate(resolve));
+    const ctx = Context.instances.at(-1);
+    audio.update('running', 0, 0, 1, false);
+    const oscillatorCount = ctx.oscillators.length;
+    const engine = ctx.oscillators[0];
+    const background = engine.connections[0].connections[0].connections[0];
+    let alertBus;
+    for (const cue of cues) {
+      audio.reset(); ctx.currentTime += 2;
+      const before = ctx.sources.length;
+      audio.play(cue);
+      assert.equal(ctx.sources.length, before + 1, cue);
+      assert.equal(ctx.oscillators.length, oscillatorCount, `${cue} does not layer legacy tones`);
+      const clip = ctx.sources.at(-1);
+      assert.equal(clip.buffer.duration, 1.1);
+      const bus = clip.connections[0].connections[0];
+      if (['height', 'recovery', 'thunder'].includes(cue)) assert.equal(bus, background);
+      else { alertBus ??= bus; assert.equal(bus, alertBus); }
+    }
+    audio.reset(); ctx.currentTime = 50; audio.play('finish');
+    const finish = ctx.sources.at(-1), before = ctx.sources.length;
+    audio.play('boost-full'); ctx.currentTime = 50.9; audio.update('finished', 0, 0, 1, false);
+    assert.equal(ctx.sources.length, before, 'finish tail is protected beyond the legacy .85 seconds');
+    assert.deepEqual(finish.stops, [51.1]);
+    ctx.currentTime = 51.2; audio.update('finished', 0, 0, 1, false);
+    assert.equal(ctx.sources.length, before + 1);
+    assert.equal(engine.starts.length, 1); assert.equal(engine.stops.length, 0);
+  } finally { audio.dispose(); globalThis.AudioContext = originalContext; globalThis.fetch = originalFetch; }
+});
+
+test('generated directional warnings cancel promptly; boost entry stays behind them and lifecycle silences clips', async () => {
+  const originalContext = globalThis.AudioContext, originalFetch = globalThis.fetch;
+  globalThis.AudioContext = Context;
+  globalThis.fetch = async () => new Response(new Uint8Array([4]));
+  const cues = ['warning-up', 'warning-down', 'boost-on', 'boost-stage2'];
+  const audio = createRaceAudio(Object.fromEntries(cues.map(cue => [cue, { url: `/generated-direction-${cue}.mp3`, level: .25 }])));
+  try {
+    audio.activate(); await new Promise(resolve => setImmediate(resolve));
+    const ctx = Context.instances.at(-1);
+    audio.update('running', 0, 0, 1, false);
+    const count = ctx.oscillators.length;
+    audio.setAltitudeWarning('up'); const up = ctx.sources.at(-1);
+    const alertBus = up.connections[0].connections[0];
+    ctx.currentTime = .2; audio.setAltitudeWarning('up'); assert.equal(ctx.sources.at(-1), up);
+    audio.update('running', 1, 0, 1.5, false); const boost = ctx.sources.at(-1);
+    assert.notEqual(boost.connections[0].connections[0], alertBus);
+    assert.deepEqual(up.stops, [.4], 'boost does not preempt a warning');
+    ctx.currentTime = .45; audio.setAltitudeWarning('down'); const down = ctx.sources.at(-1);
+    assert.ok(up.stops.includes(0)); assert.equal(up.connections.length, 0);
+    assert.notEqual(down.buffer, up.buffer); assert.equal(down.connections[0].connections[0], alertBus);
+    audio.setAltitudeWarning(null); assert.ok(down.stops.includes(0)); assert.equal(down.connections.length, 0);
+    ctx.currentTime = 1; audio.update('running', 2, 1, 2, false); const stage2 = ctx.sources.at(-1);
+    assert.equal(ctx.oscillators.length, count, 'warnings and boost entries have no synthesized overlay');
+    audio.pause(); assert.ok(stage2.stops.includes(1.04));
+    audio.update('running', 0, 0, 1, false); ctx.currentTime = 2;
+    audio.setAltitudeWarning('up'); const resumed = ctx.sources.at(-1);
+    audio.setEnabled(false); assert.ok(resumed.stops.includes(0));
+    const sources = ctx.sources.length; audio.setAltitudeWarning('down'); audio.update('running', 2, 1, 2, false);
+    assert.equal(ctx.sources.length, sources);
+  } finally { audio.dispose(); globalThis.AudioContext = originalContext; globalThis.fetch = originalFetch; }
+});
+
 test('file effects use the alert bus, cancel earlier impacts, preserve the engine, and stop with race lifecycle', async () => {
   const originalContext = globalThis.AudioContext, originalFetch = globalThis.fetch;
   globalThis.AudioContext = Context;

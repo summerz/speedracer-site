@@ -1,4 +1,7 @@
-export type FileSoundCue = 'impact' | 'off-track';
+export type FileSoundCue = 'impact' | 'electric-impact' | 'off-track'
+  | 'boost-on' | 'boost-stage2' | 'boost-full' | 'boost-complete'
+  | 'warning-up' | 'warning-down' | 'height' | 'recovery' | 'thunder'
+  | 'countdown' | 'start' | 'half-lap' | 'lap' | 'final-lap' | 'finish';
 export interface SoundEffectFile { url: string; level: number }
 export type RaceEffectFiles = Partial<Record<FileSoundCue, SoundEffectFile>>;
 
