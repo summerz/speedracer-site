@@ -1,16 +1,18 @@
 .menu-header.masthead {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) minmax(0, auto);
   gap: 20px 24px;
   min-height: auto;
   padding-block: calc(20px + env(safe-area-inset-top)) 16px;
   background: #080e14;
 }
-.menu-header-tools { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
-.menu-header .app-tools { margin: 0; }
-.menu-header .app-shell-tools { margin: 0; gap: 8px; }
-.menu-navigation { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-.menu-header-tabs { display: flex; gap: 8px; }
+.menu-header .wordmark { align-self: start; min-height: 40px; }
+.menu-header-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; min-width: 0; gap: 8px; }
+/* Let all utility controls share one wrapping row, including dynamically mounted app controls. */
+.menu-header .app-tools, .menu-header .app-shell-tools { display: contents; }
+.menu-header .app-update-status { min-width: 0; overflow-wrap: anywhere; text-align: right; }
+.menu-navigation { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 16px; }
+.menu-header-tabs { display: flex; flex-wrap: wrap; min-width: 0; gap: 8px; }
 .menu-header .menu-header-button, .menu-header .app-shell-tools button {
   appearance: none;
   display: inline-flex;
@@ -38,15 +40,18 @@
 .menu-header .menu-header-button[aria-current='page'] { opacity: 1; cursor: default; }
 .menu-balance { color: #bce6eb; font-size: 14px; font-weight: 400; white-space: nowrap; }
 @media (max-width: 760px) {
-  .menu-header.masthead { gap: 16px; padding-block: calc(16px + env(safe-area-inset-top)) 12px; }
+  .menu-header.masthead { grid-template-columns: minmax(0, 1fr); gap: 12px; padding-block: calc(16px + env(safe-area-inset-top)) 12px; }
   .menu-header .wordmark { grid-column: 1 / -1; }
-  .menu-header-tools { grid-column: 1 / -1; justify-content: space-between; gap: 12px; }
-  .menu-header .app-tools { flex: 0 1 auto; order: initial; }
+  .menu-header-tools { grid-column: 1 / -1; justify-content: flex-start; }
+  .menu-header .app-version { margin-left: auto; margin-right: 0; }
+  .menu-header [data-update] { flex-basis: 100%; }
+  .menu-header .app-update-status { text-align: left; }
   .menu-header .menu-header-button, .menu-header .app-shell-tools button { min-height: 40px; padding: 9px 12px; font-size: 11px; }
   .menu-header .app-version { font-size: 10px; }
 }
 
 @media (min-width: 761px) {
   .menu-header.masthead { gap: 12px 24px; padding-block: calc(12px + env(safe-area-inset-top)) 12px; }
+  .menu-header .wordmark { min-height: 36px; }
   .menu-header .menu-header-button, .menu-header .app-shell-tools button { min-height: 36px; padding-block: 7px; }
 }
