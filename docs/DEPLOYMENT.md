@@ -4,6 +4,8 @@
 - 사이트: https://speedracer.summerz.net
 - 배포 설정: `.github/workflows/pages.yml`
 
+GA4 이용 분석을 활성화할 때는 빌드를 수행하는 저장소의 Actions 변수 `GA_MEASUREMENT_ID`를 설정하고 다시 배포한다. 비어 있으면 분석을 사용하지 않는다. [분석 연결 안내](ANALYTICS.md)를 참고한다.
+
 main에 푸시하면 `npm ci` → `npm test` → `npm run build` 후 dist를 GitHub Pages에 배포한다. 동일한 코드를 다시 배포하려면 Actions의 Deploy GitHub Pages에서 Run workflow를 실행한다.
 
 GitHub 작업은 프로젝트 계정을 선택하는 `gh-project`로 실행한다.

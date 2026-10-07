@@ -6,9 +6,12 @@ import { upgradedConfiguration } from './game/progression/catalog';
 import { trackDefinition } from './game/track/trackCatalog';
 import { campaignStatus } from './game/progression/campaign';
 import { mountMenuNavigation } from './platform/menuNavigation';
+import { gameAnalytics } from './platform/gameAnalytics';
+import { mountAnalyticsPreferences } from './platform/analyticsPreferences';
 
 export function mountApp(root: HTMLDivElement): () => void {
   const disposeNavigation = mountMenuNavigation(root);
+  const disposeAnalyticsPreferences = mountAnalyticsPreferences(root);
   const repository = (() => {
     try { return indexedProgressRepository(window.indexedDB); }
     catch { return { read: async () => { throw new Error('진행 저장을 사용할 수 없습니다. 주행은 가능합니다.'); }, transact: async () => { throw new Error('진행 저장을 사용할 수 없습니다.'); }, close() {} }; }
@@ -60,6 +63,7 @@ export function mountApp(root: HTMLDivElement): () => void {
       const mountScreen = await mount();
       if (disposed || id !== renderId) return;
       disposeScreen = mountScreen();
+      gameAnalytics.screen(screen === 'drive' ? 'race' : screen === 'campaign' ? 'campaign' : screen === 'shop' ? 'shop' : 'hangar');
     } catch (error) {
       if (disposed || id !== renderId) return;
       console.error('화면 로딩 실패:', error);
@@ -77,6 +81,6 @@ export function mountApp(root: HTMLDivElement): () => void {
     window.removeEventListener('hashchange', onHash);
     document.removeEventListener('pointerdown', activateAudio); document.removeEventListener('keydown', activateAudio);
     document.removeEventListener('visibilitychange', visibility); root.removeEventListener('click', musicToggle);
-    disposeNavigation(); disposeScreen(); store.close(); soundtrack.dispose(); root.replaceChildren();
+    disposeNavigation(); disposeAnalyticsPreferences(); disposeScreen(); store.close(); soundtrack.dispose(); root.replaceChildren();
   };
 }

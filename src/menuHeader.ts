@@ -9,6 +9,7 @@ export function menuHeader(current: 'hangar' | 'shop' | 'campaign', balance: num
     </a>
     <div class="menu-header-tools">
       <button class="menu-header-button menu-music" type="button" data-music-toggle aria-pressed="true">음악 켜짐</button>
+      <button class="menu-header-button" type="button" data-analytics-settings hidden>이용 분석</button>
       <div class="app-tools" data-app-tools></div>
     </div>
     <nav class="menu-navigation" aria-label="메인 메뉴">

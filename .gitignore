@@ -7,4 +7,5 @@ output/
 .gh-user
 .env
 .env.*
+!.env.example
 /incoming-resources/

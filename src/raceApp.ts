@@ -25,6 +25,8 @@ import type { CampaignOutcome } from './game/progression/campaign';
 import type { ProgressStore } from './game/progression/progressStore';
 import type { RewardInput } from './game/progression/progress';
 import './shop.css';
+import { createRaceAnalytics } from './platform/analytics';
+import { gameAnalytics } from './platform/gameAnalytics';
 
 const formatTime = (seconds: number) => {
   const ms = Math.round(Math.max(0, seconds) * 1000);
@@ -190,7 +192,20 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
   let previousLevel = -1;
   let highlightUntil = 0;
   let overlayLayout = '';
+  const analytics = createRaceAnalytics(gameAnalytics.send);
   const update = (state: RaceSnapshot) => {
+    const attackResult = state.timeAttack;
+    const stars = campaign && state.phase === 'finished' ? challengeStars(selectedMode, campaign.track, challenge, {
+      laps: attackResult.lapTimes, rank: state.competition?.playerRank ?? 1, disqualified: attackResult.disqualified,
+      collisions: state.collisions, offTrackExits: state.offTrackExits,
+    }) : 0;
+    analytics.observe({ id: attackResult.raceId, phase: state.phase, seconds: state.elapsed,
+      laps: attackResult.lapTimes.length, collisions: state.collisions, exits: state.offTrackExits,
+      obstacles: state.obstaclesPassed, success: campaign ? stars > 0 : !attackResult.disqualified,
+      disqualified: attackResult.disqualified, rank: state.competition?.playerRank ?? 1, stars,
+    }, { track_id: campaign?.track.id ?? 'practice', race_mode: selectedMode,
+      difficulty: campaign ? challenge : selectedDifficulty, ship_id: configuration.id,
+      control_type: coarsePointer.matches ? 'touch' : 'desktop' });
     const viewKey = `${state.view}/${state.trackDisplay}`;
     if (lastViewKey && lastViewKey !== viewKey && ['ready', 'paused', 'finished'].includes(state.phase) && !lost) previewing = true;
     lastViewKey = viewKey;
@@ -399,6 +414,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
   };
   const events = new AbortController();
   const listen = { signal: events.signal };
+  window.addEventListener('pagehide', event => { if (!event.persisted) analytics.quit('page_exit'); }, listen);
   // iOS long-press selection/callouts can originate on a control's child label.
   for (const type of ['contextmenu', 'selectstart', 'dragstart']) {
     screen.addEventListener(type, event => event.preventDefault(), listen);
@@ -560,5 +576,5 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
     const enabled = hapticsButton.getAttribute('aria-pressed') !== 'true';
     hapticsButton.setAttribute('aria-pressed', String(enabled)); race?.setHapticsEnabled(enabled);
   }, listen);
-  return () => { screenDisposed = true; preferences.close(); restartConfirm.close(); impactAnimation?.cancel(); boostFlashAnimation?.cancel(); events.abort(); race?.dispose(); window.dispatchEvent(new CustomEvent('speedracer:phase', { detail: 'hangar' })); };
+  return () => { analytics.quit(lost ? 'render_error' : 'navigation'); screenDisposed = true; preferences.close(); restartConfirm.close(); impactAnimation?.cancel(); boostFlashAnimation?.cancel(); events.abort(); race?.dispose(); window.dispatchEvent(new CustomEvent('speedracer:phase', { detail: 'hangar' })); };
 }

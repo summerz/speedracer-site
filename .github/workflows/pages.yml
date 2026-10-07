@@ -21,6 +21,8 @@ jobs:
       - run: npm test
       - run: npm run docs:world:check
       - run: npm run build
+        env:
+          VITE_GA_MEASUREMENT_ID: ${{ vars.GA_MEASUREMENT_ID }}
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v4
         with:
