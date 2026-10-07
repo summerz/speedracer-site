@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { applyWaitingUpdate } from '../output/test/platform/appUpdate.js';
+import { applyWaitingUpdate, applyAvailableUpdate, readAppUpdate } from '../output/test/platform/appUpdate.js';
 
 const fixture = () => {
   const container = new EventTarget(); container.controller = {};
@@ -27,4 +27,64 @@ test('no waiting version only checks for updates, without reloading', async () =
   const f = fixture(); let checks = 0;
   assert.equal(await applyWaitingUpdate({ waiting:null, update:async () => { checks++; } }, f.container, f.reload), false);
   assert.equal(checks, 1); assert.equal(f.reloads, 0); assert.equal(f.sent, 0);
+});
+
+const versionedWorker = version => ({
+  postMessage(message, ports) {
+    assert.equal(message.type, 'GET_UPDATE_INFO');
+    ports[0].postMessage({ version });
+  },
+});
+
+test('resumed old page offers an update even when the new worker is already active', async () => {
+  const active = versionedWorker('0.16.6');
+  const registration = { waiting: null, installing: null, active };
+  assert.deepEqual(await readAppUpdate(registration, '0.16.5'), { kind: 'reload', version: '0.16.6' });
+  let reloads = 0;
+  assert.equal(await applyAvailableUpdate(registration, {}, '0.16.5', () => reloads++), true);
+  assert.equal(reloads, 1);
+});
+
+test('a current page or older active worker never prompts or reloads', async () => {
+  for (const version of ['0.16.6', '0.16.5', '0.9.99', 'unknown']) {
+    const registration = { active: versionedWorker(version) };
+    assert.deepEqual(await readAppUpdate(registration, '0.16.6'), { kind: 'current', version: null });
+    assert.equal(await applyAvailableUpdate(registration, {}, '0.16.6', () => assert.fail('unexpected reload')), false);
+  }
+});
+
+test('version ordering compares numeric components rather than text', async () => {
+  assert.deepEqual(await readAppUpdate({ active: versionedWorker('0.16.10') }, '0.16.9'), { kind: 'reload', version: '0.16.10' });
+});
+
+test('downloading and fully prepared updates are distinguished', async () => {
+  const worker = versionedWorker('0.16.7');
+  const registration = { installing: worker, active: versionedWorker('0.16.6') };
+  assert.deepEqual(await readAppUpdate(registration, '0.16.6'), { kind: 'preparing', version: '0.16.7' });
+  registration.waiting = worker; registration.installing = null;
+  assert.deepEqual(await readAppUpdate(registration, '0.16.6'), { kind: 'ready', version: '0.16.7' });
+});
+
+test('worker becoming active while its version is queried still offers a reload', async () => {
+  const registration = {};
+  const worker = {
+    postMessage(message, ports) {
+      registration.active = worker; registration.installing = null;
+      ports[0].postMessage({ version: '0.16.7' });
+    },
+  };
+  registration.installing = worker;
+  assert.deepEqual(await readAppUpdate(registration, '0.16.6'), { kind: 'reload', version: '0.16.7' });
+});
+
+test('a failed or superseded install cannot become an available update', async () => {
+  const registration = {};
+  const worker = {
+    postMessage(message, ports) {
+      registration.installing = null;
+      ports[0].postMessage({ version: '0.16.7' });
+    },
+  };
+  registration.installing = worker;
+  assert.deepEqual(await readAppUpdate(registration, '0.16.6'), { kind: 'current', version: null });
 });

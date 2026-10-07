@@ -1,4 +1,4 @@
-import { applyWaitingUpdate, waitingVersion } from './appUpdate';
+import { applyAvailableUpdate, readAppUpdate, type AppUpdateState } from './appUpdate';
 import './appShell.css';
 
 interface InstallPrompt extends Event {
@@ -17,10 +17,12 @@ export function createAppShell(root: HTMLElement) {
   let phase = 'hangar';
   let applying = false;
   let checking: Promise<void> | undefined;
-  let updateVersion: string | null = null;
+  let connecting: Promise<void> | undefined;
+  let updateState: AppUpdateState = { kind: 'current', version: null };
   let status = '';
   let stopped = false;
-  let notifiedWorker: ServiceWorker | undefined;
+  let announcement = 0;
+  const watched = new WeakSet<ServiceWorker>();
   const tools = document.createElement('div');
   tools.className = 'app-shell-tools';
   tools.innerHTML = `<span class="app-version">v${APP_VERSION}</span><button type="button" data-install>앱 설치</button><button type="button" data-update hidden>업데이트</button><span class="app-update-status" role="status" aria-live="polite"></span>`;
@@ -36,32 +38,34 @@ export function createAppShell(root: HTMLElement) {
     const slot = root.querySelector<HTMLElement>('[data-app-tools]');
     if (slot && tools.parentElement !== slot) slot.append(tools);
     install.hidden = installed || standalone.matches || Boolean((navigator as Navigator & { standalone?: boolean }).standalone);
-    const waiting = Boolean(registration?.waiting);
-    update.hidden = !waiting;
-    update.textContent = applying ? '업데이트 적용 중…' : `${updateVersion ? 'v' + updateVersion : '새 버전'} 업데이트 ↻`;
-    update.disabled = applying || !import.meta.env.PROD || !registration;
-    update.classList.toggle('update-ready', waiting);
-    message.textContent = status;
-    root.querySelector('#race-pause')?.classList.toggle('has-update', waiting);
+    const preparing = Boolean(registration?.installing);
+    const ready = Boolean(registration?.waiting) || updateState.kind === 'reload';
+    update.hidden = !ready && !(preparing && registration?.active);
+    const version = updateState.version ? 'v' + updateState.version : '새 버전';
+    update.textContent = applying ? '업데이트 적용 중…' : preparing && !ready ? `${version} 준비 중…` : `${version} 업데이트 ↻`;
+    update.disabled = applying || !ready || !import.meta.env.PROD || !registration;
+    update.classList.toggle('update-ready', ready);
+    message.textContent = status || (preparing ? registration?.active ? '새 버전을 다운로드하고 있습니다.' : '오프라인 사용을 준비하고 있습니다.' : ready ? '새 버전이 준비됐습니다.' : '');
+    root.querySelector('#race-pause')?.classList.toggle('has-update', ready);
   };
   // Each screen mounts its descendants synchronously when replacing root children.
   const observer = new MutationObserver(paint);
   observer.observe(root, { childList: true });
   paint();
   const announce = async () => {
-    const worker = registration?.waiting;
-    if (worker && worker !== notifiedWorker) {
-      notifiedWorker = worker;
-      const version = await waitingVersion(worker);
-      if (stopped || registration?.waiting !== worker) return;
-      updateVersion = version;
-    }
-    if (!stopped) paint();
+    if (!registration || stopped) return;
+    const request = ++announcement;
+    paint();
+    const next = await readAppUpdate(registration, APP_VERSION);
+    if (stopped || request !== announcement) return;
+    updateState = next;
+    paint();
   };
   const check = async () => {
-    if (!registration || document.hidden || applying) return;
+    if (document.hidden || applying || stopped) return;
+    if (!registration) { await connect(); return; }
     if (checking) return checking;
-    checking = registration.update().then(() => { status = registration?.installing ? '새 버전을 준비하고 있습니다.' : registration?.waiting ? '새 버전이 준비됐습니다.' : ''; })
+    checking = registration.update().then(() => { status = ''; })
       .catch(() => { status = '연결 후 다시 확인해주세요.'; })
       .finally(() => { checking = undefined; void announce(); });
     return checking;
@@ -74,12 +78,12 @@ export function createAppShell(root: HTMLElement) {
   }, listen);
   update.addEventListener('click', async () => {
     if (!registration || applying) return;
-    if (!registration.waiting) { void announce(); return; }
+    if (!registration.waiting && updateState.kind !== 'reload') { void announce(); return; }
     // Pause releases keys, all fingers and haptics before requesting worker activation.
     window.dispatchEvent(new Event('speedracer:pause-request'));
     if (phase === 'running') { status = '주행을 멈춘 후 적용해주세요.'; paint(); return; }
     applying = true; status = '새 버전 적용 후 다시 시작합니다.'; paint();
-    try { await applyWaitingUpdate(registration, navigator.serviceWorker); }
+    try { await applyAvailableUpdate(registration, navigator.serviceWorker, APP_VERSION); }
     catch { status = '적용하지 못했습니다. 연결을 확인하고 다시 시도해주세요.'; }
     finally { applying = false; if (!stopped) paint(); }
   }, listen);
@@ -88,23 +92,37 @@ export function createAppShell(root: HTMLElement) {
   standalone.addEventListener('change', paint, listen);
   window.addEventListener('speedracer:phase', event => { phase = (event as CustomEvent<string>).detail; }, listen);
   const watchInstalling = () => {
-    registration?.installing?.addEventListener('statechange', () => {
-      if (registration?.waiting) status = '새 버전이 준비됐습니다. 적용하면 주행은 다시 시작합니다.';
+    const worker = registration?.installing;
+    if (!worker || watched.has(worker)) return;
+    watched.add(worker);
+    status = '';
+    void announce();
+    worker.addEventListener('statechange', () => {
+      status = worker.state === 'redundant' && !registration?.waiting ? '업데이트 준비가 중단됐습니다. 연결되면 다시 시도합니다.' : '';
       void announce();
     }, listen);
   };
-  if (import.meta.env.PROD && isSecureContext && 'serviceWorker' in navigator) {
-    void navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).then(value => {
+  const supported = import.meta.env.PROD && isSecureContext && 'serviceWorker' in navigator;
+  const connect = () => {
+    if (!supported || stopped) return Promise.resolve();
+    if (connecting) return connecting;
+    connecting = navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).then(value => {
       if (stopped) return;
       registration = value;
       registration.addEventListener('updatefound', watchInstalling, listen);
       watchInstalling(); void announce(); void check();
-    }).catch(() => { status = '온라인으로 실행 중 · 오프라인 준비는 나중에 다시 시도합니다.'; paint(); });
+    }).catch(() => { status = '연결되면 업데이트를 다시 확인합니다.'; paint(); })
+      .finally(() => { connecting = undefined; });
+    return connecting;
+  };
+  if (supported) {
+    navigator.serviceWorker.addEventListener('controllerchange', () => { void announce(); }, listen);
+    void connect();
   }
   window.addEventListener('online', () => { void check(); }, listen);
   window.addEventListener('focus', () => { void check(); }, listen);
   window.addEventListener('pageshow', () => { void check(); }, listen);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) void check(); }, listen);
-  const timer = setInterval(() => { void check(); }, 15 * 60 * 1000);
+  const timer = setInterval(() => { void check(); }, 60 * 1000);
   return () => { stopped = true; events.abort(); observer.disconnect(); clearInterval(timer); tools.remove(); dialog.remove(); };
 }
