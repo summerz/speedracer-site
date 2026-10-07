@@ -82,3 +82,21 @@ test('late decoding after leaving the race cannot retain or expose a sound', asy
     await bank.prepare(context);
   } finally { globalThis.fetch = original; }
 });
+
+test('an audio replacement applies to the next bank and restoring keeps an existing race stable', async () => {
+  const { setSoundEffectResolver } = await import('../output/test/game/audio/soundEffectBank.js');
+  const original = globalThis.fetch;
+  globalThis.fetch = async () => new Response(new Uint8Array([8]));
+  const files = { impact: { url: '/original-replacement-test.mp3', level: .52 } };
+  const context = { state: 'running', decodeAudioData: async () => ({ duration: .5 }) };
+  let first, next;
+  try {
+    setSoundEffectResolver((_cue, file) => ({ ...file, url: 'blob:test-library', level: .2 }));
+    first = createSoundEffectBank(files); await first.prepare(context);
+    assert.equal(first.get('impact').level, .2);
+    setSoundEffectResolver(undefined);
+    next = createSoundEffectBank(files); await next.prepare(context);
+    assert.equal(next.get('impact').level, .52);
+    assert.equal(first.get('impact').level, .2);
+  } finally { setSoundEffectResolver(undefined); first?.dispose(); next?.dispose(); globalThis.fetch = original; }
+});

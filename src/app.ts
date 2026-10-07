@@ -18,8 +18,8 @@ export function mountApp(root: HTMLDivElement): () => void {
   })();
   const store = createProgressStore(repository);
   soundtrack.start();
-  const activateAudio = () => soundtrack.activate();
-  const visibility = () => document.hidden ? soundtrack.suspend() : soundtrack.activate();
+  const activateAudio = () => { if (!(import.meta.env.DEV && location.hash.split('?')[0] === '#sound-lab')) soundtrack.activate(); };
+  const visibility = () => document.hidden ? soundtrack.suspend() : activateAudio();
   const musicToggle = (event: Event) => {
     if (!(event.target instanceof Element) || !event.target.closest('[data-music-toggle]')) return;
     soundtrack.setEnabled(!soundtrack.enabled); refreshMusicButton();
@@ -35,7 +35,10 @@ export function mountApp(root: HTMLDivElement): () => void {
   root.addEventListener('click', musicToggle);
   let disposeScreen = () => {}; let renderId = 0; let disposed = false;
   const developmentGrant = import.meta.env.DEV
-    ? import('./devProgress').then(module => module.grantLocalPlaytestPoints(repository)).catch(() => {})
+    ? Promise.all([
+      import('./devProgress').then(module => module.grantLocalPlaytestPoints(repository)).catch(() => {}),
+      import('./devAudio').then(module => module.initializeDevAudio()).catch(error => console.warn('개발 오디오 저장을 불러오지 못했습니다.', error)),
+    ])
     : Promise.resolve();
   const render = async () => {
     const id = ++renderId;
@@ -49,12 +52,15 @@ export function mountApp(root: HTMLDivElement): () => void {
     const track = trackDefinition(params.get('track') ?? '');
     const challenge = raceChallenge(params.get('challenge'));
     const mode = params.get('mode') === 'competition' ? 'competition' : 'time-attack';
-    soundtrack.setScene(screen === 'drive' ? 'ready' : 'menu');
+    if (import.meta.env.DEV && screen === 'sound-lab') soundtrack.suspend();
+    else soundtrack.setScene(screen === 'drive' ? 'ready' : 'menu');
     const profile = store.snapshot();
     const entry = DRONE_CATALOG.find(craft => craft.configuration.id === profile.equipped)!;
     const selected = { ...entry, configuration: upgradedConfiguration(profile.equipped, profile.upgrades[profile.equipped]) };
     if (screen === 'drive' && params.has('track') && (!track || campaignStatus(profile.campaign, mode, track) === 'locked')) { location.hash = 'campaign'; return; }
-    const mount = screen === 'drive'
+    const mount = import.meta.env.DEV && screen === 'sound-lab'
+      ? () => import('./devAudioApp').then(({ mountDevAudio }) => () => mountDevAudio(root, profile.balance, params.get('view') === 'library' ? 'library' : 'assignments'))
+      : screen === 'drive'
       ? () => import('./raceApp').then(({ mountRace }) => () => mountRace(root, () => { location.hash = track ? `campaign?track=${track.id}&mode=${mode}&challenge=${challenge}` : 'campaign'; }, selected.configuration, store, () => { location.hash = 'shop'; }, track ? { track, mode, challenge } : undefined))
       : screen === 'campaign' ? () => import('./campaignApp').then(({ mountCampaign }) => () => mountCampaign(root, store, params.has('mode') ? { mode, trackId: params.get('track') ?? undefined, challenge } : undefined))
       : screen === 'shop' ? () => import('./shopApp').then(({ mountShop }) => () => mountShop(root, store, () => { location.hash = ''; }))
@@ -63,7 +69,7 @@ export function mountApp(root: HTMLDivElement): () => void {
       const mountScreen = await mount();
       if (disposed || id !== renderId) return;
       disposeScreen = mountScreen();
-      gameAnalytics.screen(screen === 'drive' ? 'race' : screen === 'campaign' ? 'campaign' : screen === 'shop' ? 'shop' : 'hangar');
+      if (screen !== 'sound-lab') gameAnalytics.screen(screen === 'drive' ? 'race' : screen === 'campaign' ? 'campaign' : screen === 'shop' ? 'shop' : 'hangar');
     } catch (error) {
       if (disposed || id !== renderId) return;
       console.error('화면 로딩 실패:', error);

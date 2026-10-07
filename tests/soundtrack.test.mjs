@@ -133,3 +133,40 @@ test('pending playback cannot resurrect a canceled race after returning to menu 
     idle.deferred=undefined;f.player.setScene('countdown');f.player.dispose();await flush();assert.ok(f.media.every(m=>m.paused&&m.src===''));
   }finally{f.player.dispose();}
 });
+
+test('a library replacement changes the intended track URL and keeps the other music paths', async () => {
+  const context = new Context(), media = [];
+  const player = createSoundtrack({ contextFactory: () => context, mediaFactory: () => { const m = new Media(); media.push(m); return m; },
+    baseUrl: '/game/', resolveUrl: (file, original) => file === SOUNDTRACKS[0].file ? 'blob:lobby-library' : original, random: () => .999999, fadeSeconds: .01 });
+  try {
+    player.preload();
+    assert.ok(media.some(m => m.src === 'blob:lobby-library'));
+    player.activate(); await flush();
+    player.setScene('countdown'); await flush();
+    assert.ok(media.some(m => m.src === `/game/music/ost/${SOUNDTRACKS[1].file}`));
+    assert.equal(player.snapshot().song, SOUNDTRACKS[1].title);
+  } finally { player.dispose(); }
+  assert.ok(media.every(m => m.paused && m.src === ''));
+});
+
+
+test('custom playlist shuffles only included tracks and supports one racing song', async () => {
+  const context = new Context(), media = [];
+  const tracks = [SOUNDTRACKS[0], SOUNDTRACKS[3]];
+  const player = createSoundtrack({ tracks, contextFactory: () => context, mediaFactory: () => { const m = new Media(); media.push(m); return m; }, fadeSeconds: .01 });
+  try {
+    player.activate(); await flush(); player.setScene('running'); await flush();
+    assert.equal(player.snapshot().song, 'Steel Gemini');
+    for (let i = 0; i < 3; i++) { media.find(m => !m.paused).time(179.995); await flush(); assert.equal(player.snapshot().song, 'Steel Gemini'); }
+    assert.ok(media.every(m => /lobby-before|racing-3/.test(m.src)));
+  } finally { player.dispose(); }
+});
+test('empty racing playlist stays silent during a race and resumes lobby on return', async () => {
+  const context = new Context(), media = [];
+  const player = createSoundtrack({ tracks: [SOUNDTRACKS[0]], contextFactory: () => context, mediaFactory: () => { const m = new Media(); media.push(m); return m; }, fadeSeconds: .01 });
+  try {
+    player.activate(); await flush(); assert.ok(media.some(m => !m.paused));
+    player.setScene('countdown'); player.activate(); await flush(); assert.ok(media.every(m => m.paused));
+    player.setScene('menu'); await flush(); assert.ok(media.some(m => !m.paused));
+  } finally { player.dispose(); }
+});

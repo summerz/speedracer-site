@@ -1,3 +1,4 @@
+import importedLevels from '../../assets/audio/effect-levels.json';
 import impact from '../../assets/audio/agent-audio/impact.mp3';
 import electricImpact from '../../assets/audio/agent-audio/electric-impact.mp3';
 import offTrack from '../../assets/audio/agent-audio/off-track.mp3';
@@ -17,9 +18,9 @@ import thunder from '../../assets/audio/agent-audio/thunder.mp3';
 import type { RaceEffectFiles } from './soundEffectBank.js';
 
 // Imported resources receive content hashes and are included in the PWA shell.
-export const RACE_EFFECT_FILES: RaceEffectFiles = {
-  impact: { url: impact, level: .65 },
-  'electric-impact': { url: electricImpact, level: .6 },
+const defaultFiles: RaceEffectFiles = {
+  impact: { url: impact, level: .52 },
+  'electric-impact': { url: electricImpact, level: .52 },
   'off-track': { url: offTrack, level: .38 },
   'boost-on': { url: boostOn, level: .3 },
   'boost-stage2': { url: boostStage2, level: .45 },
@@ -37,3 +38,6 @@ export const RACE_EFFECT_FILES: RaceEffectFiles = {
   finish: { url: finish, level: .32 },
   thunder: { url: thunder, level: .32 },
 };
+
+const levels = importedLevels as Partial<Record<keyof RaceEffectFiles, number>>;
+export const RACE_EFFECT_FILES = Object.fromEntries(Object.entries(defaultFiles).map(([cue, file]) => [cue, { ...file, level: levels[cue as keyof RaceEffectFiles] ?? file.level }])) as RaceEffectFiles;

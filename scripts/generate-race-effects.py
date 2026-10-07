@@ -23,21 +23,22 @@ ORIGINALS = ROOT / 'incoming-resources/agent-audio'
 DEST = ROOT / 'src/assets/audio/agent-audio'
 REVISED_CUES = {'start', 'boost-full', 'off-track', 'warning-up', 'warning-down', 'lap', 'final-lap'}
 LATEST_CUES = {'boost-full', 'electric-impact', 'finish'}
+FEEDBACK_CUES = {'boost-complete', 'impact', 'electric-impact', 'warning-up'}
 
 
 def source_revision(name):
-    return 3 if name in LATEST_CUES else 2 if name in REVISED_CUES else 1
+    return 5 if name == 'warning-up' else 4 if name in FEEDBACK_CUES else 3 if name in LATEST_CUES else 2 if name in REVISED_CUES else 1
 
 
 SPECS = [
-    ('impact', .65, 'A single violent futuristic drone collision, close dry heavy metal chassis crunch and bass thud, sharp immediate attack, brief gritty debris decay, isolated one shot.'),
-    ('electric-impact', .48, 'A single quick contact with a futuristic energy barrier, sharp thin electrical snap immediately followed by a smooth bright sizzling discharge and short airy tail. Lightweight electronic shock, dry close sound, crisp rather than gritty, no bass thud, no metal crunch, no explosion, no heavy distortion, no alarm.'),
+    ('impact', .55, 'A single futuristic racing drone shield contact, immediate bright synthetic magnetic zap folding into a short smooth resonant energy ripple, elastic electronic texture with a fast downward pitch bend, medium weight and close dry space. Clean science fiction force-field collision, no bass boom, no thud, no explosion, no metallic crunch, no debris, no gritty distortion.'),
+    ('electric-impact', .48, 'A single futuristic racing drone touching an electric filament, immediate crisp electronic zip and smooth thin sizzling energy discharge, a short glassy resonant tail, dry close space, controlled bright synthetic texture. Clean science fiction electrical contact, no bass boom, no thud, no explosion, no metal crunch, no debris, no harsh gritty crackle, no alarm.'),
     ('off-track', .5, 'A hovering racing drone briefly brushing a magnetic track boundary, smooth airy friction swish and soft elastic electronic buzz bending downward, light contact sliding past, close dry sound, no crash, no explosion, no debris, no heavy impact.'),
     ('boost-on', .6, 'A single futuristic jet booster igniting, sudden airy pressure whoosh rising rapidly in pitch, tight bass attack and short rush of air, isolated one shot.'),
     ('boost-stage2', .7, 'A single powerful science fiction warp acceleration, deep pressure slam immediately followed by a fast bright air tearing sweep upward, short dry tail, isolated one shot.'),
     ('boost-full', .72, 'One single bright crystalline chime strike for a futuristic energy battery fully charged, very high sparkling glass timbre, a clear sustained ding dissolving into tiny shimmering overtones, soft rounded attack and gently fading tail. One hit only, one continuous pitch, no second note, no ascending sequence, no radar bleep, no alarm, no bass.'),
-    ('boost-complete', .65, 'A quick sequence of three warm rounded electronic plucks rising in pitch, compact triumphant reward confirmation, immediate notes and short dry decay.'),
-    ('warning-up', .38, 'A single short precise digital radar bleep, clean bright rounded square wave pulse at a steady high pitch, compact retro futuristic computer interface signal, dry and immediate, no flute, no whistle, no glissando, no buzzing alarm.'),
+    ('boost-complete', .65, 'A single bright luminous electronic synth pluck at a steady pitch, rounded bell-like attack with sparkling warm upper harmonics and a clear short ringing decay, cheerful futuristic arcade reward timbre, close dry sound. Light and optimistic, no bass, no brass, no horn, no alarm, no melody, no pitch bend.'),
+    ('warning-up', .38, 'Derived from the current warning-down asset: exchange the two notes into low then high without changing their timbre.'),
     ('warning-down', .38, 'A single short precise digital computer bleep, smooth rounded pulse wave at a steady middle high pitch, compact retro futuristic interface signal, dry and immediate, soft edges, no flute, no whistle, no growl, no glissando, no buzzing alarm.'),
     ('height', .18, 'A single tiny precise futuristic servo click with a soft electronic tick, light and dry, very brief tactile switch sound, immediate attack.'),
     ('countdown', .22, 'A single tight low digital radar blip, pure focused electronic pulse, immediate attack and very brief dry decay, race countdown signal.'),
@@ -49,7 +50,53 @@ SPECS = [
 ]
 
 
+def encode_warning_up():
+    """Exchange the descending cue's notes without changing pitch or timbre."""
+    source = DEST / 'warning-down.mp3'
+    archive = ORIGINALS / 'race-sfx-v6'
+    archive.mkdir(parents=True, exist_ok=True)
+    digest = hashlib.sha256(source.read_bytes()).hexdigest()
+    snapshot = archive / f'warning-down-{digest[:16]}.mp3'
+    if not snapshot.exists():
+        snapshot.write_bytes(source.read_bytes())
+    previous = DEST / 'warning-up.mp3'
+    if previous.exists():
+        previous_digest = hashlib.sha256(previous.read_bytes()).hexdigest()
+        backup = archive / f'warning-up-before-{previous_digest[:16]}.mp3'
+        if not backup.exists():
+            backup.write_bytes(previous.read_bytes())
+    target = archive / 'warning-up-encoded.mp3'
+    # Preserve each note's forward attack/decay; reverse only the note order.
+    filters = ('[0:a]asplit[high][low];'
+               '[low]atrim=start=0.18:end=0.31,asetpts=PTS-STARTPTS[low1];'
+               '[high]atrim=start=0:end=0.13,asetpts=PTS-STARTPTS,adelay=180:all=1[high1];'
+               '[low1][high1]amix=inputs=2:normalize=0,apad=whole_dur=0.38[out]')
+    subprocess.run(['ffmpeg', '-v', 'error', '-y', '-i', str(snapshot),
+                    '-filter_complex', filters, '-map', '[out]', '-t', '0.38',
+                    '-ac', '1', '-ar', '44100', '-c:a', 'libmp3lame', '-b:a', '96k',
+                    '-map_metadata', '-1', str(target)], check=True, timeout=20)
+    decoded = array.array('f', subprocess.check_output([
+        'ffmpeg', '-v', 'error', '-i', str(target), '-f', 'f32le', '-']))
+    if sys.byteorder != 'little':
+        decoded.byteswap()
+    assert decoded and all(math.isfinite(v) for v in decoded), 'warning-up: invalid samples'
+    peak = max(abs(v) for v in decoded)
+    rms = math.sqrt(sum(v*v for v in decoded) / len(decoded))
+    assert .001 < rms and peak < .99, 'warning-up: silence/clipping'
+    target = target.replace(previous)
+    return {'cue': 'warning-up', 'file': target.name,
+            'sourceType': 'derived-existing-effect', 'sourceCue': 'warning-down',
+            'sourcePath': str(snapshot.relative_to(ROOT)), 'sourceRevision': 6,
+            'sourceSha256': digest, 'sha256': hashlib.sha256(target.read_bytes()).hexdigest(),
+            'bytes': target.stat().st_size, 'durationSeconds': len(decoded)/44100,
+            'sampleRate': 44100, 'channels': 1, 'peak': peak, 'rms': rms,
+            'edit': 'descending cue notes exchanged: low then high, same pitches/timbre/envelopes, '
+                    'two 130 ms pulses / 50 ms gap; no pitch shift, EQ or gain change'}
+
+
 def encode(name, maximum):
+    if name == 'warning-up':
+        return encode_warning_up()
     originals = ORIGINALS / f'race-sfx-v{source_revision(name)}'
     source = originals / f'{name}.wav'
     # Decode uniformly; choose the first meaningful attack using 5 ms energy windows.
@@ -72,10 +119,10 @@ def encode(name, maximum):
     edit = 'onset trim, peak normalization, 3 ms attack / 40 ms tail fades'
     filters = ['-af', f'atrim=start={onset}:duration={maximum},asetpts=PTS-STARTPTS,'
                f'volume={.72/peak},afade=t=in:d=0.003,afade=t=out:st={maximum-.04}:d=0.04']
-    if name in ('warning-up', 'warning-down'):
+    if name == 'warning-down':
         # Reuse the generated timbre at two pitches so the direction cannot be lost
         # when trimming a longer model phrase. Both pulses remain model audio.
-        ratio = 1.5 if name == 'warning-up' else .75
+        ratio = .75
         peak = max(abs(v) for v in values[int(onset*44100):int((onset+.17)*44100)])
         filters = ['-filter_complex',
                    f'[0:a]atrim=start={onset}:duration=0.17,asetpts=PTS-STARTPTS,volume={.68/peak},asplit[a][b];'
@@ -84,14 +131,14 @@ def encode(name, maximum):
                    'afade=t=in:d=0.003,afade=t=out:st=0.09:d=0.04,adelay=180:all=1[b1];'
                    '[a1][b1]amix=inputs=2:normalize=0,apad=whole_dur=0.38[out]', '-map', '[out]']
         edit = f'generated timbre, two 130 ms pulses / 50 ms gap, second pitch x{ratio}, fades'
-    elif name in ('lap', 'final-lap'):
+    elif name in ('lap', 'final-lap', 'boost-complete'):
         # Build an audible rising motif from the generated pluck, rather than
         # truncating whatever melody happened to occupy a longer source phrase.
-        ratios = [1, 2**(4/12), 1.5]
+        ratios = [1, 2**(4/12), 2] if name == 'boost-complete' else [1, 2**(4/12), 1.5]
         if name == 'final-lap':
             ratios.append(2)
-        pulse = .16
-        spacing = .18
+        pulse = .12 if name == 'boost-complete' else .16
+        spacing = .12 if name == 'boost-complete' else .18
         retained = max(.35, pulse * max(ratios))
         peak = max(abs(v) for v in values[int(onset*44100):int((onset+retained)*44100)])
         splits = ''.join(f'[p{i}]' for i in range(len(ratios)))
@@ -105,6 +152,20 @@ def encode(name, maximum):
                      f'amix=inputs={len(ratios)}:normalize=0,apad=whole_dur={maximum}[out]')
         filters = ['-filter_complex', ';'.join(graph), '-map', '[out]']
         edit = f'generated pluck, rising pitch ratios {ratios}, {pulse}s notes / {spacing}s spacing, fades'
+    elif name in ('impact', 'electric-impact'):
+        low, high, tail = (450, 7000, .1) if name == 'impact' else (700, 6500, .09)
+        band = f'atrim=start={onset}:duration={maximum},asetpts=PTS-STARTPTS,highpass=f={low},lowpass=f={high}'
+        filtered = array.array('f', subprocess.check_output([
+            'ffmpeg', '-v', 'error', '-i', str(source), '-af', band,
+            '-ac', '1', '-ar', '44100', '-f', 'f32le', '-']))
+        if sys.byteorder != 'little':
+            filtered.byteswap()
+        peak = max(abs(v) for v in filtered)
+        assert peak > .001, f'{name}: silent filtered contact'
+        filters = ['-af', f'atrim=start={onset}:duration={maximum},asetpts=PTS-STARTPTS,'
+                   f'highpass=f={low},lowpass=f={high},volume={.65/peak},'
+                   f'afade=t=in:d=0.004,afade=t=out:st={maximum-tail}:d={tail}']
+        edit = f'generated energy contact, onset trim, {low}-{high} Hz band, peak gain, 4 ms attack / {tail}s tail fade'
     elif name in LATEST_CUES:
         # Preserve the generated gesture: charge is a single ringing strike,
         # barrier contact a short discharge, finish a sustained synth chord.
@@ -140,14 +201,26 @@ async def main():
     parser.add_argument('--cues', nargs='+', choices=[spec[0] for spec in SPECS],
                         help='Replace only these cues, preserving other manifest entries.')
     args = parser.parse_args()
-    log_dir = ORIGINALS / 'race-sfx-v3'
+    log_dir = ORIGINALS / 'race-sfx-v5'
     log_dir.mkdir(parents=True, exist_ok=True)
     DEST.mkdir(parents=True, exist_ok=True)
     runtime = Path(os.environ.get('AGENT_AUDIO_REPO', Path.home()/'.local/share/agent-audio'))
     env = {**os.environ, 'AGENT_AUDIO_HOME': os.environ.get('AGENT_AUDIO_HOME', str(Path.home()/'.agent-audio'))}
     params = StdioServerParameters(command=str(runtime/'.venv/bin/python'), args=['-I', '-m', 'agent_audio.mcp_server'], env=env)
     manifest_path = DEST / 'manifest.json'
-    records = {e['cue']: e for e in json.loads(manifest_path.read_text())['effects']} if manifest_path.exists() else {}
+    existing = json.loads(manifest_path.read_text()) if manifest_path.exists() else {}
+    records = {e['cue']: e for e in existing.get('effects', [])}
+    # An exact note-order edit needs no model invocation.
+    if args.cues == ['warning-up']:
+        record = encode_warning_up()
+        records['warning-up'] = record
+        existing.update(version=max(6, existing.get('version', 0) + 1), listeningVerified=False,
+                        effects=[records[name] for name, *_ in SPECS if name in records])
+        temporary = manifest_path.with_suffix('.json.tmp')
+        temporary.write_text(json.dumps(existing, indent=2)+'\n')
+        temporary.replace(manifest_path)
+        print(f'warning-up: {record["durationSeconds"]:.2f}s / {record["bytes"]} bytes; warning-down notes exchanged')
+        return
     with (log_dir/'mcp-stderr.log').open('a') as errors:
         async with stdio_client(params, errlog=errors) as (read, write):
             async with ClientSession(read, write) as session:
@@ -159,6 +232,8 @@ async def main():
                 for name, maximum, description in SPECS:
                     if args.cues and name not in args.cues:
                         continue
+                    if name == 'warning-up':
+                        continue  # Derive after warning-down has been encoded, if selected.
                     originals = ORIGINALS / f'race-sfx-v{source_revision(name)}'
                     originals.mkdir(parents=True, exist_ok=True)
                     source = originals/f'{name}.wav'
@@ -171,7 +246,9 @@ async def main():
                     record = {'cue': name, 'prompt': prompt, **encode(name, maximum)}
                     records[name] = record
                     print(f'{name}: {record["durationSeconds"]:.2f}s / {record["bytes"]} bytes / peak {record["peak"]:.3f}', flush=True)
-    manifest = {'version': 3, 'generator': 'Agent Audio 0.1.0, standalone Python MCP SDK stdio client',
+    if not args.cues or 'warning-up' in args.cues:
+        records['warning-up'] = encode_warning_up()
+    manifest = {**existing, 'version': max(6, existing.get('version', 0) + 1), 'generator': 'Agent Audio 0.1.0, standalone Python MCP SDK stdio client',
                 'model': 'Stable Audio 3 Medium / official MLX runtime',
                 'modelRevision': 'da6edc54ddba10bfd79a077102ded687f80e882b',
                 'format': 'MP3, mono, 44.1 kHz, 96 kbps', 'listeningVerified': False,

@@ -86,7 +86,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
         <details class="control-help"><summary>조작 안내</summary>
           <p class="touch-help">메뉴: 화살표로 이동 · Enter로 선택. 게임패드: 방향 패드/스틱으로 이동 · A 선택 · B 돌아가기.<br />주행: 왼쪽 스틱 조향 · 방향 패드 ↑/↓ 고도 · LT 감속 · RT/RB 부스트 · X 콕핏 · Y 트랙 뷰 · LB 아이템 · Start 일시정지/계속.</p>
           <div class="drive-keys"><span>자동 가속 · <kbd>S</kbd> 감속</span><span><kbd>A</kbd> <kbd>D</kbd> 좌우 조향</span><span><kbd>↓</kbd> <kbd>↑</kbd> 고도 한 단계 전환</span><span><kbd>Space</kbd> 길게 눌러 부스트</span><span><kbd>C</kbd> 기체·콕핏 전환</span><span><kbd>X</kbd> 트랙 PIP·자리 교환·닫기</span><span><kbd>V</kbd> 아이템 사용</span><span><kbd>Esc</kbd> 일시정지·계속하기</span><span>대기·일시정지 중 <kbd>S</kbd> 설정</span></div>
-          <p class="touch-help">자동으로 가속합니다. 왼쪽 조이스틱은 좌우 조향, 아래로 당기면 감속합니다. 대각선으로 두 조작을 함께 할 수 있습니다.<br />오른쪽 ↑/↓ 버튼은 고도를 한 단계 바꾸고, BOOST는 길게 눌러 사용합니다. ${(configuration.performance.boostStage2Threshold / configuration.performance.boostDrain).toFixed(1)}초 연속 부스트 시 2단계에 진입합니다.<br />시점은 일시정지 메뉴의 시점 전환에서 바꿀 수 있습니다.</p>
+          <p class="touch-help">자동으로 가속합니다. 왼쪽 조이스틱은 좌우 조향, 아래로 당기면 감속합니다. 대각선으로 두 조작을 함께 할 수 있습니다.<br />오른쪽 BOOST를 누른 채 위·아래로 밀면 부스트를 유지하면서 고도가 한 단계 바뀝니다. 가운데로 돌아온 뒤 다시 밀면 다음 단계로 바뀝니다. ↑/↓만 누르면 부스트 없이 고도를 바꿉니다. ${(configuration.performance.boostStage2Threshold / configuration.performance.boostDrain).toFixed(1)}초 연속 부스트 시 2단계에 진입합니다.<br />시점은 일시정지 메뉴의 시점 전환에서 바꿀 수 있습니다.</p>
           <p>중간·어려움: 주황 방전 구역은 모든 고도에서 위험합니다. 민트색 화살표를 따라 왼쪽·가운데·오른쪽 통로로 이동하세요. 이동 전기선의 링과 화살표는 통과 구멍의 위치·이동 방향을 보여주며, 고도 안내는 도착 예상 시점의 통과 고도입니다.</p>
         </details>
       </dialog>

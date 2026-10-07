@@ -37,3 +37,46 @@ test('pause/cancel/reset returns every input to neutral, subsequent touches work
   input.reset(); assert.deepEqual(input.read(true), { throttle:true, brake:false, steer:0, boost:false });
   assert.equal(input.pressStick(6), true);
 });
+
+test('boost swipes ignore jitter and change one altitude step while boost stays held', () => {
+  const input = createTouchInput(); input.pressBoost(2, 100);
+  for (const y of [95, 109, 80, 73]) assert.equal(input.moveBoost(2, y), 0);
+  assert.equal(input.moveBoost(2, 72), 1);
+  for (const y of [65, 50, 75, 120, 145]) assert.equal(input.moveBoost(2, y), 0);
+  assert.equal(input.boostDirection, 1);
+  assert.equal(input.read(true).boost, true);
+  assert.equal(input.release(2), true);
+  assert.equal(input.boostDirection, 0);
+  assert.equal(input.read(true).boost, false);
+});
+
+test('returning to the press center rearms the next up or down altitude step', () => {
+  const input = createTouchInput(); input.pressBoost(2, 200);
+  assert.equal(input.moveBoost(2, 160), 1);
+  assert.equal(input.moveBoost(2, 189), 0);
+  assert.equal(input.boostDirection, 1);
+  assert.equal(input.moveBoost(2, 190), 0);
+  assert.equal(input.boostDirection, 0);
+  assert.equal(input.moveBoost(2, 160), 1);
+  input.moveBoost(2, 200);
+  assert.equal(input.moveBoost(2, 228), -1);
+  assert.equal(input.moveBoost(2, 260), 0);
+  assert.equal(input.read(true).boost, true);
+});
+
+test('boost swipe and steering fingers remain independent, cancellation clears the gesture', () => {
+  const input = createTouchInput(); input.pressStick(1); input.pressBoost(2, 100);
+  input.moveStick(1, -40, 40, 40);
+  const steering = input.read(true);
+  assert.equal(input.moveBoost(1, 50), 0);
+  assert.equal(input.moveBoost(2, 60), 1);
+  assert.deepEqual(input.read(true), steering);
+  assert.equal(steering.brake, true); assert.ok(steering.steer < -.6);
+  assert.equal(input.release(1), false);
+  assert.equal(input.boostDirection, 1);
+  input.reset();
+  assert.equal(input.moveBoost(2, 100), 0);
+  assert.equal(input.boostDirection, 0);
+  input.pressBoost(3, 500);
+  assert.equal(input.moveBoost(3, 530), -1);
+});

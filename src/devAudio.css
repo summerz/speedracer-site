@@ -1,0 +1,105 @@
+.audio-lab { min-height: 100dvh; background: #080f16; }
+.audio-lab-heading, .audio-lab-views, .audio-lab-workspace, .audio-lab-message, .audio-lab-footer { margin-inline: max(4.5%, env(safe-area-inset-left)); }
+.audio-lab-heading { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding-block: 28px 24px; }
+.audio-lab-heading h1 { margin: 6px 0; font: 600 40px/1.1 'Barlow Condensed', sans-serif; }
+.audio-lab-heading p { margin: 8px 0; font-size: 13px; color: #97aebb; }
+.audio-lab-heading .eyebrow, .audio-lab-editor .eyebrow { color: var(--accent); font-size: 10px; letter-spacing: 1.5px; }
+.audio-lab-workspace { display: grid; grid-template-columns: minmax(240px, .9fr) minmax(0, 1.3fr); align-items: start; border-block: 1px solid #213340; }
+.audio-lab-library { min-width: 0; padding: 24px 24px 24px 0; }
+.audio-lab-editor { position: sticky; top: 16px; min-width: 0; padding: 24px 0 28px 32px; border-left: 1px solid #213340; }
+.audio-lab-editor h2 { margin: 12px 0; font-size: 24px; font-weight: 600; }
+.audio-lab-id { color: #7893a2; font-size: 11px; overflow-wrap: anywhere; }
+.audio-lab-tabs { display: flex; padding: 4px; gap: 4px; border: 1px solid #58717d45; border-radius: 4px; background: #07131f; }
+.audio-lab-tabs button { flex: 1; }
+.audio-lab-tabs span { margin-left: 6px; color: #7893a2; }
+.audio-lab button:not(.menu-header-button):not(.primary-action), .audio-lab-upload { appearance: none; min-height: 40px; border: 1px solid #58717d70; border-radius: 3px; background: #0b1c28; color: #c9dadf; padding: 10px 16px; font: 500 12px/1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; transition: background 160ms, border-color 160ms; }
+.audio-lab button:hover:not(:disabled), .audio-lab-upload:hover { background: #17303c; border-color: #7bb7be; }
+.audio-lab button[aria-pressed=true] { color: #d6fffa; border-color: #56dacf80; background: #56dacf13; }
+.audio-lab-search { display: grid; gap: 8px; margin: 20px 0 16px; color: #a6bfcb; font-size: 12px; }
+.audio-lab-search input { width: 100%; min-height: 40px; padding: 10px 12px; border: 1px solid #58717d70; border-radius: 3px; background: #07131f; color: #d7e9ec; font: inherit; }
+.audio-lab-search input:focus-visible, .audio-lab input:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.audio-lab .audio-lab-row { display: flex; align-items: center; justify-content: space-between; width: 100%; gap: 12px; padding: 14px 12px; border-radius: 0; border-width: 0 0 1px; background: transparent; text-align: left; }
+.audio-lab-row > span:first-child { display: grid; gap: 6px; min-width: 0; }
+.audio-lab-row strong { color: #d7e9ec; font-size: 14px; font-weight: 500; }
+.audio-lab-row small { color: #7893a2; font: 10px 'IBM Plex Mono', monospace; overflow-wrap: anywhere; }
+.audio-lab-badge { color: #8ca5b5; font-size: 10px; white-space: nowrap; }
+.audio-lab-badge.is-changed { color: #9ce5db; }
+.audio-lab-row.is-playing strong::before { content: ''; display: inline-block; width: 5px; height: 12px; margin-right: 8px; background: var(--accent); }
+.audio-lab-transport { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 28px; }
+.audio-lab .primary-action { border-radius: 3px; min-height: 40px; padding: 10px 20px; justify-content: center; font-size: 12px; }
+.audio-lab-play-state { min-height: 18px; color: #93b5c0; font-size: 11px; }
+.audio-lab-seek, .audio-lab-level input { width: 100%; accent-color: var(--accent); }
+.audio-lab-loop { display: flex; gap: 8px; align-items: center; margin: 12px 0 24px; color: #97aebb; font-size: 12px; }
+.audio-lab-loop input { accent-color: var(--accent); }
+.audio-lab-level { display: grid; grid-template-columns: 1fr auto; gap: 12px; padding-block: 12px 24px; font-size: 12px; color: #a6bfcb; }
+.audio-lab-level input { grid-column: 1 / -1; }
+.audio-lab-level output { color: #bce6eb; font-family: 'IBM Plex Mono', monospace; }
+.audio-lab-replacement { border-top: 1px solid #213340; padding-top: 24px; }
+.audio-lab-replacement h3 { margin: 0 0 12px; font-size: 14px; font-weight: 500; }
+.audio-lab-replacement > p { font-size: 12px; color: #a6bfcb; overflow-wrap: anywhere; }
+.audio-lab-upload { display: inline-flex; position: relative; align-items: center; cursor: pointer; }
+.audio-lab-upload input { position: absolute; inset: 0; width: 100%; opacity: 0; cursor: pointer; }
+.audio-lab-upload:focus-within { outline: 2px solid var(--accent); outline-offset: 3px; }
+.audio-lab-hint, .audio-lab-details p, .audio-lab-footer p, .audio-lab-empty { color: #7893a2; font-size: 12px; line-height: 1.75; }
+.audio-lab-details { margin-top: 24px; border-top: 1px solid #213340; padding-top: 16px; font-size: 12px; color: #9ebbc8; }
+.audio-lab-details summary { cursor: pointer; padding-block: 8px; }
+.audio-lab-details code { display: block; padding: 12px; background: #07131f; color: #bce6eb; overflow-wrap: anywhere; }
+.audio-lab-message { min-height: 24px; margin-block: 16px; color: #bce6eb; font-size: 12px; }
+.audio-lab-footer { padding-block: 4px max(32px, env(safe-area-inset-bottom)); }
+.audio-lab-footer p { margin: 4px 0; }
+.audio-lab-footer button { margin-top: 16px; }
+.audio-lab-confirm { max-width: min(480px, calc(100% - 32px)); padding: 24px; border: 1px solid #58717d70; border-radius: 4px; background: #0b1721; color: #d7e9ec; }
+.audio-lab-confirm::backdrop { background: #02080dcc; }
+.audio-lab-confirm h2 { font-size: 18px; }
+.audio-lab-confirm p { font-size: 13px; line-height: 1.75; color: #97aebb; }
+.audio-lab-confirm > div { display: flex; justify-content: flex-end; gap: 8px; margin-top: 24px; }
+@media (max-width: 760px) {
+  .audio-lab-heading { align-items: flex-start; flex-direction: column; gap: 12px; padding-block: 24px; }
+  .audio-lab-heading h1 { font-size: 32px; }
+  .audio-lab-workspace { grid-template-columns: 1fr; }
+  .audio-lab-library { padding: 20px 0; }
+  .audio-lab-list { max-height: 280px; overflow-y: auto; }
+  .audio-lab-editor { position: static; padding: 24px 0; border-left: 0; border-top: 1px solid #213340; }
+  .audio-lab .menu-header-tabs { flex-wrap: wrap; }
+}
+.audio-lab-actions, .audio-lab-views, .audio-lab-add { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.audio-lab-views { padding-bottom: 16px; border-bottom: 1px solid #213340; }
+.audio-lab-view-buttons { display: flex; gap: 8px; flex-wrap: wrap; align-self: flex-start; }
+.audio-lab-project-guide { flex: 0 1 640px; min-width: 0; margin-left: auto; color: #7893a2; font-size: 12px; line-height: 1.6; }
+.audio-lab-project-guide p { margin: 0; }
+.audio-lab-project-guide.has-changes [data-project-note] { color: #a4dcd7; }
+.audio-lab-project-guide code { display: block; margin-block: 6px; padding: 8px 10px; border: 1px solid #213340; border-radius: 3px; background: #07131f; color: #bce6eb; font-size: 12px; overflow-wrap: anywhere; user-select: text; }
+.audio-lab-project-guide small { display: block; font-size: 11px; }
+@media (max-width: 760px) {
+  .audio-lab-project-guide { flex-basis: 100%; margin-left: 0; }
+}
+.audio-lab-add { margin-top: 20px; }
+.audio-lab-add > label:not(.audio-lab-upload) { display: flex; align-items: center; gap: 8px; color: #97aebb; font-size: 12px; }
+.audio-lab select { appearance: auto; min-width: 0; max-width: 100%; min-height: 40px; border: 1px solid #58717d70; border-radius: 3px; background: #07131f; color: #d7e9ec; padding: 8px; font-size: 12px; }
+.audio-lab-select { display: grid; gap: 8px; margin-bottom: 16px; color: #a6bfcb; font-size: 12px; }
+.audio-lab-editor h2 { overflow-wrap: anywhere; }
+.audio-lab-heading > div { min-width: 0; }
+.audio-lab-upload { overflow: hidden; }
+.audio-lab-editor, .audio-lab-library { min-width: 0; }
+.audio-lab select:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+.audio-lab-usage { color: #a4dcd7; font-size: 12px; line-height: 1.6; }
+.audio-lab-title { color: #c9dadf; font-size: 14px; }
+.audio-lab-current { padding: 16px; margin-bottom: 16px; border-left: 2px solid #56dacf80; background: #07131f; }
+.audio-lab-current p { margin: 0 0 8px; font-size: 12px; color: #a6bfcb; overflow-wrap: anywhere; }
+.audio-lab-current strong { color: #d7e9ec; }
+.audio-lab-playlist { margin-block: 24px; padding-top: 20px; border-top: 1px solid #213340; }
+.audio-lab-row strong { overflow-wrap: anywhere; }
+.audio-lab-list-tools { margin-bottom: 12px; text-align: right; }
+.audio-lab-candidates { max-height: 320px; overflow-y: auto; overscroll-behavior: contain; border: 1px solid #213340; margin-bottom: 12px; }
+.audio-lab-candidates .audio-lab-row:last-child { border-bottom: 0; }
+.audio-lab-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+.audio-lab-file-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-block: 12px; }
+.audio-lab button.audio-lab-delete:not(.menu-header-button):not(.primary-action) { color: #f5aaa7; border-color: #bc676750; background: #bc67670c; }
+.audio-lab button.audio-lab-delete:not(.menu-header-button):not(.primary-action):hover { border-color: #e28e87; background: #bc67671c; }
+.audio-lab-rename:not([hidden]) { display: grid; gap: 8px; padding: 16px; margin-block: 16px; border: 1px solid #213340; background: #07131f; }
+.audio-lab-rename label { color: #a6bfcb; font-size: 12px; }
+.audio-lab-rename input { width: 100%; min-width: 0; min-height: 40px; padding: 10px 12px; border: 1px solid #58717d70; border-radius: 3px; background: #0b1c28; color: #d7e9ec; font: 12px 'IBM Plex Mono', monospace; }
+.audio-lab-rename p, .audio-lab-rename .audio-lab-file-actions { margin: 0; }
+.audio-lab-rename .audio-lab-rename-error { color: #f5aaa7; font-size: 12px; }

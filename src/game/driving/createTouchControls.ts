@@ -19,12 +19,14 @@ export function createTouchControls(container: HTMLElement, actions: {
     <div class="touch-flight" aria-label="고도와 부스트">
       <button type="button" class="touch-rise" data-lift="1" aria-label="고도 한 단계 상승">↑</button>
       <button type="button" class="touch-descend" data-lift="-1" aria-label="고도 한 단계 하강">↓</button>
-      <button type="button" class="touch-boost" aria-label="부스트: 길게 누르기"><span>BOOST</span><small>HOLD</small></button>
+      <button type="button" class="touch-boost" aria-label="부스트: 누른 채 위아래로 밀어 고도 한 단계 변경, 가운데로 돌아와 다시 밀기"><span>BOOST</span><small>누른 채 ↕</small></button>
     </div>`;
   container.append(element);
   const joystick = element.querySelector<HTMLButtonElement>('.touch-joystick')!;
   const knob = element.querySelector<HTMLElement>('.stick-knob')!;
   const boost = element.querySelector<HTMLButtonElement>('.touch-boost')!;
+  const rise = element.querySelector<HTMLButtonElement>('.touch-rise')!;
+  const descend = element.querySelector<HTMLButtonElement>('.touch-descend')!;
   const buttons = [...element.querySelectorAll<HTMLButtonElement>('button')];
   const input = createTouchInput();
   const captures = new Map<number, HTMLButtonElement>();
@@ -54,6 +56,8 @@ export function createTouchControls(container: HTMLElement, actions: {
     joystick.classList.toggle('is-held', input.stickPointer !== undefined);
     joystick.classList.toggle('is-braking', brake);
     boost.classList.toggle('is-held', input.read(true).boost);
+    rise.classList.toggle('is-swipe', input.boostDirection === 1);
+    descend.classList.toggle('is-swipe', input.boostDirection === -1);
   };
   const release = (id: number) => {
     const button = captures.get(id);
@@ -70,11 +74,16 @@ export function createTouchControls(container: HTMLElement, actions: {
     if (boosting) actions.releaseBoost();
   };
   const move = (event: PointerEvent) => {
-    if (event.pointerId !== input.stickPointer) return;
+    if (!captures.has(event.pointerId)) return;
     if (event.buttons === 0) { release(event.pointerId); return; }
-    const rect = joystick.getBoundingClientRect();
-    input.moveStick(event.pointerId, event.clientX - rect.left - rect.width / 2,
-      event.clientY - rect.top - rect.height / 2, rect.width * .3);
+    if (event.pointerId === input.stickPointer) {
+      const rect = joystick.getBoundingClientRect();
+      input.moveStick(event.pointerId, event.clientX - rect.left - rect.width / 2,
+        event.clientY - rect.top - rect.height / 2, rect.width * .3);
+    } else {
+      const direction = input.moveBoost(event.pointerId, event.clientY);
+      if (direction) actions.lift(direction);
+    }
     paint();
   };
   for (const button of buttons) {
@@ -83,7 +92,7 @@ export function createTouchControls(container: HTMLElement, actions: {
       event.preventDefault(); actions.interact();
       if (button.dataset.lift) { actions.lift(Number(button.dataset.lift)); return; }
       if (button === joystick && !input.pressStick(event.pointerId)) return;
-      if (button === boost) input.pressBoost(event.pointerId);
+      if (button === boost) input.pressBoost(event.pointerId, event.clientY);
       captures.set(event.pointerId, button);
       button.setPointerCapture(event.pointerId);
       if (button === joystick) move(event); else paint();

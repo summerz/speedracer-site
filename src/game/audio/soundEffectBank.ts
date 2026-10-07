@@ -5,6 +5,10 @@ export type FileSoundCue = 'impact' | 'electric-impact' | 'off-track'
 export interface SoundEffectFile { url: string; level: number }
 export type RaceEffectFiles = Partial<Record<FileSoundCue, SoundEffectFile>>;
 
+let resolveFile: ((cue: FileSoundCue, file: SoundEffectFile) => SoundEffectFile) | undefined;
+/** Optional development transport; normal builds keep content-hashed assets. */
+export function setSoundEffectResolver(resolver: typeof resolveFile) { resolveFile = resolver; }
+
 // Share encoded bytes across race restarts. Vite gives each changed file a new URL.
 const encoded = new Map<string, Promise<ArrayBuffer>>();
 const load = (url: string) => {
@@ -22,6 +26,8 @@ const load = (url: string) => {
 
 /** Fetch before the gesture; decode after activation. Never queue delayed playback. */
 export function createSoundEffectBank(files: RaceEffectFiles) {
+  files = Object.fromEntries(Object.entries(files).map(([cue, file]) =>
+    [cue, resolveFile?.(cue as FileSoundCue, file) ?? file]));
   const buffers = new Map<FileSoundCue, AudioBuffer>();
   const pending = new Map<FileSoundCue, Promise<void>>();
   let disposed = false;

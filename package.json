@@ -1,6 +1,6 @@
 {
   "name": "speedracer",
-  "version": "0.16.8",
+  "version": "0.16.9",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,7 +10,8 @@
     "preview": "vite preview --host 127.0.0.1 --port 5274 --strictPort",
     "test": "tsc -p tsconfig.test.json && node --test tests/*.test.mjs",
     "docs:world": "tsc -p tsconfig.test.json && node scripts/update-world-docs.mjs",
-    "docs:world:check": "tsc -p tsconfig.test.json && node scripts/update-world-docs.mjs --check"
+    "docs:world:check": "tsc -p tsconfig.test.json && node scripts/update-world-docs.mjs --check",
+    "audio:import": "node scripts/import-dev-audio.mjs"
   },
   "engines": {
     "node": "^20.19.0 || >=22.12.0"
