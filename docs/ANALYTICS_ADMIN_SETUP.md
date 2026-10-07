@@ -20,15 +20,15 @@
 - 웹 스트림: `Speedracer web`, ID `16058182051`, 주소 `https://speedracer.summerz.net`.
 - 공개 측정 ID: `G-86SQDL5ZDS`. `summerz/speedracer-site`의 Actions 변수 `GA_MEASUREMENT_ID`에 등록하고 조회로 확인했다.
 - 맞춤 측정기준 10개·측정항목 5개를 등록하고 MCP 속성 조회로 확인했다. 이 스트림의 향상된 측정과 이 속성의 Google Signals를 껐다.
-- Data API 실시간 보고서 호출에 성공했다. 이벤트별 횟수와 전체 활성 사용자 수는 API 호환성을 위해 별도 조회한다. 아직 실제 게임 이벤트가 없어 결과는 비어 있다. 관리 도구 자동 테스트 9개도 통과했다.
-- 분석 코드의 배포와 실제 게임 이벤트 수신 확인은 아직 남아 있다. GitHub 변수 등록만으로 이미 배포된 게임이 변경되지는 않는다.
+- Data API 실시간 보고서 호출에 성공했다. 이벤트별 횟수와 전체 활성 사용자 수는 API 호환성을 위해 별도 조회한다. v0.16.6의 실제 `page_view`·`level_start`·`level_end`·`race_quit`와 활성 사용자 1명이 보고서에 집계되는 것을 확인했다. 관리 도구 자동 테스트 9개도 통과했다.
+- v0.16.6 분석 코드 배포를 완료했다. 실제 서비스에서 선택 동의 후 화면 조회·경기 시작·완주·중도 종료 요청과 Google 수집 서버의 HTTP 204 응답을 확인했다. 동의 전·거절 후 전송 없음과 철회 후 전송 중단·GA 쿠키 삭제도 검증했다. 일반 Chrome 시험 세션의 완주·중도 종료를 포함해 보고서 집계까지 확인했다. DebugView·iPhone 설치 앱 확인은 별도 검증 항목이다.
 
 ### Google Cloud 준비 현황 (2026-10-07)
 
 - 전용 프로젝트 `Speedracer Analytics` (`speedracer-analytics`)를 생성했다. 기존 프로젝트의 설정은 변경하지 않았다.
 - OAuth 앱: `Speedracer Analytics Admin`, 외부 사용자·테스트 상태, 지원·연락 이메일 `summerz@gmail.com`. 사용자가 User Data Policy에 직접 동의한 뒤 생성 완료를 확인했다.
 - 테스트 사용자 `summerz@gmail.com`과 `analytics.readonly`, `analytics.edit` 범위를 등록·저장했다.
-- Admin API와 Data API 모두 사용 설정 완료를 확인했다. Admin API의 실제 계정 목록 조회에 성공했으며, Data API 실시간 보고서는 속성 연결 이후 검증한다.
+- Admin API와 Data API 모두 사용 설정 완료를 확인했다. Admin API의 실제 계정 목록 조회에 성공했으며, Data API 실시간 보고서의 MCP 호출에도 성공했다.
 - 데스크톱 OAuth 클라이언트 `Speedracer Analytics MCP`를 생성하고 **Use this client for an AI-powered agent**로 지정했다. JSON은 `~/.config/speedracer-analytics/oauth-client.json`에 권한 `0600`으로 보관한다. Git과 배포에는 포함하지 않는다.
 - 사용자가 테스트 앱 안내와 Analytics 권한 승인을 직접 완료했다. 인증 토큰은 `~/.config/speedracer-analytics/credentials.json`에 권한 `0600`, 상위 디렉터리는 `0700`으로 저장했다. 비밀값은 출력하지 않았다.
 - MCP 계정 목록 조회 후 사용자가 기존 개인 계정의 이름 변경과 재사용을 선택했다. 해당 계정 아래 Speedracer 전용 속성을 생성했으며 다른 사이트 설정은 변경하지 않았다.

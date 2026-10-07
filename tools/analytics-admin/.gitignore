@@ -1,0 +1,5 @@
+.venv/
+__pycache__/
+# OAuth files must stay outside this directory; ignore accidental local copies.
+*credentials*.json
+client_secret*.json
