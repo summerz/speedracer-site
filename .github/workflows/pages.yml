@@ -18,6 +18,10 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci
+      - name: Install audio validation tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y ffmpeg
       - run: npm test
       - run: npm run docs:world:check
       - run: npm run build
