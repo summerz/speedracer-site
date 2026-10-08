@@ -5,6 +5,7 @@ import type { Hangar } from './game/createHangar';
 import type { ThrustMode } from './game/drone/createThrusterEffect';
 import type { ProgressStore } from './game/progression/progressStore';
 import { upgradedConfiguration } from './game/progression/catalog';
+import { focusPrimary, usingKeys } from './platform/menuNavigation';
 import { menuHeader } from './menuHeader';
 import { craftCards } from './craftCards';
 import { TRACK_CATALOG, DISTRICTS, type TrackDefinition } from './game/track/trackCatalog';
@@ -18,12 +19,12 @@ const MODE_LABEL: Record<RaceMode, string> = { 'time-attack': '타임어택', co
 /** Resume card: the next track to attempt in the last-played mode, deep-linked into the campaign detail. */
 function continueCard(campaign: CampaignProgress, mode: RaceMode): string {
   const firstRun = TRACK_CATALOG.every(t => (['time-attack', 'competition'] as const).every(m => campaignStatus(campaign, m, t) !== 'cleared'));
-  if (firstRun) return `<section class="home-continue" aria-label="시작하기"><div class="continue-copy"><p class="eyebrow">시작하기</p><strong class="continue-track">CITY CIRCUITS 캠페인</strong><span class="continue-note">네온 주거지의 첫 코스부터 시작합니다</span></div><a class="primary-action continue-action" id="continue-campaign" href="#campaign">캠페인 시작 <span aria-hidden="true">↗</span></a></section>`;
+  if (firstRun) return `<section class="home-continue" aria-label="시작하기"><div class="continue-copy"><p class="eyebrow">시작하기</p><strong class="continue-track">CITY CIRCUITS 캠페인</strong><span class="continue-note">네온 주거지의 첫 코스부터 시작합니다</span></div><a class="primary-action continue-action" id="continue-campaign" data-autofocus href="#campaign">캠페인 시작 <span aria-hidden="true">↗</span></a></section>`;
   const next = nextCampaignTrack(campaign, mode);
-  if (campaignStatus(campaign, mode, next) === 'cleared') return `<section class="home-continue" data-done="true" aria-label="이어하기"><div class="continue-copy"><p class="eyebrow">이어하기 · ${MODE_LABEL[mode]}</p><strong class="continue-track">모든 코스 통과</strong></div><a class="primary-action continue-action" id="continue-campaign" href="#campaign">캠페인 <span aria-hidden="true">↗</span></a></section>`;
+  if (campaignStatus(campaign, mode, next) === 'cleared') return `<section class="home-continue" data-done="true" aria-label="이어하기"><div class="continue-copy"><p class="eyebrow">이어하기 · ${MODE_LABEL[mode]}</p><strong class="continue-track">모든 코스 통과</strong></div><a class="primary-action continue-action" id="continue-campaign" data-autofocus href="#campaign">캠페인 <span aria-hidden="true">↗</span></a></section>`;
   const stars = Math.max(...CHALLENGE_IDS.map(id => campaignStars(campaign, mode, next, id)));
   const district = DISTRICTS[next.district];
-  return `<section class="home-continue" style="--district-color:${district.color}" aria-label="이어하기"><div class="continue-copy"><p class="eyebrow">이어하기 · ${MODE_LABEL[mode]}</p><p class="continue-district">${district.name}</p><strong class="continue-track"><span class="mono">${String(next.order).padStart(2, '0')}</span> ${next.name}</strong><span class="course-stars" aria-label="최고 별 ${stars}개 / 3개">${[1, 2, 3].map(n => `<span aria-hidden="true" data-earned="${n <= stars}">★</span>`).join('')}</span></div><a class="primary-action continue-action" id="continue-campaign" href="#campaign?track=${next.id}&mode=${mode}&challenge=${campaign.last.challenge ?? 'normal'}">이어서 도전 <span aria-hidden="true">↗</span></a></section>`;
+  return `<section class="home-continue" style="--district-color:${district.color}" aria-label="이어하기"><div class="continue-copy"><p class="eyebrow">이어하기 · ${MODE_LABEL[mode]}</p><p class="continue-district">${district.name}</p><strong class="continue-track"><span class="mono">${String(next.order).padStart(2, '0')}</span> ${next.name}</strong><span class="course-stars" aria-label="최고 별 ${stars}개 / 3개">${[1, 2, 3].map(n => `<span aria-hidden="true" data-earned="${n <= stars}">★</span>`).join('')}</span></div><a class="primary-action continue-action" id="continue-campaign" data-autofocus href="#campaign?track=${next.id}&mode=${mode}&challenge=${campaign.last.challenge ?? 'normal'}">이어서 도전 <span aria-hidden="true">↗</span></a></section>`;
 }
 
 export function mountHangar(root: HTMLDivElement, selected: DroneCatalogEntry, onSelect: (entry: DroneCatalogEntry) => void, onDrive: () => void, store: ProgressStore): () => void {
@@ -129,7 +130,7 @@ export function mountHangar(root: HTMLDivElement, selected: DroneCatalogEntry, o
         const profile = await store.command({ kind: 'equip', id: picker.dataset.hangarCraft! });
         const entry = DRONE_CATALOG.find(craft => craft.configuration.id === profile.equipped)!;
         selected = { ...entry, configuration: upgradedConfiguration(profile.equipped, profile.upgrades[profile.equipped]) };
-        if (!eventController.signal.aborted) { hangar!.setDrone(selected.configuration); displayCraft(); onSelect(selected); }
+        if (!eventController.signal.aborted) { hangar!.setDrone(selected.configuration); displayCraft(); onSelect(selected); if (usingKeys()) root.querySelector<HTMLElement>('#continue-campaign')?.focus({ preventScroll: true }); }
       } catch (error) { if (!eventController.signal.aborted) root.querySelector('#hangar-progress-warning')!.textContent = String(error instanceof Error ? error.message : error); }
       finally { selecting = false; if (!eventController.signal.aborted && ready) controls.forEach(button => { button.disabled = false; }); }
     }, listen);
@@ -159,7 +160,10 @@ export function mountHangar(root: HTMLDivElement, selected: DroneCatalogEntry, o
     showError();
   }
 
+  const focusFrame = requestAnimationFrame(() => focusPrimary(root));
+
   return () => {
+    cancelAnimationFrame(focusFrame);
     eventController.abort();
     hangar?.dispose();
     root.replaceChildren();

@@ -1,5 +1,6 @@
 import { RACE_CHALLENGES, challengeLapLimit, raceChallenge, type RaceChallengeId } from './game/track/raceChallenge';
 import { RACE_PARTICIPANT_COUNT } from './game/driving/aiRoster';
+import { focusPrimary, usingKeys } from './platform/menuNavigation';
 import { menuHeader } from './menuHeader';
 import { DRONE_CATALOG } from './game/drone/droneCatalog';
 import { TRACK_CATALOG, DISTRICTS, campaignRankLimit, type DistrictId, type TrackDefinition } from './game/track/trackCatalog';
@@ -60,7 +61,7 @@ export function mountCampaign(root: HTMLDivElement, store: ProgressStore, contex
           <div class="campaign-title"><p class="eyebrow" id="course-district"></p><div class="campaign-title-row"><h2 id="course-name"></h2><div id="course-stars-summary" class="course-stars-summary"></div></div></div>
           <div class="campaign-difficulty"><span>난이도</span><div class="course-challenges" role="group" aria-label="출전 난이도">${(['easy', 'normal', 'hard'] as const).map(id => `<button type="button" data-challenge="${id}"><span>${RACE_CHALLENGES[id].label}</span><span class="diff-stars"></span></button>`).join('')}</div></div></div>
         <div class="detail-info"><div class="detail-scroll"><div id="course-metrics" class="course-specs"></div><section id="course-condition" class="course-condition" aria-label="통과 조건과 통과 기록 비교"></section><section id="course-ladder" class="course-ladder" aria-label="별 등급 기준"></section><section id="course-routes" class="course-routes" aria-label="갈림길별 경험" hidden></section><div id="course-tags" class="course-tags"></div><section id="course-record" class="course-record" aria-label="최단 완주 기록"></section></div>
-          <footer class="campaign-detail-actions">${loadoutMarkup()}<div class="action-main"><p id="course-access" role="status" tabindex="-1"></p><button id="course-start" class="primary-action" type="button">도전하기 ↗</button></div><p id="campaign-warning" class="progress-warning" role="status"></p></footer></div>
+          <footer class="campaign-detail-actions">${loadoutMarkup()}<div class="action-main"><p id="course-access" role="status" tabindex="-1"></p><button id="course-start" class="primary-action" type="button" data-autofocus>도전하기 ↗</button></div><p id="campaign-warning" class="progress-warning" role="status"></p></footer></div>
       </section>
     </div></main>`;
   const get = (id: string) => root.querySelector<HTMLElement>(`#${id}`)!;
@@ -119,7 +120,7 @@ export function mountCampaign(root: HTMLDivElement, store: ProgressStore, contex
     const nextDistrict = finished ? undefined : next.district;
     const banner = finished
       ? `<div class="continue-banner" data-done="true"><span class="eyebrow">COMPLETE</span><strong>모든 코스 통과 · <span class="stat-stars">★ ${starTotal}/${starMax}</span></strong></div>`
-      : `<div class="continue-banner" style="--district-color:${DISTRICTS[next.district].color}"><span class="continue-copy"><span class="eyebrow">${firstRun ? '첫 코스' : '이어하기'}</span><strong><em>${DISTRICTS[next.district].name}</em> · <span class="mono">${number2(next.order)}</span> ${next.name}</strong></span><button id="campaign-continue" type="button" class="continue-button">${firstRun ? '첫 도전' : '이어서 도전'} ↗</button></div>`;
+      : `<div class="continue-banner" style="--district-color:${DISTRICTS[next.district].color}"><span class="continue-copy"><span class="eyebrow">${firstRun ? '첫 코스' : '이어하기'}</span><strong><em>${DISTRICTS[next.district].name}</em> · <span class="mono">${number2(next.order)}</span> ${next.name}</strong></span><button id="campaign-continue" type="button" class="continue-button" data-autofocus>${firstRun ? '첫 도전' : '이어서 도전'} ↗</button></div>`;
     get('districts-summary').innerHTML = `${banner}<div class="overall"><p class="mono"><span>통과 <b>${cleared}</b>/${TRACK_CATALOG.length}</span><span class="stat-stars">★ <b>${starTotal}</b>/${starMax}</span></p><span class="meter" aria-hidden="true"><i style="width:${starTotal / starMax * 100}%"></i></span></div>`;
     get('district-list').innerHTML = (Object.entries(DISTRICTS) as [DistrictId, typeof DISTRICTS[DistrictId]][]).map(([id, entry], index) => {
       const tracks = districtTracks(id);
@@ -134,6 +135,8 @@ export function mountCampaign(root: HTMLDivElement, store: ProgressStore, contex
         <span class="district-foot">${locked ? '<span class="district-lock">🔒 이전 구역을 통과하면 열립니다</span>' : ''}<span class="district-dots" aria-hidden="true">${statuses.map(s => `<i data-status="${s}"></i>`).join('')}</span><span class="district-tracklist" aria-hidden="true">${tracks.map((t, i) => { const st = statuses[i], n = bestStars(campaign, t); return `<span class="dt-row" data-status="${st}" data-next="${!finished && t.id === next.id}"><span class="mono">${number2(t.order)}</span><span class="dt-name">${t.name}</span><span class="dt-mark">${st === 'locked' ? '잠김' : st === 'available' ? '도전' : `<span class="dt-stars">${'★'.repeat(n)}<s>${'★'.repeat(3 - n)}</s></span>`}</span></span>`; }).join('')}</span>
         <span class="district-stats mono"><span>통과 ${done}/${tracks.length}</span><span class="stat-stars">★ ${stars}/${tracks.length * 3}</span></span></span></button>`;
     }).join('');
+    if (!finished) return;
+    get('district-list').querySelector('[data-district]')?.setAttribute('data-autofocus', '');
   };
 
   const trackRecord = (campaign: CampaignProgress, t: TrackDefinition) => {
@@ -163,6 +166,7 @@ export function mountCampaign(root: HTMLDivElement, store: ProgressStore, contex
         ${status === 'locked' ? '<span class="track-locked">이전 코스 통과 필요</span>' : `<span class="course-meta">${pips(t.rating)}<span>${t.altitudeLevels}단 고도</span>${mode === 'competition' ? `<span>${campaignRankLimit(t)}위 이내</span>` : ''}</span><span class="track-foot">${mode === 'competition' ? `<span class="track-rank-l">${campaignRankLimit(t)}위 이내</span>` : ''}${starsMarkup(bestStars(campaign, t))}${record ? `<span class="course-card-record">${record}</span>` : ''}</span>`}</span></button>`;
     }).join('');
     // Thumbnails are snapshots of the detail preview's own scene; one track per idle tick.
+    (list.querySelector(`[data-track="${nextCampaignTrack(campaign, mode).id}"]:not([data-status=locked])`) ?? list.querySelector('.track-card'))?.setAttribute('data-autofocus', '');
     const token = ++mapToken, km = (n: number) => (n / 1000).toFixed(1);
     const probe = list.querySelector<HTMLElement>('[data-map]');
     const w = Math.max(1, Math.round(probe?.clientWidth ?? 0)), h = Math.max(1, Math.round(probe?.clientHeight ?? 0));
@@ -244,11 +248,8 @@ export function mountCampaign(root: HTMLDivElement, store: ProgressStore, contex
   };
   const focusEntry = () => {
     if (portraitPhone()) window.scrollTo({ top: 0, behavior: 'instant' });
-    const campaign = store.snapshot().campaign;
-    const target = view === 'districts' ? root.querySelector<HTMLElement>('#campaign-continue') ?? root.querySelector<HTMLElement>('[data-district]')
-      : view === 'tracks' ? root.querySelector<HTMLElement>('.track-card:not([data-status=locked])') ?? get('campaign-back')
-      : campaignStatus(campaign, mode, selected) === 'locked' ? get('campaign-back') : get('course-start');
-    target?.focus({ preventScroll: true });
+    if (focusPrimary(root, true)) return;
+    (view === 'tracks' ? root.querySelector<HTMLElement>('.track-card:not([data-status=locked])') ?? get('campaign-back') : view === 'detail' ? get('campaign-back') : undefined)?.focus({ preventScroll: true });
   };
   const setView = (next: Snapshot, focus = true) => {
     view = next.view; district = next.district; selected = trackById(next.trackId) ?? selected;
@@ -302,7 +303,7 @@ export function mountCampaign(root: HTMLDivElement, store: ProgressStore, contex
     mode = button.dataset.mode as RaceMode;
     if (view === 'detail' && campaignStatus(store.snapshot().campaign, mode, selected) === 'locked') goBack(); else paint();
   }, listen);
-  for (const button of root.querySelectorAll<HTMLElement>('[data-challenge]')) button.addEventListener('click', () => { challenge = raceChallenge(button.dataset.challenge); paint(); }, listen);
+  for (const button of root.querySelectorAll<HTMLElement>('[data-challenge]')) button.addEventListener('click', () => { challenge = raceChallenge(button.dataset.challenge); paint(); if (usingKeys() && !(get('course-start') as HTMLButtonElement).disabled) get('course-start').focus({ preventScroll: true }); }, listen);
   window.addEventListener('speedracer:menu-back', event => {
     if (view === 'districts') return;
     event.preventDefault(); goBack();
@@ -314,6 +315,6 @@ export function mountCampaign(root: HTMLDivElement, store: ProgressStore, contex
   }, listen);
   get('shop-back').addEventListener('click', () => { location.hash = ''; }, listen);
   get('open-shop').addEventListener('click', () => { location.hash = 'shop'; }, listen);
-  const returnFrame = returning ? requestAnimationFrame(focusEntry) : 0;
+  const returnFrame = requestAnimationFrame(() => { if (returning) focusEntry(); else focusPrimary(root); });
   return () => { disposed = true; cancelAnimationFrame(returnFrame); events.abort(); unsubscribe(); preview?.dispose(); clearTimeout(mapTimer); mapToken++; };
 }

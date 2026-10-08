@@ -1,4 +1,5 @@
 import { createHangar } from './game/createHangar';
+import { focusPrimary } from './platform/menuNavigation';
 import { menuHeader } from './menuHeader';
 import { DRONE_CATALOG, droneStats } from './game/drone/droneCatalog';
 import { CRAFT_PRICES, craftResaleValue, STARTER_ID, emptyLevels, FOCUS_PRICE, RIVAL_ITEMS, INVENTORY_LIMIT, UPGRADES, UPGRADE_COSTS, upgradedConfiguration } from './game/progression/catalog';
@@ -87,7 +88,7 @@ export function mountShop(root: HTMLDivElement, store: ProgressStore, onBack: ()
         const button = owned ? `<div class="shop-action"><button type="button" class="primary-action" data-upgrade="${upgrade.id}" ${busy || level === 3 || cost > profile.balance ? 'disabled' : ''}>${level === 3 ? '최대 단계' : `${cost} P · 강화`}</button>${reason}</div>` : '';
         return `<article class="shop-upgrade ${owned ? '' : 'is-preview'}"><div class="upgrade-info"><h3>${upgrade.name} ${pips(owned ? level : 0)}<small>${owned ? level : 0}/3</small></h3><p>${upgrade.description}${upgrade.id === 'stabilizer' ? ' · 입력 해제 후 잔류 방향 90% 감소 시간' : ''}</p><div class="metrics">${rows}</div></div>${button}</article>`;
       }).join('')}`;
-      get('shop-products').innerHTML = `<div class="shop-detail"><div class="shop-title"><p class="eyebrow">${entry.role}</p><h2>${entry.name}</h2><p class="shop-desc">${entry.description}</p></div><div class="shop-action-zone">${isEquipped ? '<div class="shop-action shop-buy is-status"><strong class="equipped-status">✓ 장착 중</strong></div>' : `<div class="shop-action shop-buy"><div class="shop-buy-info"><span>${owned ? '보유' : '가격'}</span>${owned ? '' : `<strong>${price.toLocaleString()} P</strong>`}${owned ? '' : insufficient(price, profile.balance)}</div><button type="button" class="primary-action" data-action="${owned ? 'equip' : 'craft'}" ${busy || !owned && price > profile.balance ? 'disabled' : ''}>${owned ? '이 기체 장착' : `<span class="full">${price.toLocaleString()} P · 구매</span><span class="short">구매하기</span>`}</button></div>`}${sale}</div><nav class="shop-tabs shop-subtabs" aria-label="기체 정보"><button type="button" data-subtab="stats" aria-pressed="${sub === 'stats'}">성능</button><button type="button" data-subtab="upgrade" aria-pressed="${sub === 'upgrade'}">강화</button></nav><div class="shop-subview" style="--craft-color:${entry.lineColor}">${sub === 'stats' ? statsView : upgradeView}</div></div>`;
+      get('shop-products').innerHTML = `<div class="shop-detail"><div class="shop-title"><p class="eyebrow">${entry.role}</p><h2>${entry.name}</h2><p class="shop-desc">${entry.description}</p></div><div class="shop-action-zone">${isEquipped ? '<div class="shop-action shop-buy is-status"><strong class="equipped-status">✓ 장착 중</strong></div>' : `<div class="shop-action shop-buy"><div class="shop-buy-info"><span>${owned ? '보유' : '가격'}</span>${owned ? '' : `<strong>${price.toLocaleString()} P</strong>`}${owned ? '' : insufficient(price, profile.balance)}</div><button type="button" class="primary-action" data-autofocus data-action="${owned ? 'equip' : 'craft'}" ${busy || !owned && price > profile.balance ? 'disabled' : ''}>${owned ? '이 기체 장착' : `<span class="full">${price.toLocaleString()} P · 구매</span><span class="short">구매하기</span>`}</button></div>`}${sale}</div><nav class="shop-tabs shop-subtabs" aria-label="기체 정보"><button type="button" data-subtab="stats" aria-pressed="${sub === 'stats'}">성능</button><button type="button" data-subtab="upgrade" aria-pressed="${sub === 'upgrade'}">강화</button></nav><div class="shop-subview" style="--craft-color:${entry.lineColor}">${sub === 'stats' ? statsView : upgradeView}</div></div>`;
     } else {
       get('shop-products').innerHTML = `<div class="shop-detail"><p class="eyebrow">RACE ITEMS</p><h2>주행 아이템</h2><p class="shop-note">장착은 캠페인에서 트랙을 고른 뒤 출전 직전에 선택합니다 <a href="#campaign">캠페인으로 ↗</a></p><div class="shop-item-grid">${(() => {
         const card = (name: string, desc: string, stock: number, price: number, attrs: string, only: boolean) => `<article class="shop-upgrade shop-item"><div class="item-name"><h3>${name}</h3>${only ? '<span class="scope">경쟁 레이스 전용</span>' : ''}</div><p>${desc}</p><span class="stock">보유 ${stock} / ${INVENTORY_LIMIT}</span><div class="shop-action"><button type="button" class="primary-action" ${attrs} ${busy || stock >= INVENTORY_LIMIT || profile.balance < price ? 'disabled' : ''}>${price} P · 1개 구매</button>${stock >= INVENTORY_LIMIT ? '<small>최대 보유</small>' : insufficient(price, profile.balance)}</div></article>`;
@@ -95,7 +96,9 @@ export function mountShop(root: HTMLDivElement, store: ProgressStore, onBack: ()
           + RIVAL_ITEMS.map(item => card(item.name, item.description, profile.rivalInventory[item.id], item.price, `data-rival-buy="${item.id}"`, true)).join('');
       })()}</div><div class="shop-footnote"><p>합계 2개 장착 · 공통 재사용 대기 3초. 아이템 장착 경기는 보조 기록으로 분리하며 기본 보상은 80%, 기록 갱신 보너스는 없습니다. 사용하지 않은 수량은 남습니다.</p><p>타임어택에서는 상대 기체 대상 아이템이 출전에 포함되지 않습니다. 전파 교란은 앞쪽 180m 안에 대상이 없으면 소비하지 않습니다. V / 패드 LB로 사용 가능한 다음 아이템을 쓰거나 주행 버튼을 눌러 선택하세요.</p></div></div>`;
     }
+    markPrimary();
   };
+  const markPrimary = () => { if (!get('shop-products').querySelector('[data-autofocus]:not(:disabled)')) get('shop-picker-cards').querySelector('[aria-pressed=true]')?.setAttribute('data-autofocus', ''); };
   const purchase = async (command: ProgressCommand) => {
     if (busy) return; busy = true; render();
     try { await store.command(command); if (!disposed) get('shop-message').textContent = command.kind === 'craft' ? '구매했습니다. 장착 버튼으로 선택할 수 있습니다.' : command.kind === 'sell-craft' ? `${craftResaleValue(command.id).toLocaleString()} P를 돌려받았습니다.` : command.kind === 'equip' ? '기체를 장착했습니다.' : '저장했습니다.'; }
@@ -119,5 +122,6 @@ export function mountShop(root: HTMLDivElement, store: ProgressStore, onBack: ()
   get('shop-back').addEventListener('click', onBack, options);
   get('shop-preview-reset').addEventListener('click', () => hangar.setView('reset'), options);
   const unsubscribe = store.subscribe(() => { if (!disposed) render(); }); render();
-  return () => { disposed = true; unsubscribe(); controller.abort(); hangar.dispose(); root.replaceChildren(); };
+  const focusFrame = requestAnimationFrame(() => focusPrimary(root));
+  return () => { disposed = true; cancelAnimationFrame(focusFrame); unsubscribe(); controller.abort(); hangar.dispose(); root.replaceChildren(); };
 }

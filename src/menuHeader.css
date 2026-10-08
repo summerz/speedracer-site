@@ -29,7 +29,7 @@
   text-decoration: none;
   transition: background 160ms, border-color 160ms;
 }
-.menu-header button:hover:not(:disabled) { background: #17303c; border-color: #7bb7be; }
+.menu-header button:hover:not(:disabled):not([aria-current='page']) { background: #17303c; border-color: #7bb7be; }
 .menu-header .menu-header-button[aria-pressed='true'],
 .menu-header .menu-header-button[aria-current='page'],
 .menu-header .app-shell-tools .update-ready {

@@ -14,9 +14,9 @@ export function menuHeader(current: 'hangar' | 'shop' | 'campaign' | 'sound-lab'
     </div>
     <nav class="menu-navigation" aria-label="메인 메뉴">
       <div class="menu-header-tabs">
-        <button id="shop-back" class="menu-header-button" type="button" ${current === 'hangar' ? 'aria-current="page" disabled' : ''}>격납고</button>
+        <button id="shop-back" class="menu-header-button" type="button" ${current === 'hangar' ? 'aria-current="page"' : ''}>격납고</button>
         <a class="menu-header-button" href="#campaign" ${current === 'campaign' ? 'aria-current="page"' : ''}>캠페인</a>
-        <button id="open-shop" class="menu-header-button" type="button" ${current === 'shop' ? 'aria-current="page" disabled' : ''}>상점</button>
+        <button id="open-shop" class="menu-header-button" type="button" ${current === 'shop' ? 'aria-current="page"' : ''}>상점</button>
         ${import.meta.env.DEV ? `<a class="menu-header-button" href="#sound-lab" ${current === 'sound-lab' ? 'aria-current="page"' : ''}>사운드 관리</a>` : ''}
       </div>
       <strong class="menu-balance mono" id="${current}-balance" aria-label="보유 포인트">${balance.toLocaleString()} P</strong>

@@ -13,8 +13,9 @@ export function mountDevAudio(root: HTMLDivElement, balance: number, initialView
   document.title = 'Speedracer · 사운드 관리'; soundtrack.suspend();
   root.innerHTML = `<main class="audio-lab">
     ${menuHeader('sound-lab', balance)}
-    <div class="audio-lab-heading"><div><p class="eyebrow">DEVELOPMENT ONLY</p><h1>사운드 관리</h1><p>소리를 보관하고, 들어보고, 게임에 지정하세요.</p></div><div class="audio-lab-actions"><button type="button" data-export>라이브러리·변경분 내보내기</button><label class="audio-lab-upload">보관함 가져오기<input type="file" accept=".json,application/json" data-import></label></div></div>
-    <div class="audio-lab-views"><div class="audio-lab-view-buttons" role="group" aria-label="작업 선택"><button type="button" data-view="assignments" aria-pressed="true">게임에 지정</button><button type="button" data-view="library" aria-pressed="false">라이브러리</button></div><aside class="audio-lab-project-guide" aria-label="프로젝트 반영 안내"><p data-project-note></p><div data-project-command hidden><p>변경분을 내보낸 뒤, 프로젝트 폴더의 터미널에서 실행하세요.</p><code>npm run audio:import -- ~/Downloads/speedracer-audio.json</code><small>다운로드 위치가 다르면 경로를 바꾸세요. 프로젝트 반영 후 배포해야 다른 이용자에게 적용됩니다.</small></div></aside></div>
+    <div class="audio-lab-heading"><div class="audio-lab-title-block"><p class="eyebrow">DEVELOPMENT ONLY</p><h1>사운드 관리</h1><p>소리를 보관하고, 들어보고, 게임에 지정하세요.</p></div><div class="audio-lab-view-buttons" role="group" aria-label="작업 선택"><button type="button" data-view="assignments" aria-pressed="true">게임에 지정</button><button type="button" data-view="library" aria-pressed="false">라이브러리</button></div><div class="audio-lab-actions"><button type="button" data-export>라이브러리·변경분 내보내기</button><label class="audio-lab-upload">보관함 가져오기<input type="file" accept=".json,application/json" data-import></label></div></div>
+    <div class="audio-lab-body">
+    <aside class="audio-lab-project-guide" aria-label="프로젝트 반영 안내"><p data-project-note></p><div data-project-command hidden><p>변경분을 내보낸 뒤, 프로젝트 폴더의 터미널에서 실행하세요.</p><code>npm run audio:import -- ~/Downloads/speedracer-audio.json</code><small>다운로드 위치가 다르면 경로를 바꾸세요. 프로젝트 반영 후 배포해야 다른 이용자에게 적용됩니다.</small></div></aside>
     <div class="audio-lab-workspace">
       <section class="audio-lab-library" aria-label="사운드 목록">
         <div class="audio-lab-tabs" role="group" aria-label="사운드 종류"><button type="button" data-kind="sfx" aria-pressed="true">효과음</button><button type="button" data-kind="music" aria-pressed="false">배경음악</button></div>
@@ -22,11 +23,12 @@ export function mountDevAudio(root: HTMLDivElement, balance: number, initialView
         <p class="audio-lab-hint" data-upload-hint></p>
         <label class="audio-lab-search">사운드 찾기<input type="search" placeholder="이름 또는 이벤트 검색" aria-label="사운드 찾기"></label>
         <div class="audio-lab-list-tools"><button type="button" data-auto-preview aria-pressed="true">미리듣기 켜짐</button></div><div class="audio-lab-list"></div>
+    <footer class="audio-lab-footer"><p>파일과 지정 설정은 이 브라우저에 보관됩니다. 교체·원본 복원으로 파일이 삭제되지 않습니다. 브라우저 데이터 삭제 전에는 보관함을 내보내세요.</p><p>게임 지정은 다음 주행부터 적용됩니다. 개발용 보관함은 배포에 포함되지 않습니다. 엔진·바람·비 등 합성 지속음은 별도 코드로 관리합니다.</p><button type="button" data-reset-all>모든 게임 지정 원본 복원</button></footer>
       </section>
       <section class="audio-lab-editor" aria-label="선택 사운드 편집"></section>
     </div>
     <p class="audio-lab-message" role="status" aria-live="polite"></p>
-    <footer class="audio-lab-footer"><p>파일과 지정 설정은 이 브라우저에 보관됩니다. 교체·원본 복원으로 파일이 삭제되지 않습니다. 브라우저 데이터 삭제 전에는 보관함을 내보내세요.</p><p>게임 지정은 다음 주행부터 적용됩니다. 개발용 보관함은 배포에 포함되지 않습니다. 엔진·바람·비 등 합성 지속음은 별도 코드로 관리합니다.</p><button type="button" data-reset-all>모든 게임 지정 원본 복원</button></footer>
+    </div>
     <dialog class="audio-lab-confirm"><h2 data-dialog-title></h2><p data-dialog-text></p><div><button type="button" data-cancel>취소</button><button type="button" data-confirm>확인</button></div></dialog>
   </main>`;
   root.querySelector<HTMLElement>('.menu-music')!.hidden = true;
