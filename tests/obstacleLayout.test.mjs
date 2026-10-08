@@ -23,9 +23,10 @@ test('every campaign course has more fields and random safe levels with unchange
     for (const random of [() => 0, () => .5, () => .999]) {
       track.randomizeObstacles(random);
       assert.deepEqual(track.heightObstacles.map(o => o.distance), positions);
-      const level = Math.floor(random() * track.altitudeProfile.levels.length);
-      const height = track.altitudeProfile.levels[level];
-      for (const o of track.heightObstacles) assert.ok(height >= o.minAltitude && height <= o.maxAltitude);
+      const statics = track.heightObstacles.filter(o => !o.motion);
+      const bands = statics.map(o => track.altitudeProfile.levels.findIndex(h => h >= o.minAltitude && h <= o.maxAltitude));
+      assert.ok(bands.every(b => b >= 0));
+      for (let i = 2; i < bands.length; i++) assert.ok(!(bands[i] === bands[i-1] && bands[i] === bands[i-2]), `${definition.name}: three identical levels`);
     }
   }
 });
@@ -47,4 +48,29 @@ test('session randomizes once on fresh start/restart, shares fields with rivals 
   session.pause(); session.start(); assert.equal(calls, 1);
   assert.deepEqual(track.heightObstacles.map(o => [o.minAltitude, o.maxAltitude]), bands);
   session.restart(); assert.equal(calls, 2);
+});
+
+test('hard tracks randomize corridor lanes and moving-field phases without triple repeats', () => {
+  const seeded = seed => () => { seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+  const definition = TRACK_CATALOG.find(d => { const t = createCatalogTrack(d, 'hard'); return (t.corridorObstacles?.length ?? 0) >= 3 && t.heightObstacles.some(o => o.motion); });
+  assert.ok(definition);
+  const track = createCatalogTrack(definition, 'hard'), random = seeded(7);
+  const distances = track.corridorObstacles.map(o => o.distance), lanes = new Set(), phases = new Set();
+  for (let run = 0; run < 20; run++) {
+    track.randomizeObstacles(random);
+    const corridors = track.corridorObstacles;
+    assert.deepEqual(corridors.map(o => o.distance), distances);
+    corridors.forEach((c, i) => {
+      lanes.add(c.lane);
+      assert.equal(c.safeCenter, (['left', 'center', 'right'].indexOf(c.lane) - 1) * track.halfWidth * .58);
+      if (i >= 2) assert.ok(!(c.lane === corridors[i-1].lane && c.lane === corridors[i-2].lane));
+    });
+    for (const o of track.heightObstacles.filter(o => o.motion)) {
+      const cycle = o.motion.stepSeconds * (track.altitudeProfile.levels.length - 1) * 2;
+      assert.ok(o.motion.phase >= 0 && o.motion.phase < cycle);
+      phases.add(o.motion.phase);
+    }
+  }
+  assert.ok(lanes.size >= 2);
+  assert.ok(phases.size > 1);
 });
