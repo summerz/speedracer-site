@@ -39,15 +39,42 @@
 }
 .menu-header .menu-header-button[aria-current='page'] { opacity: 1; cursor: default; }
 .menu-balance { color: #bce6eb; font-size: 14px; font-weight: 400; white-space: nowrap; }
-@media (max-width: 760px) {
-  .menu-header.masthead { grid-template-columns: minmax(0, 1fr); gap: 12px; padding-block: calc(16px + env(safe-area-inset-top)) 12px; }
-  .menu-header .wordmark { grid-column: 1 / -1; }
-  .menu-header-tools { grid-column: 1 / -1; justify-content: flex-start; }
-  .menu-header .app-version { margin-left: auto; margin-right: 0; }
-  .menu-header [data-update] { flex-basis: 100%; }
-  .menu-header .app-update-status { text-align: left; }
-  .menu-header .menu-header-button, .menu-header .app-shell-tools button { min-height: 40px; padding: 9px 12px; font-size: 11px; }
+.menu-header [hidden] { display: none !important; }
+@media (max-width: 760px) and (orientation: portrait) {
+  .menu-header.masthead { grid-template-columns: auto minmax(0, 1fr); gap: 8px 12px; min-height: 0; padding-block: calc(8px + env(safe-area-inset-top)) 8px; }
+  .menu-header .wordmark { min-height: 36px; font-size: 15px; }
+  .menu-header .wordmark-caption, .menu-header .wordmark-divider { display: none; }
+  .menu-header-tools { flex-wrap: nowrap; gap: 6px; }
+  .menu-header .app-update-status { display: none; }
+  .menu-navigation { gap: 10px; }
+  .menu-header-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .menu-header-tabs::-webkit-scrollbar { display: none; }
+  .menu-header-tabs > .menu-header-button { flex: 1 1 0; min-width: max-content; }
+  .menu-header .menu-header-button, .menu-header .app-shell-tools button { min-height: 36px; padding: 6px 10px; font-size: 11px; }
+  .menu-header .app-version { font-size: 10px; margin-right: 2px; }
+  .menu-balance { font-size: 13px; }
+}
+/* Production adds the analytics button; on narrow portrait the wordmark keeps only its icon so tools never overlap it. */
+@media (max-width: 430px) and (orientation: portrait) {
+  .menu-header:has([data-analytics-settings]:not([hidden])) .wordmark { font-size: 0; gap: 0; letter-spacing: 0; }
+}
+
+@media (max-height: 500px) and (orientation: landscape) {
+  .menu-header.masthead {
+    display: flex; flex-wrap: nowrap; align-items: center; gap: 12px; min-height: 0;
+    padding: calc(6px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 6px max(16px, env(safe-area-inset-left));
+  }
+  .menu-header .wordmark { order: 1; min-height: 36px; font-size: 15px; flex: none; }
+  .menu-header .wordmark-caption, .menu-header .wordmark-divider { display: none; }
+  .menu-navigation { order: 2; flex: 1 1 auto; min-width: 0; display: flex; gap: 12px; }
+  .menu-header-tabs { flex: 1 1 auto; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .menu-header-tabs::-webkit-scrollbar { display: none; }
+  .menu-header-tabs > .menu-header-button { flex: 0 0 auto; }
+  .menu-header-tools { order: 3; flex: none; flex-wrap: nowrap; gap: 6px; }
+  .menu-header .app-update-status { display: none; }
+  .menu-header .menu-header-button, .menu-header .app-shell-tools button { min-height: 36px; padding: 6px 12px; font-size: 11px; }
   .menu-header .app-version { font-size: 10px; }
+  .menu-balance { font-size: 13px; flex: none; }
 }
 
 @media (min-width: 761px) {
