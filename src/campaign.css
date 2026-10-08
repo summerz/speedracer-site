@@ -103,6 +103,7 @@
 .track-card[data-status=locked] .track-map { opacity:.35; filter:grayscale(1); }
 .track-lock { position:absolute; right:6px; top:4px; font-size:13px; z-index:1; }
 .track-body { display:flex; flex:1; flex-direction:column; gap:6px; min-width:0; }
+.stats-short, .track-rank-l { display:none; }
 .track-stats { color:#a9bdc8; font-size:11px; line-height:1.4; min-height:1.4em; }
 .track-landmark { color:#78919e; font-size:11px; min-height:1.3em; }
 .course-fork { font:500 10px 'Noto Sans KR',sans-serif; font-style:normal; color:#ffd9a0; border:1px solid #ffd9a070; border-radius:3px; padding:1px 5px; }
@@ -271,10 +272,17 @@
   .tracks-progress .meter { width:140px; }
   .track-list { flex:1; min-height:0; grid-template-columns:repeat(4,minmax(0,1fr)); grid-auto-rows:minmax(0,1fr); gap:10px; }
   .track-card { min-height:0; padding:8px; gap:5px; }
-  .track-map-wrap { height:70px; }
+  .track-map-wrap { height:100px; }
   .track-top .course-number { font-size:16px; }
   .track-body { gap:3px; }
   .track-stats, .track-landmark { font-size:10px; }
+  .track-landmark, .track-card .course-meta { display:none; }
+  .stats-full { display:none; }
+  .stats-short { display:inline; }
+  .track-rank-l { display:inline; color:#ffc48b; font-size:11px; white-space:nowrap; }
+  .track-stats { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .track-foot { display:flex; align-items:center; gap:6px; }
+  .track-foot .course-card-record { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:9.5px; }
   .track-foot { gap:3px; }
   .track-foot .course-stars { font-size:15px; }
   .course-number { font-size:18px; }

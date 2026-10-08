@@ -160,7 +160,7 @@ export function mountCampaign(root: HTMLDivElement, store: ProgressStore, contex
       return `<button type="button" class="track-card" data-status="${status}" data-track="${t.id}"><span class="track-map-wrap" data-map="${t.id}">${status === 'locked' ? '<span class="track-lock" aria-hidden="true">🔒</span>' : ''}</span><span class="track-body"><span class="track-top"><span class="course-number mono">${number2(t.order)}</span><span class="track-chip">${chip}</span></span>
         <strong class="track-name">${t.name}${fresh}${fork}</strong>
         <span class="track-stats mono" data-stats="${t.id}"></span><span class="track-landmark" data-landmark="${t.id}"></span>
-        ${status === 'locked' ? '<span class="track-locked">이전 코스 통과 필요</span>' : `<span class="course-meta">${pips(t.rating)}<span>${t.altitudeLevels}단 고도</span>${mode === 'competition' ? `<span>${campaignRankLimit(t)}위 이내</span>` : ''}</span><span class="track-foot">${starsMarkup(bestStars(campaign, t))}${record ? `<span class="course-card-record">${record}</span>` : ''}</span>`}</span></button>`;
+        ${status === 'locked' ? '<span class="track-locked">이전 코스 통과 필요</span>' : `<span class="course-meta">${pips(t.rating)}<span>${t.altitudeLevels}단 고도</span>${mode === 'competition' ? `<span>${campaignRankLimit(t)}위 이내</span>` : ''}</span><span class="track-foot">${mode === 'competition' ? `<span class="track-rank-l">${campaignRankLimit(t)}위 이내</span>` : ''}${starsMarkup(bestStars(campaign, t))}${record ? `<span class="course-card-record">${record}</span>` : ''}</span>`}</span></button>`;
     }).join('');
     // Thumbnails are snapshots of the detail preview's own scene; one track per idle tick.
     const token = ++mapToken, km = (n: number) => (n / 1000).toFixed(1);
@@ -169,7 +169,7 @@ export function mountCampaign(root: HTMLDivElement, store: ProgressStore, contex
     const fill = (t: TrackDefinition, info: CardInfo) => {
       const card = list.querySelector(`[data-track="${t.id}"]`); if (!card) return;
       if (info.url) card.querySelector('[data-map]')!.insertAdjacentHTML('afterbegin', `<img class="track-map" alt="" src="${info.url}">`);
-      card.querySelector('[data-stats]')!.textContent = info.stats;
+      card.querySelector('[data-stats]')!.innerHTML = info.stats;
       card.querySelector('[data-landmark]')!.textContent = info.landmark;
     };
     const pending = tracks.filter(t => { const hit = cardCache.get(`${t.id}:${t.revision}:${w}x${h}`); if (hit) fill(t, hit); return !hit; });
@@ -179,7 +179,7 @@ export function mountCampaign(root: HTMLDivElement, store: ProgressStore, contex
       ensurePreview(); let url = '';
       try { url = preview?.snapshot(track, entry.color, t, w, h) ?? ''; previewKey = ''; } catch { /* WebGL unavailable: cards stay text-only */ }
       const info = { url, landmark: describeTrackLandmarks(track, t)[0]?.name ?? '',
-        stats: `${km(m.lengthMin)}${km(m.lengthMin) !== km(m.lengthMax) ? `–${km(m.lengthMax)}` : ''} km · 고저차 ${Math.round(m.heightRange)} m · 장애물 ${m.obstacles} · ${t.laps}랩` };
+        stats: `<span class="stats-full">${km(m.lengthMin)}${km(m.lengthMin) !== km(m.lengthMax) ? `–${km(m.lengthMax)}` : ''} km · 고저차 ${Math.round(m.heightRange)} m · 장애물 ${m.obstacles} · ${t.laps}랩</span><span class="stats-short">${km(m.lengthMin)}${km(m.lengthMin) !== km(m.lengthMax) ? `–${km(m.lengthMax)}` : ''}km · ${Math.round(m.heightRange)}m · 장애물 ${m.obstacles}</span>` };
       cardCache.set(`${t.id}:${t.revision}:${w}x${h}`, info); fill(t, info); schedule();
     };
     const schedule = () => { if (pending.length) mapTimer = setTimeout(step, 0); };
