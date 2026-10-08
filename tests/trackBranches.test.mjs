@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { TRACK_CATALOG } from '../output/test/game/track/trackCatalog.js';
+import { TRACK_CATALOG, DISTRICTS } from '../output/test/game/track/trackCatalog.js';
 import { createCatalogTrack, trackMetrics } from '../output/test/game/track/trackRuntime.js';
 import { forkAt, selectBranch, roadPaths, roadBoundary, withTrackBranches, physicalDistance, branchChoiceOpen, advanceTrackDistance } from '../output/test/game/track/trackBranches.js';
 import { createDrivingModel, NEUTRAL_INPUT } from '../output/test/game/driving/createDrivingModel.js';
@@ -48,11 +48,11 @@ for (const kind of ['horizontal', 'vertical']) for (const intertwined of [false,
     }
   });
 }
-test('first two courses introduce both choices and all six districts have branches', () => {
+test('first two courses introduce both choices and all districts have branches', () => {
   assert.equal(TRACK_CATALOG[0].branches[0].kind, 'horizontal');
   assert.equal(TRACK_CATALOG[1].branches[0].kind, 'vertical');
-  assert.equal(new Set(definitions.map(d => d.district)).size, 6);
-  assert.equal(definitions.length, 15);
+  assert.equal(new Set(definitions.map(d => d.district)).size, Object.keys(DISTRICTS).length);
+  assert.equal(definitions.length, 19);
 });
 for (const definition of definitions) test(`${definition.name}: continuous fork geometry, distinct experiences and physical progress`, () => {
   const track = createCatalogTrack(definition, 'easy');

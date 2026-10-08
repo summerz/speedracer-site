@@ -58,7 +58,7 @@ function runCourse(definition, configuration, mode, platform, slowStart = false)
 }
 
 for (const platform of ['desktop', 'touch']) {
-  test(`${platform}: earn points across 24 time attacks, buy a craft, clear 24 races and reload/replay safely`, () => {
+  test(`${platform}: earn points across ${TRACK_CATALOG.length} time attacks, buy a craft, clear ${TRACK_CATALOG.length} races and reload/replay safely`, () => {
     let progress = initialProgress();
     const starter = DRONE_CATALOG[0].configuration;
     for (const definition of TRACK_CATALOG) {

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { TRACK_CATALOG, campaignLapLimit, campaignRankLimit, validateTrackCatalog } from '../output/test/game/track/trackCatalog.js';
+import { TRACK_CATALOG, DISTRICTS, campaignLapLimit, campaignRankLimit, validateTrackCatalog } from '../output/test/game/track/trackCatalog.js';
 import { createCatalogTrack, trackMetrics } from '../output/test/game/track/trackRuntime.js';
 import { initialProgress, validateProgress, applyCommand } from '../output/test/game/progression/progress.js';
 import { initialCampaign, campaignStatus, nextCampaignTrack, validateCampaign, campaignClearRecord, completeCampaign } from '../output/test/game/progression/campaign.js';
@@ -16,6 +16,37 @@ const first = TRACK_CATALOG[0], second = TRACK_CATALOG[1];
 const reward = id => ({ raceId: id, difficulty: 'beginner', collisions: 0, offTrackExits: 0, recoveries: 0, penaltyPoints: 0, cleanHalfLaps: 6, improvedExistingBest: false, assisted: false });
 const outcome = (track = first, mode = 'time-attack', changes = {}) => ({ mode, trackId: track.id, revision: track.revision, total: 120, laps: [40,40,40], rank: 1, disqualified: false, assisted: false, lapLimit: campaignLapLimit(track), ...changes });
 const complete = (p, id, result = outcome()) => applyCommand(p, { kind: 'campaign-result', input: reward(id), outcome: result });
+
+test('new districts append eight varied courses without changing earlier campaign identities', () => {
+  assert.equal(TRACK_CATALOG.length,32); assert.equal(Object.keys(DISTRICTS).length,8);
+  assert.equal(TRACK_CATALOG[23].order,24);
+  for (const district of ['harbor','desert']) {
+    const courses=TRACK_CATALOG.filter(t=>t.district===district);
+    assert.equal(courses.length,4); assert.ok(DISTRICTS[district].description.length>15);
+    assert.ok(new Set(courses.map(t=>t.layout.shape)).size>=3);
+    assert.ok(courses.every(t=>t.layout.stunts.length>=2));
+    assert.equal(courses.filter(t=>t.branches?.length).length,2);
+    assert.ok(courses[0].rating<courses.at(-1).rating);
+  }
+  let p=initialProgress(); for(const track of TRACK_CATALOG.slice(0,24)) p=complete(p,track.id,outcome(track));
+  const restored=validateProgress(p);
+  assert.equal(campaignStatus(restored.campaign,'time-attack',TRACK_CATALOG[23]),'cleared');
+  assert.equal(campaignStatus(restored.campaign,'time-attack',TRACK_CATALOG[24]),'available');
+  assert.equal(campaignStatus(restored.campaign,'time-attack',TRACK_CATALOG[25]),'locked');
+  assert.equal(campaignStatus(restored.campaign,'competition',TRACK_CATALOG[24]),'locked');
+});
+test('campaign placement pays outside the qualification cut and cannot disagree with the saved result', () => {
+  const lost=complete(initialProgress(),'last-place',outcome(first,'competition',{rank:5}));
+  assert.equal(lost.rewards['last-place'].placement,12);
+  assert.equal(lost.rewards['last-place'].bonus,0); assert.equal(lost.balance,130);
+  const won=complete(lost,'winner',outcome(first,'competition',{rank:1}));
+  assert.equal(won.rewards.winner.placement,80); assert.equal(won.rewards.winner.bonus,125);
+  assert.equal(won.rewards.winner.total,323);
+  assert.deepEqual(complete(won,'winner',outcome(first,'competition',{rank:1})),won);
+  for(const delta of [{mode:'time-attack'},{mode:'competition',rank:2}]) {
+    assert.throws(()=>applyCommand(initialProgress(),{kind:'campaign-result',input:{...reward('mismatch'),...delta},outcome:outcome(first,'competition')}));
+  }
+});
 
 test('old shop saves migrate without losing money, ownership, upgrades or rewards', () => {
   const p = initialProgress(); p.balance = 5000; delete p.campaign;
@@ -46,9 +77,9 @@ test('DQ gives no reward or best, and invalid/locked results never mutate progre
   for (const invalid of [outcome(second), outcome(first,'time-attack',{ lapLimit: 100000 }), outcome(first,'time-attack',{ total: 200 }), outcome(first,'time-attack',{ revision: 999 })]) assert.throws(() => complete(p, 'bad', invalid));
   assert.equal(p.balance, 0); assert.deepEqual(p.campaign, initialCampaign());
 });
-test('adding track 25 preserves old/retired progress and makes it available after its predecessor', () => {
+test('adding a track preserves old/retired progress and makes it available after its predecessor', () => {
   let p = initialProgress(); for (const track of TRACK_CATALOG) p = complete(p, track.id, outcome(track));
-  const extended = [...TRACK_CATALOG, { ...first, id: 'new-district', order: 25, predecessor: TRACK_CATALOG.at(-1).id }];
+  const extended = [...TRACK_CATALOG, { ...first, id: 'new-district', order: TRACK_CATALOG.length + 1, predecessor: TRACK_CATALOG.at(-1).id }];
   validateTrackCatalog(extended);
   assert.equal(nextCampaignTrack(p.campaign, 'time-attack', extended).id, 'new-district');
   assert.equal(campaignStatus(p.campaign, 'time-attack', extended.at(-1)), 'available');
@@ -156,8 +187,8 @@ test('campaign keeps varied lap lengths, early stunts and difficulty relief betw
   for(const t of TRACK_CATALOG)assert.ok(t.layout ? t.layout.stunts.length>=1 : createCatalogTrack(t).sections.length>=2);
   assert.deepEqual(new Set(TRACK_CATALOG[0].layout.stunts.map(s=>s.kind)),new Set(['loop','helix','roll']));
   assert.ok(TRACK_CATALOG[2].layout.stunts.length>=4);assert.ok(TRACK_CATALOG.at(-1).layout.stunts.length>=6);
-  for(let i=4;i<24;i+=4)assert.ok(TRACK_CATALOG[i].rating<TRACK_CATALOG[i-1].rating);
-  for(let i=1;i<24;i++)assert.ok(TRACK_CATALOG[i].rating-TRACK_CATALOG[i-1].rating<=1);
+  for(let i=4;i<TRACK_CATALOG.length;i+=4)assert.ok(TRACK_CATALOG[i].rating<TRACK_CATALOG[i-1].rating);
+  for(let i=1;i<TRACK_CATALOG.length;i++)assert.ok(TRACK_CATALOG[i].rating-TRACK_CATALOG[i-1].rating<=1);
   assert.ok(Math.max(...TRACK_CATALOG.map(t=>t.rating))<=4);
   for(const t of TRACK_CATALOG)assert.ok(t.lapLimit>0);
   assert.ok(TRACK_CATALOG[12].rating>TRACK_CATALOG[0].rating && lengths[12]<lengths[0]);
@@ -207,7 +238,7 @@ test('a recoverable legacy winning record survives a faster losing replay', () =
 });
 
 
-test('AI qualifying ranks follow difficulty and persist without losing first-clear history', () => {
+test('Competition qualifying ranks follow difficulty and persist without losing first-clear history', () => {
   assert.deepEqual([1,2,3,4,5,6].map(rating => campaignRankLimit({ rating })), [4,4,3,3,2,2]);
   for (const rating of [1,2,3,4]) {
     const track = TRACK_CATALOG.find(t => t.rating === rating);

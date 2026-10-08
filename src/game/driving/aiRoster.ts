@@ -75,7 +75,7 @@ export function selectAiRacer(modelVariant: string, playerColor: string, random:
     const nearest = Math.min(...candidates.map(r => Math.abs(r.rating - rating)));
     candidates = candidates.filter(r => Math.abs(r.rating - rating) <= Math.max(1, nearest));
   }
-  if (!candidates.length) throw new Error(`No eligible AI racer for ${modelVariant}`);
+  if (!candidates.length) throw new Error(`No eligible Competition racer for ${modelVariant}`);
   return candidates[Math.floor(random() * candidates.length)];
 }
 

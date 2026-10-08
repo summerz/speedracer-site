@@ -22,8 +22,8 @@ export const emptyLevels = (): UpgradeLevels => ({ engine: 0, brakes: 0, steerin
 export const FOCUS_PRICE = 60;
 export const INVENTORY_LIMIT = 99;
 export const RIVAL_ITEMS = [
-  { id: 'time-stop', name: '시간 정지', price: 120, duration: 1, description: '상대 AI를 1초 동안 멈춥니다. 내 기체와 경기 시계는 계속 움직입니다.' },
-  { id: 'interference', name: '전파 교란', price: 100, duration: 3, description: '앞쪽 180m 안의 가장 가까운 AI 최대 2대의 목표 속도를 3초 동안 50%로 낮춥니다.' },
+  { id: 'time-stop', name: '시간 정지', price: 120, duration: 1, description: '상대 기체를 1초 동안 멈춥니다. 내 기체와 경기 시계는 계속 움직입니다.' },
+  { id: 'interference', name: '전파 교란', price: 100, duration: 3, description: '앞쪽 180m 안의 가장 가까운 상대 기체 최대 2대의 목표 속도를 3초 동안 50%로 낮춥니다.' },
 ] as const;
 export type RivalItemId = typeof RIVAL_ITEMS[number]['id'];
 export const isRivalItem = (id: unknown): id is RivalItemId => RIVAL_ITEMS.some(item => item.id === id);

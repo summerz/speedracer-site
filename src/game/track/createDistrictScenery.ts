@@ -18,7 +18,7 @@ export function createDistrictScenery(track: Track, definition: TrackDefinition)
   const landmark = landmarks[0];
   const landmarkObjects = landmarks.map(descriptor => createTrackLandmark(descriptor));
   const color = new THREE.Color(DISTRICTS[definition.district].color);
-  const bodyMaterial = new THREE.MeshStandardMaterial({ color: '#09131d', roughness: .8, metalness: .45 });
+  const bodyMaterial = new THREE.MeshStandardMaterial({ color: definition.district === 'desert' ? '#241d14' : '#09131d', roughness: .8, metalness: .45 });
   const windowMaterial = new THREE.MeshBasicMaterial({ color: color.clone().multiplyScalar(1.7), toneMapped: false });
   const accentMaterial = new THREE.MeshBasicMaterial({ color: color.clone().multiplyScalar(.75), toneMapped: false });
   const boxes: THREE.Matrix4[] = [], windows: THREE.Matrix4[] = [], accents: THREE.Matrix4[] = [];
@@ -48,13 +48,27 @@ export function createDistrictScenery(track: Track, definition: TrackDefinition)
       return t > .05 && t < .98 && view.addScaledVector(axis, -t).length() < radius + 35;
     }))) continue;
     const district = definition.district;
-    const height = district === 'skyline' ? 100 + random() * 200 : district === 'orbital' ? 80 + random() * 180 : district === 'industrial' ? 25 + random() * 65 : district === 'stadium' ? 25 + random() * 55 : 40 + random() * 120;
+    const height = district === 'skyline' ? 100 + random() * 200 : district === 'orbital' ? 80 + random() * 180 : district === 'industrial' ? 25 + random() * 65 : district === 'stadium' ? 25 + random() * 55 : district === 'harbor' ? 20 + random() * 40 : district === 'desert' ? 16 + random() * 34 : 40 + random() * 120;
     const floor = district === 'orbital' ? 24 + random() * 40 : 0;
     const firstBox = boxes.length, firstWindow = windows.length, firstAccent = accents.length;
     boxes.push(matrix(x, floor + height / 2, z, width, height, depth));
     // Terraced crowns, reactor pylons and arena bleachers produce distinct silhouettes.
     if (district === 'research' || district === 'skyline') boxes.push(matrix(x, floor + height + 12, z, width * .65, 24, depth * .65));
     if (district === 'industrial') boxes.push(matrix(x + width * .3, floor + height + 18, z, 5, 36, 5));
+    if (district === 'harbor') {
+      // Narrow pylons and a cantilevered beam above each dock warehouse.
+      boxes.push(matrix(x - width * .3, floor + height + 16, z, 4, 32, 4));
+      boxes.push(matrix(x, floor + height + 31, z, width * .85, 3, 4));
+      accents.push(matrix(x, floor + height + 33, z, width * .85, .6, 4));
+    }
+    if (district === 'desert') {
+      boxes.push(matrix(x, floor + height + 5, z, width * .7, 10, depth * .7));
+      boxes.push(matrix(x, floor + height + 12, z, width * .4, 4, depth * .4));
+      for (const side of [-1, 1]) {
+        boxes.push(matrix(x + side * width * .32, floor + height + 11, z, width * .18, .7, depth * .6));
+        accents.push(matrix(x + side * width * .32, floor + height + 11.5, z, width * .16, .3, depth * .55));
+      }
+    }
     if (district === 'stadium') {
       for (let tier = 1; tier <= 3; tier++) boxes.push(matrix(x + tier * 9, floor + tier * 6, z, width + 12, 5, depth * 1.5));
     }

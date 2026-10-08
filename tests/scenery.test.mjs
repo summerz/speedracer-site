@@ -6,7 +6,7 @@ import { createCatalogTrack } from '../output/test/game/track/trackRuntime.js';
 import { createDistrictScenery } from '../output/test/game/track/createDistrictScenery.js';
 import { createTrackLandmark, describeTrackLandmark, disposeScenery, sceneryRoute } from '../output/test/game/track/createTrackLandmark.js';
 
-test('all 24 course landmarks are reproducible, unique and outside the full swept route', () => {
+test('all course landmarks are reproducible, unique and outside the full swept route', () => {
   const ids = new Set(), kinds = new Set();
   for (const definition of TRACK_CATALOG) {
     const track = createCatalogTrack(definition), route = sceneryRoute(track);
@@ -30,7 +30,7 @@ test('all 24 course landmarks are reproducible, unique and outside the full swep
     }
     disposeScenery(race); disposeScenery(preview);
   }
-  assert.equal(ids.size, 24); assert.equal(kinds.size, 7);
+  assert.equal(ids.size, TRACK_CATALOG.length); assert.equal(kinds.size, 7);
 });
 
 test('city LOD removes distant instances, reduces low-quality windows and avoids per-frame uploads', () => {

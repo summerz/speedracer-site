@@ -253,3 +253,16 @@ button:focus-visible { outline:2px solid #c9f9f2; outline-offset:3px; }
 .fork-guide { margin:10px -45px 0; text-align:center; color:#bcefe7; font:11px/1.4 'IBM Plex Mono',monospace; }
 .fork-guide[data-selected='false'] { color:#fff0b4; }
 .driving-overlay.is-inset .fork-guide { margin:4px -16px 0; font-size:8px; }
+.race-result .reward-summary { padding:14px 0; margin:14px 0; border-block:1px solid #58717d50; }
+.reward-total { display:flex; align-items:baseline; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+.reward-total > span { font-size:12px; color:#adc6ce; }
+.race-result .reward-total strong { color:#baffeb; font-size:clamp(28px,5vw,40px); line-height:1.1; font-variant-numeric:tabular-nums; }
+.reward-total small { font-size:16px; }
+.race-result .reward-balance { margin:6px 0; font-size:11px; color:#a5bbc4; text-align:right; }
+.race-result .reward-placement { display:inline-block; margin:4px 0 8px; padding:6px 10px; border:1px solid #e9c96b66; border-radius:4px; background:#e9c96b0b; color:#ffe29a; font-size:13px; }
+.reward-breakdown { font-size:11px; color:#b5c9d1; }
+.reward-breakdown summary { cursor:pointer; min-height:32px; padding-block:8px; }
+.reward-breakdown summary:focus-visible { outline:2px solid #80ffe0; outline-offset:2px; }
+.reward-breakdown dl { margin:4px 0 0; }
+.reward-breakdown dl > div { display:flex; justify-content:space-between; gap:12px; padding-block:3px; }
+.reward-breakdown dd { margin:0; font-variant-numeric:tabular-nums; }

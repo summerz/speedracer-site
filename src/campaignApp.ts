@@ -23,7 +23,7 @@ export function mountCampaign(root: HTMLDivElement, store: ProgressStore, contex
       <a id="campaign-craft" class="campaign-craft" href="#" aria-label="격납고에서 출전 기체 변경"><img id="campaign-craft-image" width="480" height="240" alt=""><span class="campaign-craft-copy"><span class="campaign-craft-caption">출전 기체<span aria-hidden="true">변경 ↗</span></span><strong id="campaign-craft-name"></strong><span id="campaign-craft-role"></span></span></a>
     </section>
     <div class="campaign-layout"><section class="campaign-courses" aria-label="트랙 선택">
-      <div class="campaign-modes" role="group" aria-label="캠페인 방식"><button type="button" data-mode="time-attack">타임어택</button><button type="button" data-mode="competition">AI 레이스</button></div>
+      <div class="campaign-modes" role="group" aria-label="캠페인 방식"><button type="button" data-mode="time-attack"><span>타임어택</span><span class="campaign-mode-count"></span></button><button type="button" data-mode="competition"><span>경쟁 레이스</span><span class="campaign-mode-count"></span></button></div>
       <div class="campaign-difficulty"><span>출전 난이도</span><div class="course-challenges" role="group" aria-label="출전 난이도"><button type="button" data-challenge="easy">쉬움</button><button type="button" data-challenge="normal">중간</button><button type="button" data-challenge="hard">어려움</button></div></div>
       <p id="campaign-rule" class="campaign-rule"></p><div id="campaign-list" class="campaign-list"></div>
     </section><section class="campaign-detail" aria-label="선택한 트랙"><button id="course-list-back" class="course-list-back" type="button">← 코스 목록</button><div class="campaign-preview" id="campaign-preview" aria-label="트랙 3D 경로 미리보기"><p class="campaign-preview-legend">루프 · 코일 · 노면 회전 구간</p></div>
@@ -60,9 +60,16 @@ export function mountCampaign(root: HTMLDivElement, store: ProgressStore, contex
     get('campaign-balance').textContent = `${profile.balance.toLocaleString()} P`;
     const count = TRACK_CATALOG.filter(t => campaignStatus(campaign, mode, t) === 'cleared').length;
     get('campaign-count').textContent = `${count} / ${TRACK_CATALOG.length} CLEARED`;
-    get('campaign-rule').textContent = `${RACE_CHALLENGES[challenge].label} 별점·기록 표시 · ${mode === 'time-attack' ? '매 랩 제한시간' : '통과 순위'} 안에 완주하면 다음 코스가 열립니다.`;
-    for (const button of root.querySelectorAll<HTMLElement>('[data-mode]')) button.setAttribute('aria-pressed', String(button.dataset.mode === mode));
-    get('campaign-list').innerHTML = Object.entries(DISTRICTS).map(([id, district]) => `<section class="course-district"><h3>${district.name}</h3><div>${TRACK_CATALOG.filter(t => t.district === id).map(t => {
+    get('campaign-rule').innerHTML = mode === 'time-attack'
+      ? '<strong>매 랩 제한시간 안에 완주하면 다음 트랙이 열립니다.</strong>'
+      : `<strong>다른 기체 ${RACE_PARTICIPANT_COUNT - 1}대와 순위를 겨룹니다.</strong><span>통과 순위 안에 완주하면 다음 트랙이 열립니다.</span>`;
+    for (const button of root.querySelectorAll<HTMLElement>('[data-mode]')) {
+      const buttonMode = button.dataset.mode as RaceMode;
+      const cleared = TRACK_CATALOG.filter(t => campaignStatus(campaign, buttonMode, t) === 'cleared').length;
+      button.setAttribute('aria-pressed', String(buttonMode === mode));
+      button.querySelector('.campaign-mode-count')!.textContent = `통과 ${cleared} / ${TRACK_CATALOG.length}`;
+    }
+    get('campaign-list').innerHTML = Object.entries(DISTRICTS).map(([id, district]) => `<section class="course-district" style="--district-color:${district.color}"><h3>${district.name}</h3><p class="district-description">${district.description}</p><div>${TRACK_CATALOG.filter(t => t.district === id).map(t => {
       const status = campaignStatus(campaign, mode, t);
       const clear = campaignClearRecord(campaign, mode, t, challenge);
       const stars = campaignStars(campaign, mode, t, challenge);
@@ -82,7 +89,7 @@ export function mountCampaign(root: HTMLDivElement, store: ProgressStore, contex
     const clear = campaignClearRecord(campaign, mode, selected, challenge);
     for (const button of root.querySelectorAll<HTMLElement>('[data-challenge]')) button.setAttribute('aria-pressed', String(button.dataset.challenge === challenge));
     const settings = RACE_CHALLENGES[challenge];
-    get('course-challenge-description').textContent = `${settings.label} · 장애물 ${metrics.obstacles}개 · ${challenge === 'easy' ? '이른 경고' : challenge === 'hard' ? '짧은 경고' : '기본 경고'}${mode === 'competition' ? ` · AI ${challenge === 'easy' ? '여유' : challenge === 'hard' ? '강화' : '표준'}` : ''}`;
+    get('course-challenge-description').textContent = `${settings.label} · 장애물 ${metrics.obstacles}개 · ${challenge === 'easy' ? '이른 경고' : challenge === 'hard' ? '짧은 경고' : '기본 경고'}${mode === 'competition' ? ` · 상대 ${challenge === 'easy' ? '여유' : challenge === 'hard' ? '강화' : '표준'}` : ''}`;
     const stars = campaignStars(campaign, mode, selected, challenge);
     const cutoff = campaignRankLimit(selected);
     const starRule = mode === 'time-attack' ? `1★ 통과 · 2★ 매 랩 ${time(limit * .97)} 이내 · 3★ ${time(limit * .90)} 이내` : cutoff === 2 ? `1★ 2위 · 2★ 2위 + 매 랩 ${time(limit * .97)} 이내 · 3★ 1위` : `1★ ${cutoff}위 · 2★ ${cutoff - 1}위 이내 · 3★ ${cutoff - 2}위 이내`;
@@ -91,7 +98,7 @@ export function mountCampaign(root: HTMLDivElement, store: ProgressStore, contex
       const lap = clear?.laps[i], margin = lap === undefined ? undefined : limit - lap;
       return `<tr><th scope="row">${i + 1}랩</th><td>≤ ${time(limit)}</td><td data-met="${margin === undefined ? 'unknown' : margin >= -1e-8 ? 'yes' : 'no'}">${lap === undefined ? '—' : `<strong>${time(lap)}</strong><small>${margin! >= -1e-8 ? `${Math.max(0, margin!).toFixed(3)}초 여유` : `${(-margin!).toFixed(3)}초 초과`}</small>`}</td></tr>`;
     }).join('') : `<tr><th scope="row">순위</th><td>${campaignRankLimit(selected)}위 이내 / ${RACE_PARTICIPANT_COUNT}명</td><td data-met="${clear ? clear.rank <= campaignRankLimit(selected) ? 'yes' : 'no' : 'unknown'}"><strong>${clear ? `${clear.rank}위` : '—'}</strong></td></tr><tr><th scope="row">완주</th><td>${selected.laps}랩</td><td data-met="${clear ? clear.laps.length === selected.laps ? 'yes' : 'no' : 'unknown'}"><strong>${clear ? `${clear.laps.length} / ${selected.laps}랩` : '—'}</strong></td></tr>`;
-    get('course-condition').innerHTML = `<div class="course-objective-heading"><span class="eyebrow">${mode === 'time-attack' ? '타임어택' : 'AI 레이스'} · ${RACE_CHALLENGES[challenge].label}</span>${entry?.cleared ? '<span class="course-passed">✓ 통과</span>' : ''}</div><strong>${mode === 'time-attack' ? `매 랩 ${Math.floor(limit / 60)}분 ${limit % 60}초 이내` : `${RACE_PARTICIPANT_COUNT}명 중 ${campaignRankLimit(selected)}위 이내`}</strong><table class="course-comparison"><thead><tr><th scope="col">구간</th><th scope="col">통과 조건</th><th scope="col">통과 기록</th></tr></thead><tbody>${comparisonRows}</tbody></table><span class="course-clear-summary">${clear ? `통과 경기 총 ${time(clear.total)}${clear.assisted ? ' · 보조 사용' : ''}${clear.collisions === undefined ? '' : ` · 충돌 ${clear.collisions}회 · 이탈 ${clear.offTrackExits ?? 0}회`}${clear.revision !== selected.revision ? '<small>이전 트랙 버전의 기록 · 현재 조건과 비교합니다.</small>' : ''}` : entry?.cleared ? '이전 버전 통과 완료 · 당시 기록은 저장되지 않았습니다.' : `${selected.laps}랩 ${mode === 'time-attack' ? '모두 제한시간을 지키면' : `경기에서 ${campaignRankLimit(selected)}위 이내에 들면`} 다음 코스가 열립니다.`}</span>`;
+    get('course-condition').innerHTML = `<div class="course-objective-heading"><span class="eyebrow">${mode === 'time-attack' ? '타임어택' : '경쟁 레이스'} · ${RACE_CHALLENGES[challenge].label}</span>${entry?.cleared ? '<span class="course-passed">✓ 통과</span>' : ''}</div><strong>${mode === 'time-attack' ? `매 랩 ${Math.floor(limit / 60)}분 ${limit % 60}초 이내` : `${RACE_PARTICIPANT_COUNT}명 중 ${campaignRankLimit(selected)}위 이내`}</strong><table class="course-comparison"><thead><tr><th scope="col">구간</th><th scope="col">통과 조건</th><th scope="col">통과 기록</th></tr></thead><tbody>${comparisonRows}</tbody></table><span class="course-clear-summary">${clear ? `통과 경기 총 ${time(clear.total)}${clear.assisted ? ' · 보조 사용' : ''}${clear.collisions === undefined ? '' : ` · 충돌 ${clear.collisions}회 · 이탈 ${clear.offTrackExits ?? 0}회`}${clear.revision !== selected.revision ? '<small>이전 트랙 버전의 기록 · 현재 조건과 비교합니다.</small>' : ''}` : entry?.cleared ? '이전 버전 통과 완료 · 당시 기록은 저장되지 않았습니다.' : `${selected.laps}랩 ${mode === 'time-attack' ? '모두 제한시간을 지키면' : `경기에서 ${campaignRankLimit(selected)}위 이내에 들면`} 다음 코스가 열립니다.`}</span>`;
     const best = normal ?? assisted;
     get('course-record').innerHTML = best ? `<div class="course-best-record"><span>${best.assisted ? '보조 ' : ''}최단 완주</span><strong>${time(best.total)}${mode === 'competition' ? ` · ${best.rank}위` : ''}</strong></div>` : '<p>완주 기록이 없습니다.</p>';
     const status = campaignStatus(campaign, mode, selected);

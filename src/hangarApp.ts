@@ -27,7 +27,7 @@ export function mountHangar(root: HTMLDivElement, selected: DroneCatalogEntry, o
             <button type="button" data-thrust="boost" aria-pressed="false" aria-keyshortcuts="3"><kbd>3</kbd>부스트</button>
           </div>
         </div>
-        <button type="button" id="start-driving" class="primary-action hangar-start">캠페인 시작 <span aria-hidden="true">↗</span></button><a class="free-drive-link" href="#drive">자유 주행 · 타임어택 / AI 레이스</a>
+        <button type="button" id="start-driving" class="primary-action hangar-start">캠페인 시작 <span aria-hidden="true">↗</span></button><a class="free-drive-link" href="#drive">자유 주행 · 타임어택 / 경쟁 레이스</a>
       </section>
 
       <section class="viewport" aria-label="드론 3D 미리보기">

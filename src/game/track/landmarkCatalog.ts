@@ -23,6 +23,8 @@ export const LANDMARK_DISTRICTS: Record<DistrictId, LandmarkDistrict> = {
   skyline: { signature: ['spire', 'bridge'], companions: ['orbital-ring', 'spire'], accents: ['#ffd4a1', '#b7ffec', '#ffc1db'] },
   research: { signature: ['dome', 'reactor'], companions: ['spire', 'dome'], accents: ['#aefff0', '#ffdfa5', '#ffc0dc'] },
   orbital: { signature: ['orbital-ring', 'bridge'], companions: ['dome', 'orbital-ring'], accents: ['#b7d5ff', '#ffc7dd', '#b2fff4'] },
+  harbor: { signature: ['bridge', 'orbital-ring'], companions: ['spire', 'bridge'], accents: ['#ffbd79', '#a5ffe8', '#ffaad3'] },
+  desert: { signature: ['reactor', 'terrace'], companions: ['dome', 'reactor'], accents: ['#93efff', '#bcffa5', '#ffc194'] },
 };
 export const LANDMARK_ENCOUNTERS = [
   { fraction: .08, scale: 3.1 }, { fraction: .38, scale: 2.15 }, { fraction: .72, scale: 1.65 },

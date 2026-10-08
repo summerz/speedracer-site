@@ -9,8 +9,11 @@ import { CLEAN_HALF_LAP_POINTS, RECORD_BONUS_POINTS, OBSTACLE_PASS_POINTS } from
 export interface RewardInput {
   raceId: string; difficulty: DifficultyId; collisions: number; offTrackExits: number; recoveries: number;
   penaltyPoints: number; obstaclesPassed?: number; cleanHalfLaps: number; improvedExistingBest: boolean; assisted: boolean;
+  mode?: CampaignOutcome['mode']; rank?: number;
 }
-export interface Reward { base: number; clean: number; best: number; penalty: number; total: number; assisted: boolean; bonus?: number; obstacles?: number }
+export interface Reward { base: number; clean: number; best: number; penalty: number; total: number; assisted: boolean; bonus?: number; obstacles?: number; placement?: number }
+/** Finish-order bonus; campaign qualification and first-clear rewards remain separate. */
+export const PLACEMENT_POINTS = Object.freeze([80, 55, 35, 20, 12, 8, 4, 0]);
 export interface Progress {
   version: 1; revision: number; balance: number; owned: string[]; equipped: string;
   upgrades: Record<string, UpgradeLevels>; focus: number; focusSlots: number;
@@ -64,9 +67,10 @@ export function validateProgress(value: unknown): Progress {
   if (Number(value.focus) + Object.values(value.focusUses as object).filter(state => state === 'pending').length > INVENTORY_LIMIT) throw new Error('아이템 보유 한도 초과');
   for (const [id, r] of Object.entries(value.rewards)) {
     if (!id || id.length > 160 || !record(r) || !['base', 'clean', 'best', 'penalty', 'total'].every(key => integer(r[key]))
-      || typeof r.assisted !== 'boolean' || r.total !== Math.max(0, Number(r.base) + Number(r.clean) + Number(r.best) + Number(r.bonus ?? 0) + Number(r.obstacles ?? 0) - Number(r.penalty))) throw new Error('잘못된 보상 데이터');
+      || typeof r.assisted !== 'boolean' || r.total !== Math.max(0, Number(r.base) + Number(r.clean) + Number(r.best) + Number(r.bonus ?? 0) + Number(r.obstacles ?? 0) + Number(r.placement ?? 0) - Number(r.penalty))) throw new Error('잘못된 보상 데이터');
     if (r.obstacles !== undefined && !integer(r.obstacles)) throw new Error('잘못된 장애물 보상');
     if (r.bonus !== undefined && !integer(r.bonus)) throw new Error('잘못된 첫 클리어 보상');
+    if (r.placement !== undefined && !integer(r.placement, PLACEMENT_POINTS[0])) throw new Error('잘못된 순위 보상');
   }
   value.campaign = validateCampaign(value.campaign);
   return structuredClone(value) as unknown as Progress;
@@ -75,12 +79,15 @@ export function calculateReward(input: RewardInput): Reward {
   if (!input.raceId || input.raceId.length > 160 || !own({ beginner: 1, intermediate: 1, advanced: 1 }, input.difficulty)
     || typeof input.assisted !== 'boolean' || typeof input.improvedExistingBest !== 'boolean'
     || ![input.collisions, input.offTrackExits, input.recoveries, input.penaltyPoints].every(n => integer(n))
-    || !integer(input.obstaclesPassed ?? 0) || !integer(input.cleanHalfLaps, 20)) throw new Error('Invalid race reward');
+    || !integer(input.obstaclesPassed ?? 0) || !integer(input.cleanHalfLaps, 20)
+    || (input.mode !== undefined && !['time-attack', 'competition'].includes(input.mode))
+    || (input.mode === 'competition' && (!integer(input.rank, PLACEMENT_POINTS.length) || input.rank < 1))) throw new Error('Invalid race reward');
   const base = { beginner: 100, intermediate: 150, advanced: 220 }[input.difficulty] * (input.assisted ? .8 : 1);
   const clean = input.cleanHalfLaps * CLEAN_HALF_LAP_POINTS;
   const best = !input.assisted && input.improvedExistingBest ? RECORD_BONUS_POINTS : 0;
   const obstacles = (input.obstaclesPassed ?? 0) * OBSTACLE_PASS_POINTS;
-  return { base, clean, best, obstacles, penalty: input.penaltyPoints, total: Math.max(0, base + clean + best + obstacles - input.penaltyPoints), assisted: input.assisted };
+  const placement = input.mode === 'competition' ? PLACEMENT_POINTS[input.rank! - 1] : 0;
+  return { base, clean, best, obstacles, placement, penalty: input.penaltyPoints, total: Math.max(0, base + clean + best + obstacles + placement - input.penaltyPoints), assisted: input.assisted };
 }
 export type ProgressCommand = { kind: 'campaign-select'; mode: CampaignOutcome['mode']; trackId: string; challenge?: CampaignOutcome['challenge'] }
   | { kind: 'campaign-result'; input: RewardInput; outcome: CampaignOutcome } | { kind: 'reward'; input: RewardInput } | { kind: 'craft'; id: string }
@@ -103,10 +110,12 @@ export function applyCommand(current: Progress, command: ProgressCommand): Progr
     case 'campaign-result': {
       if (own(next.rewards, command.input.raceId)) return next;
       if (command.input.assisted !== command.outcome.assisted) throw new Error('잘못된 보조 모드');
+      if ((command.input.mode !== undefined && command.input.mode !== command.outcome.mode)
+        || (command.input.rank !== undefined && command.input.rank !== command.outcome.rank)) throw new Error('경기 방식 또는 순위가 일치하지 않습니다.');
       const completion = completeCampaign(next.campaign, command.outcome);
-      const calculated = calculateReward(command.input);
+      const calculated = calculateReward({ ...command.input, mode: command.outcome.mode, rank: command.outcome.rank });
       const reward = command.outcome.disqualified ? { base: 0, clean: 0, best: 0, penalty: 0, total: 0, assisted: command.input.assisted } : calculated;
-      reward.bonus = completion.bonus; reward.total = Math.max(0, reward.base + reward.clean + reward.best + reward.bonus + (reward.obstacles ?? 0) - reward.penalty);
+      reward.bonus = completion.bonus; reward.total = Math.max(0, reward.base + reward.clean + reward.best + reward.bonus + (reward.obstacles ?? 0) + (reward.placement ?? 0) - reward.penalty);
       if (!Number.isSafeInteger(next.balance + reward.total)) throw new Error('포인트 한도를 초과했습니다.');
       next.balance += reward.total; next.rewards[command.input.raceId] = reward; break;
     }
@@ -160,20 +169,20 @@ export function applyCommand(current: Progress, command: ProgressCommand): Progr
       if (next.focusUses[command.id] !== 'pending') return next;
       next.focusUses[command.id] = 'used'; break;
     case 'rival-buy': {
-      if (command.mode !== 'competition' || !isRivalItem(command.item)) throw new Error('AI 경주 전용 아이템입니다.');
+      if (command.mode !== 'competition' || !isRivalItem(command.item)) throw new Error('경쟁 레이스 전용 아이템입니다.');
       const item = RIVAL_ITEMS.find(item => item.id === command.item)!;
       const pending = Object.values(next.rivalUses).filter(use => use.item === command.item && use.state === 'pending').length;
       if (next.rivalInventory[command.item] + pending >= INVENTORY_LIMIT) throw new Error('보유 한도에 도달했습니다.');
       charge(item.price); next.rivalInventory[command.item]++; break;
     }
     case 'rival-slots': {
-      if (command.mode !== 'competition' || !Array.isArray(command.slots) || !command.slots.every(isRivalItem)) throw new Error('AI 경주 전용 아이템입니다.');
+      if (command.mode !== 'competition' || !Array.isArray(command.slots) || !command.slots.every(isRivalItem)) throw new Error('경쟁 레이스 전용 아이템입니다.');
       if (command.slots.length + next.focusSlots > 2) throw new Error('최대 2개를 장착할 수 있습니다.');
       for (const item of RIVAL_ITEMS) if (command.slots.filter(id => id === item.id).length > next.rivalInventory[item.id]) throw new Error('아이템 수량이 부족합니다.');
       next.rivalSlots = [...command.slots]; break;
     }
     case 'consume-rival': {
-      if (command.mode !== 'competition' || !isRivalItem(command.item)) throw new Error('AI 경주 전용 아이템입니다.');
+      if (command.mode !== 'competition' || !isRivalItem(command.item)) throw new Error('경쟁 레이스 전용 아이템입니다.');
       if (!command.id || command.id.length > 200) throw new Error('Invalid item receipt');
       if (own(next.rivalUses, command.id)) {
         if (next.rivalUses[command.id].item !== command.item) throw new Error('잘못된 아이템 영수증');

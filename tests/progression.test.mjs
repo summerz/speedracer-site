@@ -1,10 +1,27 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { initialProgress, applyCommand, validateProgress, calculateReward } from '../output/test/game/progression/progress.js';
+import { initialProgress, applyCommand, validateProgress, calculateReward, PLACEMENT_POINTS } from '../output/test/game/progression/progress.js';
 import { upgradedConfiguration, STARTER_ID, emptyLevels } from '../output/test/game/progression/catalog.js';
 import { createProgressStore } from '../output/test/game/progression/progressStore.js';
 const input = { raceId: 'race-1', difficulty: 'beginner', collisions: 0, offTrackExits: 0, recoveries: 0, penaltyPoints: 0, cleanHalfLaps: 6, improvedExistingBest: false, assisted: false };
 const funded = balance => ({ ...initialProgress(), balance });
+test('competitive finish positions earn distinct bonuses, while time attacks and old receipts stay unchanged', () => {
+  assert.deepEqual(PLACEMENT_POINTS, [80,55,35,20,12,8,4,0]);
+  for (const [index, bonus] of PLACEMENT_POINTS.entries()) {
+    const reward = calculateReward({...input, mode:'competition', rank:index+1});
+    assert.equal(reward.placement, bonus); assert.equal(reward.total, 118+bonus);
+  }
+  assert.equal(calculateReward({...input, mode:'time-attack',rank:1}).total,118);
+  assert.equal(calculateReward({...input, mode:'competition',rank:1,assisted:true}).total,178);
+  for (const rank of [undefined,0,9,1.5,NaN]) assert.throws(()=>calculateReward({...input,mode:'competition',rank}));
+  const paid=applyCommand(initialProgress(),{kind:'reward',input:{...input,mode:'competition',rank:2}});
+  assert.equal(validateProgress(paid).balance,173);
+  assert.deepEqual(applyCommand(paid,{kind:'reward',input:{...input,mode:'competition',rank:1}}),paid);
+  const old=applyCommand(initialProgress(),{kind:'reward',input}); delete old.rewards[input.raceId].placement;
+  assert.equal(validateProgress(old).balance,118);
+  const corrupt=structuredClone(paid); corrupt.rewards[input.raceId].placement=80;
+  assert.throws(()=>validateProgress(corrupt));
+});
 test('tier rewards, clean bonus, real best bonus and off-course deductions share one idempotent ledger', () => {
   for (const [difficulty, base] of [['beginner',100],['intermediate',150],['advanced',220]]) assert.equal(calculateReward({...input,difficulty}).total,base+18);
   assert.equal(calculateReward({...input,improvedExistingBest:true}).total,148);

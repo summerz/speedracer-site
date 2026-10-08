@@ -6,7 +6,7 @@
 
 ## 선택과 유지
 
-캠페인 24개 트랙은 타임어택/AI 레이스 모두 경기 준비 화면 진입 때 아래 5종을 같은 확률로 선택합니다. 일시정지·재도전에서는 선택된 환경을 유지하고 경기 화면을 나갔다 다시 들어올 때 새로 선택합니다. 캠페인 트랙이 없는 자유 주행은 한밤중을 사용합니다. 현재 낮 환경과 실시간 시간대 전환은 없습니다.
+캠페인 32개 트랙은 타임어택/경쟁 레이스 모두 경기 준비 화면 진입 때 아래 5종을 같은 확률로 선택합니다. 일시정지·재도전에서는 선택된 환경을 유지하고 경기 화면을 나갔다 다시 들어올 때 새로 선택합니다. 캠페인 트랙이 없는 자유 주행은 한밤중을 사용합니다. 현재 낮 환경과 실시간 시간대 전환은 없습니다.
 
 | 환경 ID / 이름 | 천체 | 겉보기 지름 / 중심 고도 ° | 천정 / 지평선 색 | 안개 색 / 밀도 | 별 강도 | 날씨 |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -36,5 +36,7 @@
 | 미드나이트 스카이라인 | 13 SKYLINE ASCENT / 14 TOWER WEAVE / 15 HELIX HEIGHTS / 16 NIGHTFALL DROP | 한밤중 / 깊은 밤 / 동트기 직전 / 해가 진 직후 / 폭풍우의 밤 |
 | 프리즘 연구도시 | 17 PHASE CORRIDOR / 18 PRISM BEND / 19 DOUBLE INVERSION / 20 FLUX SPIRAL | 한밤중 / 깊은 밤 / 동트기 직전 / 해가 진 직후 / 폭풍우의 밤 |
 | 오비탈 프런티어 | 21 ORBITAL RISE / 22 APEX DESCENT / 23 INFINITY COIL / 24 ZERO HORIZON | 한밤중 / 깊은 밤 / 동트기 직전 / 해가 진 직후 / 폭풍우의 밤 |
+| 네온 항만 | 25 DOCKSIDE RUN / 26 CRANE CROSSING / 27 BREAKWATER ARC / 28 TIDAL KNOT | 한밤중 / 깊은 밤 / 동트기 직전 / 해가 진 직후 / 폭풍우의 밤 |
+| 솔라 사막기지 | 29 SOLAR APPROACH / 30 MIRAGE CLOVER / 31 SUNSPIRE DESCENT / 32 SOLSTICE CIRCUIT | 한밤중 / 깊은 밤 / 동트기 직전 / 해가 진 직후 / 폭풍우의 밤 |
 
 제작 데이터: `src/game/environment/raceEnvironment.ts`. 하늘/천체: `createNightSky.ts`. 비/번개: `createRaceWeather.ts`. 경기 진입 시 선택과 재도전 유지: `raceApp.ts`. 실제 iPhone의 GPU 프레임 시간·발열은 별도 실기 검증이 필요합니다.

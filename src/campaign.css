@@ -16,11 +16,16 @@
 .campaign-courses { display:flex; flex-direction:column; min-height:0; }
 .campaign-modes { display:flex; gap:8px; }
 .campaign-modes button,.course-card { color:#c9dadf; background:#0b1c28; border:1px solid #58717d70; border-radius:5px; cursor:pointer; font:inherit; }
-.campaign-modes button { padding:12px 20px; flex:1; }
+.campaign-modes button { padding:12px 14px; flex:1; display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; min-height:54px; }
+.campaign-mode-count { padding:4px 7px; border:1px solid #58717d70; border-radius:4px; color:#b2c6ce; font-size:10px; white-space:nowrap; }
+.campaign-modes button[aria-pressed=true] .campaign-mode-count { color:#baffeb; border-color:#80ffe055; background:#80ffe00b; }
 .campaign-modes button[aria-pressed=true] { border-color:#80ffe0; background:#12312f; color:#baffeb; }
-.campaign-rule { color:#99adb9; font-size:12px; line-height:1.6; min-height:38px; }
+.campaign-rule { color:#b9cfd8; font-size:13px; line-height:1.6; min-height:44px; padding:10px 12px; background:#10232c; border-left:2px solid #80ffe0; }
+.campaign-rule strong { display:block; color:#e0f5ef; font-weight:500; }
+.campaign-rule > span { display:block; margin-top:3px; font-size:12px; }
+.district-description { margin:0 0 10px; font-size:11px; line-height:1.6; color:#99adb9; }
 .campaign-list { flex:1; min-height:0; overflow:auto; overscroll-behavior:contain; padding-right:6px; scrollbar-width:thin; }
-.course-district h3 { font-size:12px; color:#849ca9; font-weight:500; margin:18px 0 8px; }
+.course-district h3 { border-left:2px solid var(--district-color); padding-left:8px; font-size:12px; color:var(--district-color,#849ca9); font-weight:500; margin:18px 0 8px; }
 .course-district>div { display:grid; gap:6px; }
 .course-card { display:flex; align-items:center; gap:14px; padding:12px 14px; width:100%; text-align:left; min-height:65px; }
 .course-card:hover { border-color:var(--district-color); }
@@ -168,3 +173,7 @@
 .course-routes strong { font-size:12px; color:#dcf8ef; }
 .course-routes span,.course-routes small { font-size:10px; line-height:1.5; color:#9bb4c1; }
 @media(max-width:480px) { .course-routes>div { grid-template-columns:1fr; gap:10px; } }
+
+@media (max-width:480px) {
+  .campaign-modes button { flex-direction:column; align-items:flex-start; justify-content:center; gap:8px; }
+}

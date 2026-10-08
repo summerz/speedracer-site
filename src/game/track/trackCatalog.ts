@@ -1,11 +1,16 @@
 import type { CourseLayout, CourseShape } from './trackAuthoring.js';
 import type { BranchRecipe } from './trackBranches.js';
 
-export type DistrictId = 'residential' | 'industrial' | 'stadium' | 'skyline' | 'research' | 'orbital';
-export const DISTRICTS: Record<DistrictId, { name: string; color: string }> = {
-  residential: { name: '네온 주거지', color: '#67dcd0' }, industrial: { name: '전력 산업구역', color: '#ffac52' },
-  stadium: { name: '그랜드 아레나', color: '#e886bc' }, skyline: { name: '미드나이트 스카이라인', color: '#91aeff' },
-  research: { name: '프리즘 연구도시', color: '#ba94ff' }, orbital: { name: '오비탈 프런티어', color: '#e4eebb' },
+export type DistrictId = 'residential' | 'industrial' | 'stadium' | 'skyline' | 'research' | 'orbital' | 'harbor' | 'desert';
+export const DISTRICTS: Record<DistrictId, { name: string; color: string; description: string }> = {
+  residential: { name: '네온 주거지', color: '#67dcd0', description: '층별 창 조명과 주거 타워 · 순환로와 블록 사이 입체 주행' },
+  industrial: { name: '전력 산업구역', color: '#ffac52', description: '반응로와 전력 기둥 · 공장 사이 연속 코일과 급강하' },
+  stadium: { name: '그랜드 아레나', color: '#e886bc', description: '층층이 쌓인 관중석과 경기장 · 넓은 곡선과 상하 교차' },
+  skyline: { name: '미드나이트 스카이라인', color: '#91aeff', description: '고층 첨탑과 공중 연결교 · 큰 고저차와 타워 사이 코일' },
+  research: { name: '프리즘 연구도시', color: '#ba94ff', description: '발광 돔과 계단형 연구 시설 · 짧은 회전 구간과 입체 매듭' },
+  orbital: { name: '오비탈 프런티어', color: '#e4eebb', description: '떠 있는 건물과 거대한 궤도 링 · 공중 교차와 연속 반전' },
+  harbor: { name: '네온 항만', color: '#5acbff', description: '낮은 창고와 크레인 · 부두 순환로, 연결교와 입체 8자' },
+  desert: { name: '솔라 사막기지', color: '#e9c96b', description: '낮은 계단형 기지와 태양광 패널 · 넓은 곡선과 압축된 연속 회전' },
 };
 export interface TrackDefinition {
   readonly id: string; readonly name: string; readonly revision: number; readonly order: number;
@@ -42,15 +47,23 @@ const recipes: [string, DistrictId, number, string, CourseLayout | null][] = [
   ['APEX DESCENT', 'orbital', 4, '기울어진 엄지형 · 급강하 · 연속 노면 720° 회전', footprint('thumb', 674, 617, 257, 2, 0.45, [stunt('roll', .42, .16, 0, 2, 1)], 1.1)],
   ['INFINITY COIL', 'orbital', 3, '입체 무한대 · 코일 · 수직 루프', footprint('eight', 465, 322, 107, 1, 0.45, [stunt('helix', .1, .18, 22, 4, -1), stunt('loop', .67, .05, 47, 1, -1)], -.35)],
   ['ZERO HORIZON', 'orbital', 4, '입체 매듭 · 루프 · 코일 · 완전 회전', footprint('knot', 357, 316, 208, 3, 0.45, [stunt('loop', .08, .038, 50, 1, 1), stunt('roll', .18, .07, 0, 1, -1), stunt('helix', .3, .07, 20, 2, 1), stunt('loop', .48, .038, 46, 1, -1), stunt('helix', .59, .12, 26, 3, -1), stunt('roll', .78, .1, 0, 2, 1)], .4)],
+  ['DOCKSIDE RUN', 'harbor', 2, '부두 순환로 · 상승 루프 · 우회전 코일', footprint('ring', 475, 400, 32, 1, .16, [stunt('loop', .17, .08, 60, 1, 1), stunt('helix', .59, .15, 25, 2, 1)])],
+  ['CRANE CROSSING', 'harbor', 3, '크레인 사이 8자 · 상하 교차 · 좌우 노면 회전', footprint('eight', 594, 414, 95, 1, .35, [stunt('roll', .15, .11, 0, 1, 1), stunt('roll', .66, .12, 0, 1, -1)], .3)],
+  ['BREAKWATER ARC', 'harbor', 3, '방파제 말굽 · 양방향 루프 · 급강하', footprint('horseshoe', 430, 360, 80, 2, .3, [stunt('loop', .21, .07, 60, 1, 1), stunt('loop', .64, .07, 60, 1, -1)], -.5)],
+  ['TIDAL KNOT', 'harbor', 4, '부두 입체 매듭 · 좌우 코일 · 완전 회전', footprint('knot', 320, 280, 125, 2, .4, [stunt('helix', .1, .13, 24, 2, -1), stunt('roll', .4, .1, 0, 1, -1), stunt('helix', .65, .13, 24, 2, 1)], .4)],
+  ['SOLAR APPROACH', 'desert', 2, '기지 외곽 콩 모양 · 넓은 상승 · 루프와 노면 회전', footprint('kidney', 470, 380, 45, 1, .18, [stunt('loop', .19, .08, 62, 1, 1), stunt('roll', .65, .13, 0, 1, -1)], .8)],
+  ['MIRAGE CLOVER', 'desert', 2, '세 잎 기지 순환로 · 낮은 코일 · 반대 방향 노면 회전', footprint('clover', 468.75, 412.5, 50, 2, .22, [stunt('helix', .14, .16, 22, 2, -1), stunt('roll', .62, .12, 0, 1, 1)], -.4)],
+  ['SUNSPIRE DESCENT', 'desert', 3, '비대칭 엄지형 · 상승 코일 · 급강하 루프', footprint('thumb', 500, 435, 120, 2, .35, [stunt('helix', .11, .15, 27, 2, 1), stunt('loop', .57, .07, 65, 1, -1)], .5)],
+  ['SOLSTICE CIRCUIT', 'desert', 4, '압축된 삼각 순환로 · 루프 2곳 · 코일 2곳 · 완전 회전 2곳', footprint('triangle', 395, 345, 70, 2, .35, [stunt('loop', .07, .055, 50, 1, -1), stunt('roll', .21, .07, 0, 1, 1), stunt('helix', .35, .1, 20, 2, -1), stunt('loop', .53, .055, 50, 1, 1), stunt('helix', .68, .1, 20, 2, 1), stunt('roll', .85, .07, 0, 1, -1)], .2)],
 ];
 // Lap limits are explicit playtesting targets; distance, stunt count and challenge are independent.
-const lapLimits = [104, 108, 91, 100, 76, 130, 100, 111, 84, 108, 136, 96, 71, 106, 118, 98, 92, 76, 133, 116, 96, 127, 101, 148];
+const lapLimits = [104, 108, 91, 100, 76, 130, 100, 111, 84, 108, 136, 96, 71, 106, 118, 98, 92, 76, 133, 116, 96, 127, 101, 148, 95, 105, 101, 126, 99, 90, 104, 107];
 export const TRACK_CATALOG: readonly TrackDefinition[] = Object.freeze(recipes.map((r, i) => {
   const levels = r[2] <= 2 ? 2 : r[2] === 3 ? 3 : 4;
   const pattern = levels === 2 ? [1, 0, 1, 0] : levels === 3 ? [2, 0, 1, 2, 1, 0] : [3, 0, 1, 2, 3, 1, 2, 0];
   const id = r[0].toLowerCase().replaceAll(' ', '-');
-  const branchCourses = [0, 1, 4, 5, 6, 8, 9, 12, 13, 15, 16, 17, 20, 21, 23];
-  const experience: BranchRecipe['experience'] = ({ residential: 'city', industrial: 'reactor', stadium: 'arena', skyline: 'sky', research: 'prism', orbital: 'orbit' } as const)[r[1]];
+  const branchCourses = [0, 1, 4, 5, 6, 8, 9, 12, 13, 15, 16, 17, 20, 21, 23, 24, 25, 28, 29];
+  const experience: BranchRecipe['experience'] = ({ residential: 'city', industrial: 'reactor', stadium: 'arena', skyline: 'sky', research: 'prism', orbital: 'orbit', harbor: 'sky', desert: 'reactor' } as const)[r[1]];
   const branches: readonly BranchRecipe[] = branchCourses.includes(i) ? Object.freeze([Object.freeze({ id: `${id}-fork`,
     kind: i % 4 === 1 ? 'vertical' as const : 'horizontal' as const, experience, direction: i % 2 ? -1 as const : 1 as const,
     intertwined: [6, 13, 17, 23].includes(i) })]) : [];

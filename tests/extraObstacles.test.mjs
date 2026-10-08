@@ -9,7 +9,7 @@ import { createRaceRecords } from '../output/test/game/driving/raceRecords.js';
 import { DEFAULT_DRONE_CONFIGURATION } from '../output/test/game/drone/droneConfiguration.js';
 import { ALTITUDE_PROFILES } from '../output/test/game/track/altitudeProfile.js';
 
-test('all 24 courses introduce both hazards on normal/hard while easy keeps static fields', () => {
+test('all catalog courses introduce both hazards on normal/hard while easy keeps static fields', () => {
   for (const definition of TRACK_CATALOG) {
     const easy = createCatalogTrack(definition, 'easy');
     assert.equal(easy.corridorObstacles?.length ?? 0, 0);

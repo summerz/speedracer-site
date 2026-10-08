@@ -318,7 +318,7 @@ export function createRace(
       : views.trackDisplay === 'primary' ? `${VIEW_LABELS[views.view]} · C 전환 / X 닫기` : '전체 트랙 · X 자리 교환';
     if (mode === 'competition' && views.trackDisplay === 'pip') {
       const legend = document.createElement('span'); legend.className = 'race-map-legend';
-      legend.textContent = '◎ 나 · ◆ AI'; pipFrame.append(legend);
+      legend.textContent = '◎ 나 · ◆ 상대'; pipFrame.append(legend);
     }
   };
   const observer = new ResizeObserver(resize); observer.observe(container);
