@@ -5,17 +5,16 @@ import { CRAFT_PRICES, craftResaleValue, STARTER_ID, emptyLevels, FOCUS_PRICE, R
 import type { UpgradeId, RivalItemId } from './game/progression/catalog';
 import type { ProgressCommand } from './game/progression/progress';
 import type { ProgressStore } from './game/progression/progressStore';
+import { craftCards, revealSelectedCard } from './craftCards';
 import './shop.css';
 
 export function mountShop(root: HTMLDivElement, store: ProgressStore, onBack: () => void) {
   document.title = 'Speedracer · 상점';
-  const total = DRONE_CATALOG.length;
   root.innerHTML = `<main class="shop-screen" data-view="craft">
     ${menuHeader('shop', store.snapshot().balance)}
     <nav class="shop-tabs shop-top-tabs" aria-label="상품 종류"><button type="button" data-tab="craft" aria-pressed="true">기체</button><button type="button" data-tab="item" aria-pressed="false">아이템</button></nav>
-    <section class="shop-hero" aria-label="선택 기체 미리보기"><div class="shop-preview"><div id="shop-scene" class="scene"></div><div class="shop-preview-label"><strong id="shop-preview-name"></strong><span id="shop-preview-role"></span></div><em id="shop-preview-badge" class="shop-badge"></em><button id="shop-preview-reset" type="button">시점 초기화</button>
-      <button type="button" class="shop-arrow is-prev" data-craft-step="-1" data-own-horizontal-keys aria-label="이전 기체"><span aria-hidden="true">◀</span></button><button type="button" class="shop-arrow is-next" data-craft-step="1" data-own-horizontal-keys aria-label="다음 기체"><span aria-hidden="true">▶</span></button></div>
-      <div class="shop-pager" role="group" aria-label="기체 선택">${DRONE_CATALOG.map(craft => `<button type="button" class="shop-dot" data-craft="${craft.configuration.id}" style="--craft-color:${craft.lineColor}"><i aria-hidden="true"></i></button>`).join('')}<b id="shop-pager-count" class="mono"></b></div></section>
+    <section class="shop-picker" aria-label="기체 목록"><h2 id="shop-picker-title" class="shop-picker-title"></h2><div id="shop-picker-cards"></div></section>
+    <section class="shop-hero" aria-label="선택 기체 미리보기"><div class="shop-preview"><div id="shop-scene" class="scene"></div><div class="shop-preview-label"><strong id="shop-preview-name"></strong><span id="shop-preview-role"></span></div><em id="shop-preview-badge" class="shop-badge"></em><button id="shop-preview-reset" type="button">시점 초기화</button></div></section>
     <section class="shop-content">
     <p id="shop-message" class="shop-message" role="status" aria-live="polite"></p><div id="shop-products"></div></section></main>`;
   const get = <T extends HTMLElement = HTMLElement>(id: string) => root.querySelector<T>(`#${id}`)!;
@@ -51,13 +50,15 @@ export function mountShop(root: HTMLDivElement, store: ProgressStore, onBack: ()
     const statusOf = (id: string) => profile.equipped === id ? '장착 중' : profile.owned.includes(id) ? '보유' : `${CRAFT_PRICES[id].toLocaleString()} P`;
     get('shop-preview-badge').textContent = statusOf(selected);
     get('shop-preview-badge').dataset.state = profile.equipped === selected ? 'equipped' : profile.owned.includes(selected) ? 'owned' : 'price';
-    const index = DRONE_CATALOG.findIndex(craft => craft.configuration.id === selected);
-    const neighbour = (step: number) => DRONE_CATALOG[(index + step + total) % total].name;
     const hero = root.querySelector<HTMLElement>('.shop-hero')!; hero.style.setProperty('--craft-color', entry.lineColor);
-    root.querySelector('.shop-arrow.is-prev')!.setAttribute('aria-label', `이전 기체 · ${neighbour(-1)}`);
-    root.querySelector('.shop-arrow.is-next')!.setAttribute('aria-label', `다음 기체 · ${neighbour(1)}`);
-    root.querySelectorAll<HTMLButtonElement>('.shop-dot').forEach(dot => { const id = dot.dataset.craft!; const name = DRONE_CATALOG.find(craft => craft.configuration.id === id)!.name; dot.setAttribute('aria-pressed', String(id === selected)); dot.setAttribute('aria-label', `${name} · ${statusOf(id)}`); dot.classList.toggle('is-owned', profile.owned.includes(id)); });
-    get('shop-pager-count').textContent = `${index + 1}/${total}`;
+    const picker = get('shop-picker-cards'); const focused = picker.contains(document.activeElement) ? (document.activeElement as HTMLElement).dataset.craft : undefined; const scroll = picker.querySelector('.craft-cards')?.scrollLeft ?? 0;
+    get('shop-picker-title').textContent = `기체 ${DRONE_CATALOG.length}종 · 보유 ${profile.owned.length}`;
+    picker.innerHTML = craftCards({ entries: DRONE_CATALOG, selectedId: selected, attr: 'data-craft', label: '기체 선택', status: craft => {
+      const id = craft.configuration.id;
+      return profile.equipped === id ? { label: '✓ 장착 중', tone: 'equipped' } : profile.owned.includes(id) ? { label: '보유', tone: 'owned' } : { label: `${CRAFT_PRICES[id].toLocaleString()} P`, tone: CRAFT_PRICES[id] > profile.balance ? 'warn' : 'price' };
+    } });
+    revealSelectedCard(picker, scroll);
+    if (focused) picker.querySelector<HTMLElement>(`[data-craft="${focused}"]`)?.focus({ preventScroll: true });
     if (tab === 'craft') {
       const owned = profile.owned.includes(selected); const price = CRAFT_PRICES[selected];
       const isEquipped = profile.equipped === selected;
@@ -89,7 +90,7 @@ export function mountShop(root: HTMLDivElement, store: ProgressStore, onBack: ()
       get('shop-products').innerHTML = `<div class="shop-detail"><div class="shop-title"><p class="eyebrow">${entry.role}</p><h2>${entry.name}</h2><p class="shop-desc">${entry.description}</p></div><div class="shop-action-zone">${isEquipped ? '<div class="shop-action shop-buy is-status"><strong class="equipped-status">✓ 장착 중</strong></div>' : `<div class="shop-action shop-buy"><div class="shop-buy-info"><span>${owned ? '보유' : '가격'}</span>${owned ? '' : `<strong>${price.toLocaleString()} P</strong>`}${owned ? '' : insufficient(price, profile.balance)}</div><button type="button" class="primary-action" data-action="${owned ? 'equip' : 'craft'}" ${busy || !owned && price > profile.balance ? 'disabled' : ''}>${owned ? '이 기체 장착' : `<span class="full">${price.toLocaleString()} P · 구매</span><span class="short">구매하기</span>`}</button></div>`}${sale}</div><nav class="shop-tabs shop-subtabs" aria-label="기체 정보"><button type="button" data-subtab="stats" aria-pressed="${sub === 'stats'}">성능</button><button type="button" data-subtab="upgrade" aria-pressed="${sub === 'upgrade'}">강화</button></nav><div class="shop-subview" style="--craft-color:${entry.lineColor}">${sub === 'stats' ? statsView : upgradeView}</div></div>`;
     } else {
       get('shop-products').innerHTML = `<div class="shop-detail"><p class="eyebrow">RACE ITEMS</p><h2>주행 아이템</h2><p class="shop-note">장착은 캠페인에서 트랙을 고른 뒤 출전 직전에 선택합니다 <a href="#campaign">캠페인으로 ↗</a></p><div class="shop-item-grid">${(() => {
-        const card = (name: string, desc: string, stock: number, price: number, attrs: string, only: boolean) => `<article class="shop-upgrade shop-item"><div class="item-head"><h3>${name}</h3>${only ? '<span class="scope">경쟁 레이스 전용</span>' : ''}<span class="stock">보유 ${stock} / ${INVENTORY_LIMIT}</span><div class="shop-action"><button type="button" class="primary-action" ${attrs} ${busy || stock >= INVENTORY_LIMIT || profile.balance < price ? 'disabled' : ''}>${price} P · 1개 구매</button>${stock >= INVENTORY_LIMIT ? '<small>최대 보유</small>' : insufficient(price, profile.balance)}</div></div><p>${desc}</p></article>`;
+        const card = (name: string, desc: string, stock: number, price: number, attrs: string, only: boolean) => `<article class="shop-upgrade shop-item"><div class="item-name"><h3>${name}</h3>${only ? '<span class="scope">경쟁 레이스 전용</span>' : ''}</div><p>${desc}</p><span class="stock">보유 ${stock} / ${INVENTORY_LIMIT}</span><div class="shop-action"><button type="button" class="primary-action" ${attrs} ${busy || stock >= INVENTORY_LIMIT || profile.balance < price ? 'disabled' : ''}>${price} P · 1개 구매</button>${stock >= INVENTORY_LIMIT ? '<small>최대 보유</small>' : insufficient(price, profile.balance)}</div></article>`;
         return card('집중 모드', '2초 동안 모든 기체의 주행을 45% 속도로 늦춥니다. 경기 시계는 정상적으로 흐릅니다. · 모든 모드', profile.focus, FOCUS_PRICE, 'data-action="focus"', false)
           + RIVAL_ITEMS.map(item => card(item.name, item.description, profile.rivalInventory[item.id], item.price, `data-rival-buy="${item.id}"`, true)).join('');
       })()}</div><div class="shop-footnote"><p>합계 2개 장착 · 공통 재사용 대기 3초. 아이템 장착 경기는 보조 기록으로 분리하며 기본 보상은 80%, 기록 갱신 보너스는 없습니다. 사용하지 않은 수량은 남습니다.</p><p>타임어택에서는 상대 기체 대상 아이템이 출전에 포함되지 않습니다. 전파 교란은 앞쪽 180m 안에 대상이 없으면 소비하지 않습니다. V / 패드 LB로 사용 가능한 다음 아이템을 쓰거나 주행 버튼을 눌러 선택하세요.</p></div></div>`;
@@ -101,14 +102,12 @@ export function mountShop(root: HTMLDivElement, store: ProgressStore, onBack: ()
     catch (error) { if (!disposed) get('shop-message').textContent = error instanceof Error ? error.message : '저장하지 못했습니다.'; }
     finally { busy = false; if (!disposed) render(); }
   };
-  const step = (by: number) => { const index = DRONE_CATALOG.findIndex(craft => craft.configuration.id === selected); selected = DRONE_CATALOG[(index + by + total) % total].configuration.id; salePending = false; render(); };
   root.addEventListener('click', event => {
     const button = (event.target as Element).closest<HTMLButtonElement>('button');
     if (!button || button.disabled || busy) return;
     if (button.dataset.rivalBuy) void purchase({ kind: 'rival-buy', item: button.dataset.rivalBuy as RivalItemId, mode: 'competition' });
     else if (button.dataset.tab) { tab = button.dataset.tab as typeof tab; salePending = false; render(); }
     else if (button.dataset.subtab) { sub = button.dataset.subtab as typeof sub; render(); }
-    else if (button.dataset.craftStep) step(Number(button.dataset.craftStep));
     else if (button.dataset.craft) { selected = button.dataset.craft; salePending = false; render(); }
     else if (button.dataset.action === 'sell') { salePending = true; render(); }
     else if (button.dataset.action === 'cancel-sale') { salePending = false; render(); }
@@ -116,10 +115,6 @@ export function mountShop(root: HTMLDivElement, store: ProgressStore, onBack: ()
     else if (button.dataset.upgrade) void purchase({ kind: 'upgrade', id: selected, upgrade: button.dataset.upgrade as UpgradeId });
     else if (button.dataset.action === 'focus') void purchase({ kind: 'focus' });
     else if (button.dataset.action === 'craft' || button.dataset.action === 'equip') void purchase({ kind: button.dataset.action, id: selected });
-  }, options);
-  root.addEventListener('keydown', event => {
-    if (!(event.target as Element).closest('.shop-arrow') || busy || (event.code !== 'ArrowLeft' && event.code !== 'ArrowRight')) return;
-    event.preventDefault(); step(event.code === 'ArrowLeft' ? -1 : 1);
   }, options);
   get('shop-back').addEventListener('click', onBack, options);
   get('shop-preview-reset').addEventListener('click', () => hangar.setView('reset'), options);

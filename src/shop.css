@@ -1,10 +1,12 @@
 /* Screen: header row auto, body fills the rest. Never hardcode the header height. */
-.shop-screen { height: 100dvh; display: grid; grid-template-columns: minmax(0, 1fr) minmax(380px, 540px); grid-template-rows: auto auto minmax(0, 1fr); background: #080f16; overflow: hidden; }
+.shop-screen { --pad: max(4.5%, env(safe-area-inset-left)); height: 100dvh; display: grid; grid-template-columns: minmax(0, 1fr) minmax(440px, 600px); grid-template-rows: auto auto auto minmax(0, 1fr); background: #080f16; overflow: hidden; }
 .shop-screen > .menu-header, .shop-top-tabs { grid-column: 1 / -1; }
-.shop-screen .shop-top-tabs { margin: 8px 16px; }
+.shop-screen .shop-top-tabs { margin: 12px var(--pad) 8px; }
 
-/* Hero: 3D preview + craft cycling (arrows overlaid, dot pager below) */
-.shop-hero { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+/* Hero: 3D preview. Craft cards sit above it (P) or at the top of the right column (L, D). */
+.shop-hero { grid-column: 1; grid-row: 3 / 5; display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.shop-picker { grid-column: 2; grid-row: 3; min-width: 0; padding: 12px 24px 0; border-left: 1px solid #213340; }
+.shop-picker-title { margin: 0 0 8px; font: 600 15px 'Barlow Condensed', sans-serif; letter-spacing: .06em; color: #adbfcc; }
 .shop-preview { position: relative; flex: 1; min-height: 0; overflow: hidden; }
 .shop-preview .scene { position: absolute; inset: 0; }
 .shop-preview-label { position: absolute; bottom: 20px; left: 28px; right: 160px; display: grid; gap: 4px; pointer-events: none; text-shadow: 0 2px 8px #000; }
@@ -14,22 +16,11 @@
 .shop-badge { position: absolute; top: 16px; left: 20px; padding: 3px 10px; border: 1px solid #58717d80; border-radius: 3px; background: #07131fcc; color: #c9dadf; font: 500 12px 'IBM Plex Mono', monospace; font-style: normal; font-variant-numeric: tabular-nums; pointer-events: none; }
 .shop-badge[data-state=equipped] { color: #80ffe0; border-color: #56dacf90; }
 .shop-badge[data-state=owned] { color: #b6f0e3; }
-.shop-arrow { position: absolute; top: 50%; transform: translateY(-50%); width: 52px; height: 52px; padding: 0; display: grid; place-items: center; border-radius: 50%; font-size: 18px; line-height: 1; }
-.shop-arrow.is-prev { left: 14px; }
-.shop-arrow.is-next { right: 14px; }
-.shop-pager { flex: none; display: flex; align-items: center; justify-content: center; gap: 2px; min-height: 52px; border-top: 1px solid #213340; background: #07131f; }
-.shop-pager .mono { margin-left: 10px; min-width: 32px; color: #8ca5b5; font: 500 12px 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; }
-.shop-dot i { display: block; width: 14px; height: 14px; margin: auto; border-radius: 50%; border: 2px solid var(--craft-color); box-sizing: border-box; transition: transform 160ms, box-shadow 160ms; }
-.shop-dot.is-owned i { background: var(--craft-color); }
-.shop-dot[aria-pressed=true] i { transform: scale(1.5); box-shadow: 0 0 0 3px #080f16, 0 0 0 4px var(--craft-color); }
-.shop-screen[data-view=item] .shop-hero { display: none; }
-.shop-screen[data-view=item] .shop-content { grid-column: 1 / -1; border-left: 0; }
-.shop-screen[data-view=item] .shop-detail { max-width: 880px; margin: 0 auto; }
-.shop-item-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; align-items: start; }
-.shop-item-grid .shop-upgrade { margin-top: 0; }
-.shop-item-grid .item-head .shop-action { margin-left: 0; width: 100%; align-items: stretch; }
+.shop-screen[data-view=item] :is(.shop-hero, .shop-picker) { display: none; }
+.shop-screen[data-view=item] .shop-content { grid-column: 1 / -1; grid-row: 3 / 5; padding-inline: var(--pad); border-left: 0; }
+.shop-item-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
 
-.shop-content { min-width: 0; min-height: 0; overflow-y: auto; padding: 16px 24px 40px; border-left: 1px solid #213340; }
+.shop-content { grid-column: 2; grid-row: 4; min-width: 0; min-height: 0; overflow-y: auto; padding: 16px 24px 40px; border-left: 1px solid #213340; }
 .shop-tabs { display: flex; gap: 8px; }
 .shop-tabs button { flex: 1; min-height: 44px; }
 .shop-subtabs { margin: 14px 0 4px; }
@@ -111,27 +102,26 @@
 .pips i { width: 9px; height: 9px; border-radius: 50%; border: 1px solid #58717d; }
 .pips i.on { background: #56dacf; border-color: #56dacf; }
 .shop-upgrade .shop-action { align-items: stretch; min-width: 128px; text-align: center; }
-.shop-item { grid-template-columns: 1fr; }
-.item-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
-.item-head .shop-action { margin-left: auto; align-items: flex-end; }
+.shop-item { display: flex; flex-direction: column; align-items: stretch; gap: 8px; margin-top: 0; }
+.shop-item p { margin: 0; }
+.shop-item .stock { align-self: flex-start; }
+.shop-item .shop-action { margin-top: auto; align-items: stretch; min-width: 0; }
+.item-name { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.item-name h3 { margin: 0; }
 .stock, .scope { padding: 2px 8px; border: 1px solid #56dacf50; border-radius: 3px; color: #80ffe0; font: 11px 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; }
 .scope { border-color: #a598ee70; color: #cfc4ff; }
 .shop-footnote { margin-top: 16px; padding-top: 10px; border-top: 1px solid #213340; }
 .shop-footnote p { margin: 0 0 6px; font-size: 11px; line-height: 1.6; color: #6f8694; }
 
 /* Reuse the race controls' surface, type scale and accent hierarchy. */
-.shop-screen > :not(.menu-header) button:not(.primary-action):not(.shop-arrow):not(.shop-dot), .race-focus, #reward-retry, #result-shop {
+.shop-screen > :not(.menu-header) button:not(.primary-action):not(.craft-card), .race-focus, #reward-retry, #result-shop {
   appearance: none; border: 1px solid #58717d70; border-radius: 3px; background: #0b1c28; color: #c9dadf;
   min-height: 44px; padding: 10px 16px; font: 500 12px/1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   touch-action: manipulation; transition: background 160ms, border-color 160ms, color 160ms;
 }
-.shop-screen > :not(.menu-header) button:not(.primary-action):not(.shop-arrow):not(.shop-dot):hover:not(:disabled), #result-shop:hover, #reward-retry:hover { background: #17303c; border-color: #7bafb880; }
-.shop-screen > :not(.menu-header) button[aria-pressed='true']:not(.shop-dot) { color: var(--accent); border-color: #56dacf80; background: #56dacf13; }
+.shop-screen > :not(.menu-header) button:not(.primary-action):not(.craft-card):hover:not(:disabled), #result-shop:hover, #reward-retry:hover { background: #17303c; border-color: #7bafb880; }
+.shop-screen > :not(.menu-header) button[aria-pressed='true']:not(.craft-card) { color: var(--accent); border-color: #56dacf80; background: #56dacf13; }
 .shop-screen > :not(.menu-header) button:disabled { opacity: .45; }
-.shop-screen .shop-arrow, .shop-screen .shop-dot { appearance: none; background: transparent; cursor: pointer; touch-action: manipulation; }
-.shop-screen .shop-arrow { border: 1px solid #7bafb870; background: #07131fd9; color: #e4f1f3; backdrop-filter: blur(4px); transition: border-color 160ms, color 160ms, background 160ms; }
-.shop-screen .shop-arrow:hover, .shop-screen .shop-arrow:focus-visible { border-color: var(--craft-color); color: var(--craft-color); background: #0b1c28; }
-.shop-screen .shop-dot { width: 44px; min-height: 44px; padding: 0; border: 0; border-radius: 4px; }
 .shop-screen .shop-tabs { padding: 4px; border: 1px solid #58717d45; border-radius: 4px; background: #07131f; }
 .shop-tabs button { border-color: transparent !important; }
 .shop-screen .primary-action { border-radius: 3px; justify-content: center; }
@@ -158,13 +148,10 @@
 @media (max-width: 760px) and (orientation: portrait) {
   .shop-screen { display: flex; flex-direction: column; height: 100dvh; }
   .shop-hero { flex: none; }
-  .shop-preview { flex: none; height: 260px; }
+  .shop-preview { flex: none; height: 220px; }
   .shop-preview-label { bottom: 12px; left: 16px; right: 120px; }
   .shop-preview-label strong { font-size: 28px; }
   #shop-preview-reset { bottom: 12px; right: 12px; min-height: 36px; padding: 6px 12px; }
-  .shop-arrow.is-prev { left: 8px; }
-  .shop-arrow.is-next { right: 8px; }
-  .shop-pager { min-height: 48px; }
   .shop-content { flex: 1; min-height: 0; padding: 10px 16px 16px; border-left: 0; border-top: 1px solid #213340; }
   .shop-screen[data-view=craft] .shop-content { padding-bottom: calc(88px + env(safe-area-inset-bottom)); }
   .shop-detail { padding-top: 6px; }
@@ -176,8 +163,9 @@
   .shop-upgrade .shop-action { flex-direction: row; align-items: center; justify-content: space-between; }
   .shop-upgrade .shop-action button { flex: 1; }
   .shop-item-grid { grid-template-columns: 1fr; }
-  .shop-upgrade .item-head .shop-action { flex-direction: column; }
-  .shop-upgrade .item-head .shop-action button { flex: none; }
+  .shop-upgrade.shop-item .shop-action { flex-direction: column; align-items: stretch; }
+  .shop-upgrade.shop-item .shop-action button { flex: none; }
+  .shop-picker { padding: 8px 16px 0; border-left: 0; }
   .shop-screen .shop-top-tabs { margin: 8px 16px 0; }
   .stat-row { grid-template-columns: 68px minmax(0, 1fr) 104px; gap: 8px; }
   .delta { min-width: 38px; }
@@ -189,12 +177,13 @@
   .shop-preview-label { bottom: 10px; left: 14px; right: 110px; }
   .shop-preview-label strong { font-size: 24px; }
   #shop-preview-reset { bottom: 10px; right: 10px; min-height: 36px; padding: 6px 10px; }
-  .shop-arrow { width: 44px; height: 44px; }
-  .shop-arrow.is-prev { left: 8px; }
-  .shop-arrow.is-next { right: 8px; }
   .shop-badge { top: 10px; left: 14px; }
-  .shop-pager { min-height: 44px; }
   .shop-content { padding: 8px 16px 16px; }
+  .shop-picker { padding: 6px 16px 0; }
+  .shop-picker-title { margin-bottom: 4px; font-size: 13px; }
+  .shop-picker .craft-card { width: 96px; padding: 4px 8px 6px; }
+  .shop-picker .craft-card img { height: 36px; }
+  .shop-picker .craft-card-name { font-size: 16px; }
   .shop-message { margin: 4px 0 0; }
   .shop-detail { padding-top: 6px; }
   .shop-detail h2 { font-size: 24px; margin: 0; }
