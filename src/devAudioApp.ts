@@ -80,7 +80,7 @@ export function mountDevAudio(root: HTMLDivElement, balance: number, initialView
     root.querySelectorAll<HTMLButtonElement>('[data-view]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.view === view)));
     root.querySelector<HTMLElement>('[data-upload-hint]')!.textContent = kind === 'sfx' ? '효과음으로 보관 · 각 3초 이하 / 8MB 이하' : '배경음악으로 보관 · 각 20분 이하 / 32MB 이하';
     const previewToggle = root.querySelector<HTMLButtonElement>('[data-auto-preview]')!;
-    previewToggle.parentElement!.hidden = view !== 'library'; previewToggle.setAttribute('aria-pressed', String(autoPreview)); previewToggle.textContent = `미리듣기 ${autoPreview ? '켜짐' : '꺼짐'}`;
+    previewToggle.setAttribute('aria-pressed', String(autoPreview)); previewToggle.textContent = `미리듣기 ${autoPreview ? '켜짐' : '꺼짐'}`;
     updateTransport();
   };
   const renderEditor = () => {
@@ -151,7 +151,7 @@ export function mountDevAudio(root: HTMLDivElement, balance: number, initialView
         libraryId = target.dataset.audioId;
         list.querySelectorAll<HTMLElement>('[data-audio-id]').forEach(row => row.setAttribute('aria-pressed', String(row.dataset.audioId === libraryId)));
         renderEditor(); if (autoPreview) play(false);
-      } else { selected = DEV_AUDIO_CATALOG.find(entry => entry.id === target.dataset.audioId)!; render(); }
+      } else { selected = DEV_AUDIO_CATALOG.find(entry => entry.id === target.dataset.audioId)!; render(); if (autoPreview) play(false); }
     }
     else if (target.dataset.view) { if (target.dataset.view !== view) location.hash = `sound-lab?view=${target.dataset.view}`; }
     else if (target.dataset.kind) {
