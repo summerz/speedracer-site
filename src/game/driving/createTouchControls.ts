@@ -3,7 +3,9 @@ export type { TouchDrivingInput } from './touchInput';
 
 /** Pointer capture plus window-level termination prevents controls staying held. */
 export function createTouchControls(container: HTMLElement, actions: {
-  lift(direction: number): void; interact(): void; releaseBoost(): void;
+  lift(direction: number): void;
+  altitude(): { level: number; count: number }; selectAltitude(level: number): void;
+  interact(): void; releaseBoost(): void;
 }) {
   const media = window.matchMedia('(any-pointer: coarse)');
   const element = document.createElement('nav');
@@ -19,12 +21,15 @@ export function createTouchControls(container: HTMLElement, actions: {
     <div class="touch-flight" aria-label="고도와 부스트">
       <button type="button" class="touch-rise" data-lift="1" aria-label="고도 한 단계 상승">↑</button>
       <button type="button" class="touch-descend" data-lift="-1" aria-label="고도 한 단계 하강">↓</button>
-      <button type="button" class="touch-boost" aria-label="부스트: 누른 채 위아래로 밀어 고도 한 단계 변경, 가운데로 돌아와 다시 밀기"><span>BOOST</span><small>누른 채 ↕</small></button>
+      <button type="button" class="touch-boost" aria-label="부스트: 누른 채 위로 길게 밀수록 높은 고도, 아래로 길게 밀수록 낮은 고도 선택"><span>BOOST</span><small>누른 채 ↕</small></button>
+      <span class="touch-flight-cursor" aria-hidden="true" hidden></span>
     </div>`;
   container.append(element);
   const joystick = element.querySelector<HTMLButtonElement>('.touch-joystick')!;
   const knob = element.querySelector<HTMLElement>('.stick-knob')!;
   const boost = element.querySelector<HTMLButtonElement>('.touch-boost')!;
+  const flight = element.querySelector<HTMLElement>('.touch-flight')!;
+  const cursor = element.querySelector<HTMLElement>('.touch-flight-cursor')!;
   const rise = element.querySelector<HTMLButtonElement>('.touch-rise')!;
   const descend = element.querySelector<HTMLButtonElement>('.touch-descend')!;
   const buttons = [...element.querySelectorAll<HTMLButtonElement>('button')];
@@ -56,6 +61,8 @@ export function createTouchControls(container: HTMLElement, actions: {
     joystick.classList.toggle('is-held', input.stickPointer !== undefined);
     joystick.classList.toggle('is-braking', brake);
     boost.classList.toggle('is-held', input.read(true).boost);
+    cursor.hidden = input.boostPosition === null;
+    if (input.boostPosition !== null) cursor.style.top = `${input.boostPosition * 100}%`;
     rise.classList.toggle('is-swipe', input.boostDirection === 1);
     descend.classList.toggle('is-swipe', input.boostDirection === -1);
   };
@@ -81,8 +88,8 @@ export function createTouchControls(container: HTMLElement, actions: {
       input.moveStick(event.pointerId, event.clientX - rect.left - rect.width / 2,
         event.clientY - rect.top - rect.height / 2, rect.width * .3);
     } else {
-      const direction = input.moveBoost(event.pointerId, event.clientY);
-      if (direction) actions.lift(direction);
+      const level = input.moveBoost(event.pointerId, event.clientY);
+      if (level !== undefined) actions.selectAltitude(level);
     }
     paint();
   };
@@ -90,9 +97,16 @@ export function createTouchControls(container: HTMLElement, actions: {
     button.addEventListener('pointerdown', event => {
       if (!running || !media.matches || event.button !== 0) return;
       event.preventDefault(); actions.interact();
-      if (button.dataset.lift) { actions.lift(Number(button.dataset.lift)); return; }
+      if (button.dataset.lift) {
+        if (!input.read(true).boost) actions.lift(Number(button.dataset.lift));
+        return;
+      }
       if (button === joystick && !input.pressStick(event.pointerId)) return;
-      if (button === boost) input.pressBoost(event.pointerId, event.clientY);
+      if (button === boost) {
+        const rect = flight.getBoundingClientRect();
+        const { level, count } = actions.altitude();
+        if (!input.pressBoost(event.pointerId, event.clientY, level, count, rect.top, rect.bottom)) return;
+      }
       captures.set(event.pointerId, button);
       button.setPointerCapture(event.pointerId);
       if (button === joystick) move(event); else paint();

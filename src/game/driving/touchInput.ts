@@ -13,35 +13,46 @@ export function joystickPosition(x: number, y: number, radius: number) {
 export function createTouchInput() {
   let stick: number | undefined;
   let position = joystickPosition(0, 0, 1);
-  const boosts = new Map<number, { originY: number; direction: number }>();
+  let boost: { id: number; originY: number; originLevel: number; level: number; count: number; step: number; top: number; bottom: number; y: number } | undefined;
   return {
     get position() { return position; },
     get stickPointer() { return stick; },
-    get boostDirection() { return [...boosts.values()].find(gesture => gesture.direction)?.direction ?? 0; },
+    get boostDirection() { return boost ? Math.sign(boost.level - boost.originLevel) : 0; },
+    get boostPosition() { return boost ? (boost.y - boost.top) / (boost.bottom - boost.top) : null; },
     pressStick(id: number) { if (stick !== undefined) return false; stick = id; return true; },
     moveStick(id: number, x: number, y: number, radius: number) {
       if (id === stick) position = joystickPosition(x, y, radius);
     },
-    pressBoost(id: number, originY = 0) { boosts.set(id, { originY, direction: 0 }); },
-    /** One altitude step per swipe; returning near the press point rearms it. */
-    moveBoost(id: number, y: number): number {
-      const gesture = boosts.get(id);
-      if (!gesture) return 0;
-      const offset = y - gesture.originY;
-      if (Math.abs(offset) <= 10) { gesture.direction = 0; return 0; }
-      if (gesture.direction || Math.abs(offset) < 28) return 0;
-      gesture.direction = offset < 0 ? 1 : -1;
-      return gesture.direction;
+    pressBoost(id: number, originY = 0, level = 0, count = 2, top = originY - 120, bottom = originY + 120) {
+      if (boost) return false;
+      // The field stays the same size for every profile. More levels divide its travel.
+      const travel = Math.max(24, Math.min(originY - top, bottom - originY) - 8);
+      boost = { id, originY, originLevel: level, level, count, top, bottom, y: originY,
+        step: travel / Math.max(1, count - 1) };
+      return true;
+    },
+    /** Absolute selection anchored at press time; no recentering between levels. */
+    moveBoost(id: number, y: number): number | undefined {
+      if (!boost || id !== boost.id) return;
+      boost.y = Math.max(boost.top, Math.min(boost.bottom, y));
+      const offset = boost.originY - boost.y;
+      const value = Math.sign(offset) * Math.max(0, Math.abs(offset) - 8) / boost.step;
+      const previous = boost.level;
+      // Six pixels of hysteresis keep boundary jitter from switching back and forth.
+      const margin = Math.min(6 / boost.step, .2);
+      while (boost.level < boost.count - 1 && value > boost.level - boost.originLevel + .5 + margin) boost.level++;
+      while (boost.level > 0 && value < boost.level - boost.originLevel - .5 - margin) boost.level--;
+      return boost.level === previous ? undefined : boost.level;
     },
     release(id: number) {
-      const wasBoosting = boosts.size > 0;
-      boosts.delete(id);
+      const stoppedBoost = boost?.id === id;
+      if (stoppedBoost) boost = undefined;
       if (id === stick) { stick = undefined; position = joystickPosition(0, 0, 1); }
-      return wasBoosting && boosts.size === 0;
+      return stoppedBoost;
     },
-    reset() { stick = undefined; boosts.clear(); position = joystickPosition(0, 0, 1); },
+    reset() { stick = undefined; boost = undefined; position = joystickPosition(0, 0, 1); },
     read(running: boolean): TouchDrivingInput {
-      return { throttle: running && !position.brake, brake: running && position.brake, steer: running ? position.steer : 0, boost: running && boosts.size > 0 };
+      return { throttle: running && !position.brake, brake: running && position.brake, steer: running ? position.steer : 0, boost: running && boost !== undefined };
     },
   };
 }

@@ -243,3 +243,40 @@ test('boost speeds increase lateral travel for the same steering input', () => {
   assert.ok(responses[1] > responses[0] * 1.05);
   assert.ok(responses[2] > responses[1]);
 });
+
+
+test('direct altitude targets skip intermediate levels, move smoothly and survive boost release', () => {
+  for (const levels of [[1.8, 4, 6.2], [1.8, 3.2, 4.7, 6.2]]) {
+    const model = createDrivingModel({ ...straight, altitudeProfile: { levels, initialLevel: 0, transitionSeconds: .2 } });
+    model.step(0, input({ boost: true, targetAltitudeLevel: levels.length - 1 }));
+    assert.equal(model.state.altitudeLevel, levels.length - 1);
+    assert.equal(model.state.altitude, levels[0], 'selection must not teleport');
+    assert.equal(model.state.targetAltitude, levels.at(-1));
+    const charge = model.state.charge;
+    model.step(0, input({ boost: true, targetAltitudeLevel: levels.length - 1 }));
+    assert.equal(model.state.charge, charge, 'holding a selected level cannot keep charging a surcharge');
+    advance(model, .2, input());
+    assert.equal(model.state.altitude, levels.at(-1));
+    advance(model, .2, input());
+    assert.equal(model.state.altitudeLevel, levels.length - 1);
+    model.step(0, input({ targetAltitudeLevel: 0 }));
+    advance(model, .2, input());
+    assert.equal(model.state.altitude, levels[0]);
+  }
+});
+
+test('changing an altitude target during a transition completes the remaining travel promptly', () => {
+  const levels = [1.8, 3.2, 4.7, 6.2];
+  const model = createDrivingModel({ ...straight, altitudeProfile: { levels, initialLevel: 0, transitionSeconds: .2 } });
+  model.step(0, input({ targetAltitudeLevel: 3 }));
+  advance(model, .05, input());
+  model.step(0, input({ targetAltitudeLevel: 2 }));
+  advance(model, .2, input());
+  assert.equal(model.state.altitude, levels[2]);
+  model.step(0, input({ targetAltitudeLevel: -100 }));
+  assert.equal(model.state.altitudeLevel, 0);
+  model.step(0, input({ targetAltitudeLevel: 100 }));
+  assert.equal(model.state.altitudeLevel, 3);
+  model.step(0, input({ targetAltitudeLevel: NaN }));
+  assert.equal(model.state.altitudeLevel, 3);
+});

@@ -212,9 +212,16 @@ export function createRace(
       distance: physicalDistance(track, model.state.distance, (selected ? junction.end : junction.start + junction.junctionLength) - model.state.distance % track.length, model.state.routeId) } : null;
     onUpdate({ ...model.state, competition: session.competition, announcement: feedback.announcement, boostStage2Seconds: model.boostStage2Seconds, altitudeProfile: model.altitudeProfile, phase: timeAttack.phase, timeAttack: session, view: views.view, trackDisplay: views.trackDisplay, trackLength: track.length, upcomingCurvature: upcoming.curvature, upcomingSection: upcoming.section, heightObstacle, corridor, fork });
   };
-  const heightRequests: number[] = [];
+  const heightRequests: { lift: number; targetAltitudeLevel?: number }[] = [];
   const touchControls = createTouchControls(container.parentElement ?? container, {
-    lift(direction) { if (timeAttack.phase === 'running') heightRequests.push(direction); },
+    lift(direction) { if (timeAttack.phase === 'running') heightRequests.push({ lift: direction }); },
+    altitude() {
+      const count = model.altitudeProfile.levels.length;
+      const level = heightRequests.reduce((current, request) =>
+        request.targetAltitudeLevel ?? THREE.MathUtils.clamp(current + Math.sign(request.lift), 0, count - 1), model.state.altitudeLevel);
+      return { level, count };
+    },
+    selectAltitude(level) { if (timeAttack.phase === 'running') heightRequests.push({ lift: 0, targetAltitudeLevel: level }); },
     interact() { raceAudio.activate(); },
     releaseBoost() { if (!keys.has('Space')) { model.interruptBoost(); boostHaptics.stop(); notify(); } },
   });
@@ -260,7 +267,7 @@ export function createRace(
     const action = (event as CustomEvent<string>).detail;
     if (action === 'pause') { togglePause(); return; }
     if (timeAttack.phase !== 'running') return;
-    if (action === 'up' || action === 'down') heightRequests.push(action === 'up' ? 1 : -1);
+    if (action === 'up' || action === 'down') heightRequests.push({ lift: action === 'up' ? 1 : -1 });
     else if (action === 'cockpit') toggleCockpit();
     else if (action === 'track') cycleTrack();
     else if (action === 'focus') window.dispatchEvent(new CustomEvent('speedracer:focus-request'));
@@ -278,7 +285,7 @@ export function createRace(
     if (timeAttack.phase !== 'running') return;
     raceAudio.activate();
     if (event.code === 'ArrowDown' || event.code === 'ArrowUp') {
-      if (!event.repeat) heightRequests.push(event.code === 'ArrowUp' ? 1 : -1);
+      if (!event.repeat) heightRequests.push({ lift: event.code === 'ArrowUp' ? 1 : -1 });
       return;
     }
     keys.add(event.code);
@@ -333,9 +340,9 @@ export function createRace(
       input.throttle = !input.brake;
       input.steer = THREE.MathUtils.clamp(Number(keys.has('KeyD')) - Number(keys.has('KeyA')) + touch.steer + gamepadDriving.steer, -1, 1);
       input.boost = keys.has('Space') || touch.boost || gamepadDriving.boost;
-      for (const lift of heightRequests) {
+      for (const request of heightRequests) {
         const previousLevel = model.state.altitudeLevel;
-        model.step(0, { ...input, lift });
+        model.step(0, { ...input, ...request });
         heightChanged ||= model.state.altitudeLevel !== previousLevel;
       }
       heightRequests.length = 0;

@@ -11,7 +11,7 @@ import { OFF_TRACK_PENALTY_POINTS, COLLISION_PENALTY_POINTS, OBSTACLE_COLLISION_
 export { OFF_TRACK_PENALTY_POINTS, COLLISION_PENALTY_POINTS, OBSTACLE_COLLISION_PENALTY_POINTS } from './raceScoring.js';
 
 /** lift is a single tap impulse (-1 / 0 / 1), never a held key. */
-export interface DrivingInput { throttle: boolean; brake: boolean; steer: number; lift: number; boost: boolean; targetSpeedScale?: number }
+export interface DrivingInput { throttle: boolean; brake: boolean; steer: number; lift: number; boost: boolean; targetAltitudeLevel?: number; targetSpeedScale?: number }
 export interface DrivingState {
   routeId?: string | null;
   distance: number;
@@ -130,15 +130,16 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
     },
     recover,
     step(delta: number, input: DrivingInput, onTravel?: (segment: TravelSegment) => boolean) {
-      if (input.lift !== 0) {
-        const nextLevel = clamp(state.altitudeLevel + Math.sign(input.lift), 0, levels.length - 1);
+      if (input.lift !== 0 || Number.isFinite(input.targetAltitudeLevel)) {
+        const nextLevel = clamp(Number.isFinite(input.targetAltitudeLevel) ? Math.round(input.targetAltitudeLevel!)
+          : state.altitudeLevel + Math.sign(input.lift), 0, levels.length - 1);
         if (nextLevel !== state.altitudeLevel) {
-          const spacing = Math.abs(levels[nextLevel] - levels[state.altitudeLevel]);
+          const spacing = Math.abs(levels[nextLevel] - state.altitude);
           state.altitudeLevel = nextLevel;
           state.targetAltitude = levels[nextLevel];
-          // Rapid consecutive taps retain a brisk speed without teleporting the craft.
+          // Direct selection and rapid taps complete the move briskly without teleporting the craft.
           heightSwitchSpeed = spacing / transitionSeconds;
-          // A small load surcharge per successful altitude tap, only during boost.
+          // A small load surcharge per successful altitude selection, only during boost.
           if (input.boost && !input.brake && !state.boostNeedsRelease && state.charge > 0) {
             state.charge = Math.max(0, state.charge - tuning.boostDrain * .04);
             if (state.charge === 0) { state.boostNeedsRelease = true; interruptBoost(); }

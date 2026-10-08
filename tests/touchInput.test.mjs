@@ -38,45 +38,67 @@ test('pause/cancel/reset returns every input to neutral, subsequent touches work
   assert.equal(input.pressStick(6), true);
 });
 
-test('boost swipes ignore jitter and change one altitude step while boost stays held', () => {
-  const input = createTouchInput(); input.pressBoost(2, 100);
-  for (const y of [95, 109, 80, 73]) assert.equal(input.moveBoost(2, y), 0);
-  assert.equal(input.moveBoost(2, 72), 1);
-  for (const y of [65, 50, 75, 120, 145]) assert.equal(input.moveBoost(2, y), 0);
+test('one continuous boost drag selects every altitude without recentering, holding stays stable', () => {
+  const input = createTouchInput(); input.pressBoost(2, 300, 0, 4, 150, 450);
+  for (const y of [295, 310, 280]) assert.equal(input.moveBoost(2, y), undefined);
+  assert.equal(input.moveBoost(2, 250), 1);
+  assert.equal(input.moveBoost(2, 200), 2);
+  assert.equal(input.moveBoost(2, 150), 3);
+  for (let i = 0; i < 10; i++) assert.equal(input.moveBoost(2, 150), undefined);
   assert.equal(input.boostDirection, 1);
   assert.equal(input.read(true).boost, true);
   assert.equal(input.release(2), true);
-  assert.equal(input.boostDirection, 0);
+  assert.equal(input.boostPosition, null);
   assert.equal(input.read(true).boost, false);
 });
 
-test('returning to the press center rearms the next up or down altitude step', () => {
-  const input = createTouchInput(); input.pressBoost(2, 200);
-  assert.equal(input.moveBoost(2, 160), 1);
-  assert.equal(input.moveBoost(2, 189), 0);
-  assert.equal(input.boostDirection, 1);
-  assert.equal(input.moveBoost(2, 190), 0);
-  assert.equal(input.boostDirection, 0);
-  assert.equal(input.moveBoost(2, 160), 1);
-  input.moveBoost(2, 200);
-  assert.equal(input.moveBoost(2, 228), -1);
-  assert.equal(input.moveBoost(2, 260), 0);
-  assert.equal(input.read(true).boost, true);
+test('a fast drag selects the final level directly, clamps outside and works down from the highest level', () => {
+  for (const count of [2, 3, 4, 6, 12]) {
+    const input = createTouchInput(); input.pressBoost(2, 300, 0, count, 150, 450);
+    assert.equal(input.moveBoost(2, -1000), count - 1);
+    assert.equal(input.moveBoost(2, -2000), undefined);
+    assert.equal(input.boostPosition, 0);
+    input.release(2);
+    input.pressBoost(3, 300, count - 1, count, 150, 450);
+    assert.equal(input.moveBoost(3, 1000), 0);
+    assert.equal(input.boostPosition, 1);
+  }
 });
 
-test('boost swipe and steering fingers remain independent, cancellation clears the gesture', () => {
-  const input = createTouchInput(); input.pressStick(1); input.pressBoost(2, 100);
+test('selection is anchored to the pressed altitude and moving back selects earlier levels', () => {
+  const input = createTouchInput(); input.pressBoost(2, 300, 1, 4, 150, 450);
+  assert.equal(input.moveBoost(2, 200), 3);
+  assert.equal(input.moveBoost(2, 250), 2);
+  assert.equal(input.moveBoost(2, 300), 1);
+  assert.equal(input.moveBoost(2, 350), 0);
+  assert.equal(input.boostDirection, -1);
+});
+
+test('small jitter at a selection boundary does not repeatedly toggle altitude', () => {
+  const input = createTouchInput(); input.pressBoost(2, 300, 0, 4, 150, 450);
+  assert.equal(input.moveBoost(2, 250), 1);
+  assert.equal(input.moveBoost(2, 210), 2);
+  for (const y of [214, 220, 216, 223, 219]) assert.equal(input.moveBoost(2, y), undefined);
+  assert.equal(input.moveBoost(2, 230), 1);
+  for (const y of [223, 216, 220]) assert.equal(input.moveBoost(2, y), undefined);
+});
+
+test('steering and boost fingers are independent; another boost finger cannot take over or release the gesture', () => {
+  const input = createTouchInput(); input.pressStick(1);
+  assert.equal(input.pressBoost(2, 300, 0, 4, 150, 450), true);
   input.moveStick(1, -40, 40, 40);
   const steering = input.read(true);
-  assert.equal(input.moveBoost(1, 50), 0);
-  assert.equal(input.moveBoost(2, 60), 1);
+  assert.equal(input.pressBoost(3, 300, 0, 4, 150, 450), false);
+  assert.equal(input.moveBoost(1, 150), undefined);
+  assert.equal(input.moveBoost(3, 150), undefined);
+  assert.equal(input.release(3), false);
+  assert.equal(input.moveBoost(2, 150), 3);
   assert.deepEqual(input.read(true), steering);
-  assert.equal(steering.brake, true); assert.ok(steering.steer < -.6);
   assert.equal(input.release(1), false);
-  assert.equal(input.boostDirection, 1);
+  assert.equal(input.read(true).boost, true);
   input.reset();
-  assert.equal(input.moveBoost(2, 100), 0);
+  assert.equal(input.moveBoost(2, 300), undefined);
   assert.equal(input.boostDirection, 0);
-  input.pressBoost(3, 500);
-  assert.equal(input.moveBoost(3, 530), -1);
+  assert.equal(input.pressBoost(4, 300, 2, 3, 150, 450), true);
+  assert.equal(input.moveBoost(4, 450), 0);
 });
