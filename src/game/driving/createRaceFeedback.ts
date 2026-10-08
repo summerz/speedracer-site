@@ -62,8 +62,8 @@ export function createRaceFeedback() {
         if (passed < end && nowPassed >= end && lap < progress.totalLaps) {
           const final = lap + 1 === progress.totalLaps;
           cues.push(final ? 'final-lap' : 'lap');
-          announcement = { id: ++sequence, kind: final ? 'final-lap' : 'lap', title: final ? 'FINAL LAP' : `LAP ${lap} COMPLETE`, detail: final ? `${lap}랩 완료 · 마지막 랩 시작!` : `${lap + 1} / ${progress.totalLaps} 랩 시작`, clean: progress.cleanSegments?.find(segment => segment.lap === lap && segment.half === 2)?.clean, startedAt: progress.elapsed, duration: final ? 3.4 : 2.8 };
-          expires = progress.elapsed + (final ? 3.4 : 2.8);
+          announcement = { id: ++sequence, kind: final ? 'final-lap' : 'lap', title: final ? 'FINAL LAP' : `LAP ${lap} COMPLETE`, detail: final ? `${lap}랩 완료 · 마지막 랩 시작!` : `${lap + 1} / ${progress.totalLaps} 랩 시작`, clean: progress.cleanSegments?.find(segment => segment.lap === lap && segment.half === 2)?.clean, startedAt: progress.elapsed, duration: final ? 1.5 : 2.8 };
+          expires = progress.elapsed + (final ? 1.5 : 2.8);
         }
       }
       passed = Math.max(passed, nowPassed);

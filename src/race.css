@@ -15,6 +15,8 @@
 .speed-readout[data-boost-stage='2'] { border-left-color:#ffc06c; }
 .speed-readout[data-boost-stage='2'] strong { color:#ffc06c; }
 #drive-time { font-size:11px; color:#b4c8d0; }
+.ghost-delta { font-size:11px; color:#ff9a42; margin-left:6px; }
+.ghost-delta.is-ahead { color:#77eaff; }
 .corner-guide { display:flex; align-items:center; gap:12px; font-size:11px; }
 .corner-guide strong { font-weight:500; }
 .corner-hint { color:#9ab2bc; font-size:10px; }
@@ -269,3 +271,44 @@ button:focus-visible { outline:2px solid #c9f9f2; outline-offset:3px; }
 .reward-breakdown dl { margin:4px 0 0; }
 .reward-breakdown dl > div { display:flex; justify-content:space-between; gap:12px; padding-block:3px; }
 .reward-breakdown dd { margin:0; font-variant-numeric:tabular-nums; }
+/* Intro title card and finish splash; both leave the pause menu hidden until they end. */
+.race-intro { position:absolute; left:50%; bottom:0; z-index:3; transform:translateX(-50%); width:min(760px,calc(100% - 32px)); padding:64px 16px max(30px,env(safe-area-inset-bottom)); display:grid; justify-items:center; gap:6px; text-align:center; pointer-events:none; text-shadow:0 2px 14px #000,0 0 28px #000a; background:radial-gradient(ellipse at 50% 85%,#030b16e6,#030b16a6 45%,transparent 72%); animation:race-intro-in .8s cubic-bezier(.2,.8,.2,1) both; }
+.race-intro p { margin:0; }
+.intro-eyebrow { font:600 13px 'IBM Plex Mono',monospace; letter-spacing:3px; color:#9ff7e8; }
+.race-intro .intro-name { margin:0; font:650 clamp(44px,8vw,84px)/1 'Barlow Condensed',sans-serif; letter-spacing:.04em; color:#edfff9; overflow-wrap:anywhere; }
+.intro-meta { font:13px 'IBM Plex Mono',monospace; letter-spacing:2px; color:#d3e9ea; }
+.intro-skip { margin-top:10px !important; font:10px 'IBM Plex Mono',monospace; letter-spacing:2px; color:#b4c8d0; }
+@keyframes race-intro-in { from { opacity:0; transform:translate(-50%,16px); } to { opacity:1; transform:translate(-50%,0); } }
+.race-splash { position:absolute; inset:0; z-index:3; display:grid; place-content:center; justify-items:center; gap:8px; pointer-events:none; text-align:center; color:#d9fff5; text-shadow:0 4px 24px #000,0 0 30px #45d8b766; animation:race-splash-in .35s cubic-bezier(.2,.9,.2,1) both,race-splash-out .3s calc(var(--cine,1.6s) - .3s) forwards; }
+.race-splash strong { font:650 clamp(80px,16vw,160px)/.9 'Barlow Condensed',sans-serif; letter-spacing:.04em; }
+.race-splash span { font:600 clamp(18px,3vw,28px) 'IBM Plex Mono',monospace; letter-spacing:2px; }
+.race-splash em { margin-top:6px; padding:6px 14px; border:1px solid #ffd36a99; background:#2a1f05d9; color:#ffe08a; font:600 14px 'IBM Plex Mono',monospace; font-style:normal; letter-spacing:4px; }
+.race-splash[data-kind='best'] { color:#ffe08a; text-shadow:0 4px 24px #000,0 0 40px #ffb62a99; }
+.race-splash[data-kind='best']::before { content:''; position:absolute; inset:0; background:radial-gradient(ellipse at center,#ffd36a99,transparent 70%); animation:race-gold-flash .6s ease-out both; }
+.race-splash[data-kind='muted'] { color:#9fb0b7; text-shadow:0 4px 18px #000; }
+.race-splash[data-kind='muted'] strong { font-weight:500; }
+.race-splash > * { position:relative; }
+@keyframes race-splash-in { from { opacity:0; transform:scale(1.18); } to { opacity:1; transform:none; } }
+@keyframes race-splash-out { to { opacity:0; } }
+@keyframes race-gold-flash { from { opacity:1; } to { opacity:0; } }
+@media (max-height:500px) { .race-intro { padding:16px 16px 12px; } .race-intro .intro-name { font-size:36px; } .intro-skip { display:none; } .race-splash strong { font-size:72px; } }
+@media (prefers-reduced-motion:reduce) {
+  .race-intro { animation:none; }
+  .race-splash { animation:race-splash-out .3s calc(var(--cine,1s) - .3s) forwards; }
+  .race-splash[data-kind='best']::before { animation:none; opacity:.25; }
+}
+/* Showcase callouts. Near miss sits just below centre by the drone; the rest stay outside the centre third. */
+.race-callout,.race-nearmiss,.race-streak { position:absolute; left:50%; margin:0; transform:translateX(-50%); pointer-events:none; text-align:center; white-space:nowrap; font:650 clamp(22px,3vw,30px)/1 'Barlow Condensed',sans-serif; letter-spacing:3px; color:#d9fff5; text-shadow:0 2px 10px #000,0 0 18px #45d8b766; }
+.race-callout { top:max(104px,14%); }
+.race-callout[data-kind='perfect'] { font-size:clamp(30px,4.5vw,44px); color:#ffe08a; text-shadow:0 2px 10px #000,0 0 22px #ffb62a99; }
+.race-callout[data-kind='gain'] { color:#7ff3ff; text-shadow:0 2px 10px #000,0 0 18px #2ad8ff88; }
+.race-callout[data-kind='loss'] { color:#ff6b6b; text-shadow:0 2px 10px #000,0 0 18px #ff3b3b88; }
+.race-nearmiss { top:62%; letter-spacing:4px; color:#fff2b8; text-shadow:0 2px 10px #000,0 0 20px #ffa62acc; }
+.race-streak { left:auto; right:max(12px,env(safe-area-inset-right)); top:40%; transform:none; font-size:20px; letter-spacing:2px; color:#fff; }
+.race-streak[data-tier='1'] { color:#7ff3ff; } .race-streak[data-tier='2'] { color:#b6ff5a; } .race-streak[data-tier='3'] { color:#ffd36a; text-shadow:0 2px 10px #000,0 0 18px #ffb62acc; }
+.drive-screen:not([data-phase='running']) :is(.race-callout,.race-nearmiss,.race-streak) { visibility:hidden; }
+.driving-overlay.is-inset .race-callout { top:20%; font-size:15px; letter-spacing:1px; }
+.driving-overlay.is-inset .race-nearmiss { font-size:14px; } .driving-overlay.is-inset .race-streak { font-size:11px; top:36%; }
+.race-announcement[data-kind='final-lap'] { top:max(150px,19%); }
+@media (max-width:600px) { .race-streak { font-size:15px; top:34%; } }
+@media (max-height:500px) { .race-callout { top:56px; font-size:20px; } .race-callout[data-kind='perfect'] { font-size:24px; } .race-announcement[data-kind='final-lap'] { top:84px; } .race-announcement[data-kind='final-lap'] strong { font-size:28px; } .race-announcement[data-kind='final-lap'] span { display:none; } .race-streak { font-size:14px; top:30%; } .race-nearmiss { top:60%; font-size:18px; } }
