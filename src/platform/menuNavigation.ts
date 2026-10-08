@@ -34,6 +34,7 @@ export function mountMenuNavigation(root: HTMLElement): () => void {
   };
   window.addEventListener('keydown', event => {
     if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || inGame() || editable(event.target instanceof Element ? event.target : null)) return;
+    if ((event.code === 'ArrowLeft' || event.code === 'ArrowRight') && event.target instanceof Element && event.target.closest('[data-own-horizontal-keys]')) return;
     const action = ({ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right'} as const)[event.code as 'ArrowUp'];
     if (event.code === 'Escape') { event.preventDefault(); if (!event.repeat) back(); }
     else if (action) { event.preventDefault(); move(action); }
