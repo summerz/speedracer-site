@@ -1,0 +1,90 @@
+/* Hangar = home. Screen root: header auto, body fills the rest. D/L: 3D hero | scrolling panel. P: one scrolling column. */
+.hangar { height: 100dvh; display: grid; grid-template-rows: auto minmax(0, 1fr); background: #080f16; overflow: hidden; font-variant-numeric: tabular-nums; }
+.hangar-body { min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(400px, 560px); }
+.viewport { position: relative; min-width: 0; min-height: 0; background: radial-gradient(ellipse at 50% 55%, #142830 0%, #0a141d 45%, #080f16 80%); }
+.hangar-title { position: absolute; top: 16px; left: 20px; margin: 0; z-index: 1; font: 600 20px/1 'Barlow Condensed', sans-serif; letter-spacing: .12em; color: #c9dadf; pointer-events: none; }
+.hangar-title span { color: #687e89; }
+.scene-label { position: absolute; top: 18px; right: 20px; display: flex; gap: 14px; font: 9px 'IBM Plex Mono', monospace; letter-spacing: 1.5px; color: #718690; pointer-events: none; }
+.scene-label .mono { color: #b4c4c9; }
+.scene-status { position: absolute; right: 20px; bottom: 16px; color: #8ba1aa; font-size: 10px; }
+.scene-status.is-ready::before { content: ''; display: inline-block; width: 4px; height: 4px; margin-right: 8px; vertical-align: middle; border-radius: 50%; background: var(--accent); }
+.orbit-hint { position: absolute; bottom: 14px; left: 20px; margin: 0; display: flex; align-items: center; gap: 8px; color: #91a6b0; font-size: 11px; pointer-events: none; }
+.hint-cross { color: #a9bfc8; font-size: 20px; font-weight: 200; }
+
+.hangar-panel { --craft-color: var(--accent); min-width: 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; display: flex; flex-direction: column; gap: 12px; padding: 16px 24px max(24px, env(safe-area-inset-bottom)); border-left: 1px solid #213340; }
+.hangar-panel > * { flex: none; }
+.progress-warning:empty { display: none; }
+.progress-warning { margin: 0; }
+
+/* 이어하기 */
+.home-continue { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 14px 16px; border: 1px solid color-mix(in srgb, var(--district-color, #80ffe0) 55%, #213340); border-radius: 6px; background: linear-gradient(100deg, color-mix(in srgb, var(--district-color, #80ffe0) 22%, #0b1c28), #0b1c28 75%); }
+.home-continue[data-done=true] { background: #12312f; border-color: #80ffe070; }
+.continue-copy { display: grid; gap: 2px; min-width: 0; }
+.home-continue .eyebrow { margin: 0; font-size: 10px; color: var(--district-color, #80ffe0); }
+.continue-district { margin: 0; font: 600 14px/1.2 'Barlow Condensed', sans-serif; letter-spacing: .06em; color: var(--district-color); }
+.continue-track { font: 600 24px/1.15 'Barlow Condensed', sans-serif; letter-spacing: .03em; color: #e8fbf5; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.continue-track .mono { font: 500 16px 'IBM Plex Mono', monospace; color: #adbfcc; margin-right: 4px; }
+.course-stars { display: inline-flex; gap: 2px; font-size: 15px; line-height: 1; }
+.course-stars [data-earned=false] { color: #475d6b; }
+.course-stars [data-earned=true] { color: #ffe29a; }
+.continue-action { flex: none; min-height: 44px; padding: 10px 18px; border-radius: 3px; gap: 10px; color: #081a1d; text-decoration: none; white-space: nowrap; }
+.home-actions { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.continue-note { color: #a9bdc8; font-size: 12px; }
+.home-secondary { appearance: none; display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 10px 16px; color: #c9dadf; background: #0b1c28; border: 1px solid #58717d70; border-radius: 3px; font: 500 13px/1.3 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; text-decoration: none; touch-action: manipulation; transition: background 160ms, border-color 160ms; }
+.home-secondary:hover:not(:disabled) { background: #17303c; border-color: #7bafb880; }
+.home-secondary small { color: #8ca5b5; font-size: 11px; }
+.free-drive { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.free-drive-link { display: inline-flex; align-items: center; gap: 7px; min-height: 40px; padding: 8px 12px; border: 1px solid #ffffff1a; border-radius: 3px; background: #ffffff03; color: #a5b6bf; font-size: 11px; text-decoration: none; transition: background 160ms; }
+.free-drive-link:hover { background: #ffffff09; }
+.free-drive-note { color: #718690; font-size: 11px; }
+
+/* Progress chips */
+.home-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin: 0; font-size: 12px; color: #99adb9; }
+.home-chips b { font-weight: 500; color: #e0f5ef; }
+.home-chips .stat-stars, .home-chips .stat-stars b { color: #ffe29a; }
+.home-chips a { margin-left: auto; padding: 8px 0; color: #80ffe0; text-decoration: none; }
+
+/* 내 기체 */
+.home-craft h2 { margin: 0 0 6px; font: 600 15px 'Barlow Condensed', sans-serif; letter-spacing: .06em; color: #adbfcc; }
+.craft-description { margin: 4px 0 10px; color: #a4b7c0; font-size: 12px; line-height: 1.6; }
+.craft-description strong { font: 600 20px 'Barlow Condensed', sans-serif; color: #e9f2f4; letter-spacing: .03em; }
+.home-stats { display: grid; gap: 2px; }
+.home-stat { display: grid; grid-template-columns: 76px minmax(0, 1fr) 96px; align-items: center; gap: 10px; min-height: 28px; }
+.home-stat .stat-label { font-size: 12px; color: #9eb1bf; }
+.home-stat .stat-track { height: 8px; border-radius: 2px; background: #0f2331; overflow: hidden; }
+.home-stat .stat-track i { display: block; height: 100%; border-radius: 2px; background: var(--craft-color); opacity: .92; }
+.home-stat .stat-value { display: flex; align-items: baseline; justify-content: flex-end; gap: 3px; font: 13px 'IBM Plex Mono', monospace; white-space: nowrap; }
+.home-stat .stat-value b { font-weight: 600; color: #d7e9ec; }
+.home-stat .stat-value small { color: #79909e; font-size: 10px; }
+
+/* 추진 테스트 */
+.thrust-test { padding-top: 10px; border-top: 1px solid #213340; }
+.thrust-heading { display: flex; justify-content: space-between; color: #91a6b0; font-size: 11px; }
+#thrust-status { color: var(--accent); }
+.thrust-controls { display: flex; gap: 6px; margin-top: 8px; }
+.thrust-controls button { display: flex; flex: 1; align-items: center; justify-content: center; gap: 7px; min-height: 40px; padding: 8px 5px; border: 1px solid #ffffff1a; border-radius: 3px; background: #ffffff03; color: #a5b6bf; font-size: 11px; transition: background 160ms, border-color 160ms; }
+.thrust-controls button:hover { background: #ffffff09; }
+.thrust-controls button[aria-pressed='true'] { color: #d6fffa; border-color: #56dacf80; background: #56dacf13; }
+.thrust-controls kbd { font: 10px 'IBM Plex Mono', monospace; color: #718690; }
+.thrust-controls button[aria-pressed='true'] kbd { color: var(--accent); }
+
+/* P: portrait phone. Hero on top (~40dvh), everything scrolls together under the fixed header. */
+@media (max-width: 760px) and (orientation: portrait) {
+  .hangar-body { display: block; overflow-y: auto; overscroll-behavior: contain; }
+  .viewport { height: 38dvh; min-height: 240px; }
+  .hangar-panel { overflow: visible; padding: 12px 16px max(24px, env(safe-area-inset-bottom)); border-left: 0; border-top: 1px solid #213340; }
+  .continue-track { font-size: 21px; }
+  .home-stat { grid-template-columns: 68px minmax(0, 1fr) 88px; gap: 8px; }
+}
+
+/* L: landscape phone. Hero left, panel right with the continue card at the top. */
+@media (max-height: 500px) and (orientation: landscape) {
+  .hangar-body { grid-template-columns: 46% minmax(0, 1fr); }
+  .hangar-panel { gap: 8px; padding: 10px 16px 16px; }
+  .home-continue { padding: 10px 12px; }
+  .continue-track { font-size: 20px; }
+  .home-secondary { min-height: 40px; padding: 8px 12px; }
+  .hangar-title { top: 10px; left: 14px; font-size: 16px; }
+  .scene-label { top: 12px; right: 14px; }
+}
+@media (prefers-reduced-motion: reduce) { .hangar *, .hangar *::before, .hangar *::after { transition: none !important; } }

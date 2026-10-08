@@ -1,0 +1,15 @@
+/* D: all cards fill one row. P and L: horizontal scroll-snap row. */
+.craft-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; padding: 2px 0 6px; }
+.craft-card { appearance: none; min-width: 0; scroll-snap-align: start; display: grid; justify-items: start; gap: 2px; padding: 6px 10px 8px; text-align: left; color: #c9dadf; font: inherit; background: #0b1c28; border: 1px solid #213340; border-top: 3px solid var(--craft-color); border-radius: 4px; cursor: pointer; touch-action: manipulation; transition: background 160ms, border-color 160ms, box-shadow 160ms; }
+.craft-card img { display: block; width: 100%; height: auto; aspect-ratio: 2 / 1; object-fit: contain; mix-blend-mode: screen; }
+.craft-card:hover:not(:disabled) { background: #12263a; border-color: #58717d; border-top-color: var(--craft-color); }
+.craft-card[aria-pressed=true] { border-color: var(--craft-color); background: linear-gradient(180deg, color-mix(in srgb, var(--craft-color) 20%, #0b1c28), #0b1c28 80%); box-shadow: 0 0 14px color-mix(in srgb, var(--craft-color) 28%, transparent); }
+.craft-card-name { font: 600 18px/1.1 'Barlow Condensed', sans-serif; letter-spacing: .03em; color: #e9f2f4; }
+.craft-card-status { font: 500 11px/1.3 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; color: #9eb1bf; }
+.craft-card[data-tone=owned] .craft-card-status { color: #b6f0e3; }
+.craft-card[data-tone=equipped] .craft-card-status { color: #80ffe0; }
+.craft-card[data-tone=warn] .craft-card-status { color: #ffc48b; }
+@media (max-width: 760px) and (orientation: portrait), (max-height: 500px) and (orientation: landscape) {
+  .craft-cards { display: flex; overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: thin; }
+  .craft-card { flex: none; width: 120px; }
+}
