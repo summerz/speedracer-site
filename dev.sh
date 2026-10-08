@@ -4,6 +4,7 @@
 # 사용:
 #   ./dev.sh            # 메뉴에서 골라 실행
 #   ./dev.sh up         # 의존성 확인 → dev 서버를 백그라운드로 기동 (http://127.0.0.1:5678/)
+#   ./dev.sh lan        # 휴대폰 테스트용: 같은 와이파이에 dev 서버 노출 (재시작)
 #   ./dev.sh down       # 5678(dev)·5679(preview) 리스너 종료
 #   ./dev.sh restart    # down → up
 #   ./dev.sh status     # 5678(dev)·5679(preview) 상태
@@ -61,13 +62,17 @@ cmd_up() {
     say "${PORT} 을 쓰던 다른 서버 종료"
   fi
   mkdir -p .dev
-  nohup npm run dev >"$LOG_FILE" 2>&1 &
+  # lan: 같은 와이파이의 휴대폰에서 접속 (로컬망에 dev 서버가 노출되므로 필요할 때만)
+  if [ "${1:-}" = lan ]; then nohup npx vite --host 0.0.0.0 --port "$PORT" --strictPort >"$LOG_FILE" 2>&1 &
+  else nohup npm run dev >"$LOG_FILE" 2>&1 &
+  fi
   echo $! >"$PID_FILE"
   say "dev 서버 기동 중..."
   for _ in $(seq 1 40); do
     if is_dev; then
       say "${C_OK}실행 중${C_RESET}: $URL"
       say "주행 화면: ${URL}#drive"
+      [ "${1:-}" = lan ] && say "휴대폰: http://$(ipconfig getifaddr en0 2>/dev/null || echo '<맥 IP>'):${PORT}/"
       say "${C_DIM}중지: ./dev.sh down · 로그: ./dev.sh logs${C_RESET}"
       return 0
     fi
@@ -105,6 +110,7 @@ print_menu() {
   cat <<MENU
 ${C_BOLD}speedracer 개발 환경${C_RESET}
   1) up       dev 서버 기동 (백그라운드)
+  6) lan      휴대폰 테스트용 기동 (같은 와이파이, 재시작)
   2) down     서버 중지 (5678 dev · 5679 preview)
   3) restart  재시작
   4) status   상태 확인 (5678 · 5679)
@@ -116,6 +122,7 @@ MENU
 dispatch() {
   case "${1:-}" in
     up|1) cmd_up ;;
+    lan|6) cmd_down; cmd_up lan ;;
     down|2) cmd_down ;;
     restart|3) cmd_down; cmd_up ;;
     status|4) cmd_status ;;
