@@ -1,4 +1,4 @@
-import { expandObstacleLayout, randomObstacleAltitudes } from './obstacleLayout.js';
+import { expandObstacleLayout, randomCorridorLanes, randomObstacleAltitudes } from './obstacleLayout.js';
 import * as THREE from 'three';
 import { createDischargeBarrier } from './createDischargeBarrier.js';
 import { altitudeCanPass, resolveAltitudeProfile } from './altitudeProfile.js';
@@ -179,6 +179,7 @@ export function createTrack(profile?: AltitudeProfile, preset?: DifficultyPreset
     altitudeProfile, sections,
     randomizeObstacles(random) {
       heightObstacles.splice(0, heightObstacles.length, ...randomObstacleAltitudes(heightObstacles, altitudeProfile.levels, random));
+      if (track.corridorObstacles) Object.assign(track, { corridorObstacles: randomCorridorLanes(track.corridorObstacles, track.halfWidth, random) });
     },
     length, halfWidth: preset?.layout.halfWidth ?? 11, checkpointSpacing: length / 24,
     heightObstacles,
@@ -315,12 +316,13 @@ export function createTrackVisual(track: Track, lineColor?: string) {
     return barrier;
   });
   let barriers = makeBarriers();
-  const corridors = (track.corridorObstacles ?? []).map(obstacle => {
+  const makeCorridors = () => (track.corridorObstacles ?? []).map(obstacle => {
     const visual = createCorridorVisual(track, obstacle); group.add(visual.object); return visual;
   });
+  let corridors = makeCorridors();
   const refreshObstacles = () => {
     const geometries = new Set<THREE.BufferGeometry>(), materials = new Set<THREE.Material>();
-    for (const barrier of barriers) {
+    for (const barrier of [...barriers, ...corridors]) {
       barrier.object.removeFromParent();
       barrier.object.traverse(child => {
         if (child instanceof THREE.Mesh) {
@@ -330,7 +332,7 @@ export function createTrackVisual(track: Track, lineColor?: string) {
       });
     }
     geometries.forEach(g => g.dispose()); materials.forEach(m => m.dispose());
-    barriers = makeBarriers();
+    barriers = makeBarriers(); corridors = makeCorridors();
   };
   const bounds = new THREE.Box3().setFromPoints(left.concat(right));
   const extent = bounds.getSize(new THREE.Vector3()), center = bounds.getCenter(new THREE.Vector3());

@@ -1,4 +1,4 @@
-import type { HeightObstacle, Track } from './createTrack.js';
+import type { CorridorObstacle, HeightObstacle, Track } from './createTrack.js';
 
 export function obstacleAtLevel(obstacle: HeightObstacle, levels: readonly number[], level: number): HeightObstacle {
   const height = levels[level];
@@ -21,11 +21,39 @@ export function expandObstacleLayout(track: Track, authored: readonly HeightObst
   return distances.sort((a, b) => a - b).map((distance, i) => ({ ...authored[i % authored.length], distance }));
 }
 
-/** Positions stay fixed; the safe altitude changes once per run, shared by all racers. */
-export function randomObstacleAltitudes(obstacles: readonly HeightObstacle[], levels: readonly number[], random: () => number): HeightObstacle[] {
-  return obstacles.map(obstacle => {
+/** Random index in [0,n) that never makes a third identical pick in a row. */
+function sequencePicker(n: number, random: () => number) {
+  const history: number[] = [];
+  return () => {
     const value = random();
-    const level = Number.isFinite(value) ? Math.max(0, Math.min(levels.length - 1, Math.floor(value * levels.length))) : 0;
-    return obstacleAtLevel(obstacle, levels, level);
+    let index = n > 1 && Number.isFinite(value) ? Math.max(0, Math.min(n - 1, Math.floor(value * n))) : 0;
+    if (n > 1 && history.length === 2 && history[0] === index && history[1] === index) {
+      const other = random();
+      index = (index + 1 + (Number.isFinite(other) ? Math.max(0, Math.min(n - 2, Math.floor(other * (n - 1)))) : 0)) % n;
+    }
+    history.push(index); if (history.length > 2) history.shift();
+    return index;
+  };
+}
+
+/** Positions stay fixed; safe altitudes and moving-field phases change once per run, shared by all racers. */
+export function randomObstacleAltitudes(obstacles: readonly HeightObstacle[], levels: readonly number[], random: () => number): HeightObstacle[] {
+  // ponytail: branch routes share one sequence, so a streak can span two routes' fields.
+  const pick = sequencePicker(levels.length, random);
+  return obstacles.map(obstacle => {
+    if (!obstacle.motion) return obstacleAtLevel(obstacle, levels, pick());
+    const value = random(), cycle = obstacle.motion.stepSeconds * (levels.length - 1) * 2;
+    return { ...obstacle, motion: { ...obstacle.motion, phase: Number.isFinite(value) ? Math.max(0, Math.min(.999999, value)) * cycle : 0 } };
+  });
+}
+
+const LANES = ['left', 'center', 'right'] as const;
+
+/** Corridor safe lanes change once per run; same formula as configureExtraObstacles. */
+export function randomCorridorLanes(corridors: readonly CorridorObstacle[], halfWidth: number, random: () => number): CorridorObstacle[] {
+  const pick = sequencePicker(3, random);
+  return corridors.map(corridor => {
+    const laneIndex = pick();
+    return { ...corridor, safeCenter: (laneIndex - 1) * halfWidth * .58, lane: LANES[laneIndex] };
   });
 }
