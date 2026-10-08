@@ -3,9 +3,9 @@ import { campaignLapLimit, campaignRankLimit, type TrackDefinition } from './tra
 /** Player-selected challenge is independent of an authored course's geometry/altitude levels. */
 export type RaceChallengeId = 'easy' | 'normal' | 'hard';
 export const RACE_CHALLENGES = {
-  easy: { label: '쉬움', timeScale: 1.15, obstacleScale: .8, aiPace: .90, aiRating: -1, warningSeconds: 1.9 },
-  normal: { label: '중간', timeScale: 1, obstacleScale: 1, aiPace: 1, aiRating: 0, warningSeconds: 1.5 },
-  hard: { label: '어려움', timeScale: .90, obstacleScale: 1.25, aiPace: 1.08, aiRating: 1, warningSeconds: 1.15 },
+  easy: { label: '쉬움', timeScale: 1.15, aiPace: .90, aiRating: -1, warningSeconds: 1.9 },
+  normal: { label: '중간', timeScale: 1, aiPace: 1, aiRating: 0, warningSeconds: 1.5 },
+  hard: { label: '어려움', timeScale: .90, aiPace: 1.08, aiRating: 1, warningSeconds: 1.15 },
 } as const;
 export function raceChallenge(value: unknown): RaceChallengeId {
   return value === 'easy' || value === 'hard' ? value : 'normal';

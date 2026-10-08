@@ -17,13 +17,16 @@ test('every course has three distinct deadlines and obstacle densities that surv
     assert.ok(challengeLapLimit(course,'easy')>challengeLapLimit(course));
     assert.ok(challengeLapLimit(course)>challengeLapLimit(course,'hard'));
     const tracks=['easy','normal','hard'].map(c=>createCatalogTrack(course,c));
-    const count = track => track.heightObstacles.length + (track.corridorObstacles?.length ?? 0);
-    assert.ok(count(tracks[0]) < count(tracks[1]), course.id);
-    assert.ok(count(tracks[1]) < count(tracks[2]), course.id);
+    const count = track => track.heightObstacles.length + (track.corridorObstacles?.length ?? 0) + (track.mineFields?.length ?? 0);
+    assert.ok(count(tracks[0]) <= count(tracks[1]) && count(tracks[1]) <= count(tracks[2]), course.id);
+    assert.ok(count(tracks[0]) < count(tracks[2]), course.id);
     for(const track of tracks){
-      const distances=track.heightObstacles.map(o=>o.distance);
+      const shape=()=>track.heightObstacles.map(o=>`${o.routeId}`).sort();
+      const kinds=shape(), corridors=(track.corridorObstacles??[]).length, mines=track.mineFields.length;
       track.randomizeObstacles(()=>.4);
-      assert.deepEqual(track.heightObstacles.map(o=>o.distance),distances);
+      assert.deepEqual(shape(),kinds);
+      assert.equal((track.corridorObstacles??[]).length,corridors); assert.equal(track.mineFields.length,mines);
+      const distances=track.heightObstacles.map(o=>`${o.routeId}:${o.distance}`);
       assert.equal(new Set(distances).size,distances.length);
     }
     assert.equal(tracks[0].length,tracks[2].length);

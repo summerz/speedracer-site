@@ -280,3 +280,31 @@ test('changing an altitude target during a transition completes the remaining tr
   model.step(0, input({ targetAltitudeLevel: NaN }));
   assert.equal(model.state.altitudeLevel, 3);
 });
+
+test('a boost pad refills charge and adds speed once per lap, only for a craft inside its lane', () => {
+  const pad = { distance: 300, lane: 'right', center: 6.4, width: 5.5, length: 14 };
+  const track = { ...straight, boostPads: [pad] };
+  const cross = (model, offset, from) => {
+    Object.assign(model.state, { distance: from, offset, speed: 40, charge: .3 });
+    const before = model.state.boostPads;
+    for (let i = 0; i < 600 && model.state.distance < from + 40; i++) model.step(1 / 120, input({ throttle: true }));
+    return model.state.boostPads - before;
+  };
+  const speedAfter = offset => { // charge and speed on the very step that crosses the pad
+    const model = createDrivingModel(track); Object.assign(model.state, { distance: 290, offset, speed: 40, charge: .3 });
+    let before;
+    while (model.state.distance < 330) { before = { speed: model.state.speed, charge: model.state.charge, pads: model.state.boostPads }; model.step(1 / 120, input()); if (model.state.boostPads > before.pads) break; }
+    return { before, state: model.state };
+  };
+  const hit = speedAfter(6.4);
+  assert.equal(hit.state.boostPads, 1);
+  assert.ok(Math.abs(hit.state.charge - hit.before.charge - .35) < .01 && hit.state.speed - hit.before.speed > 17, `${hit.before.charge}->${hit.state.charge}`);
+  assert.equal(speedAfter(0).state.boostPads, 0);
+  assert.equal(speedAfter(6.4 + 2.76).state.boostPads, 0);
+  const model = createDrivingModel(track);
+  assert.equal(cross(model, 0, 290), 0);
+  assert.equal(cross(model, 6.4, 290), 1);
+  assert.equal(cross(model, 6.4, 290), 0, 'same lap');
+  assert.equal(cross(model, 6.4, 1200 + 290), 1, 'next lap');
+  assert.equal(cross(model, 6.4, 1200 + 290), 0);
+});

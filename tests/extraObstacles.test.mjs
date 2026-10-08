@@ -1,34 +1,49 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { TRACK_CATALOG } from '../output/test/game/track/trackCatalog.js';
+import { createTrack } from '../output/test/game/track/createTrack.js';
+import { DIFFICULTIES } from '../output/test/game/track/difficulty.js';
 import { createCatalogTrack } from '../output/test/game/track/trackRuntime.js';
-import { resolveHeightObstacle, corridorCanPass, obstacleArrivalTime } from '../output/test/game/track/obstacleDynamics.js';
+import { boostPadGuide, configureExtraObstacles, resolveHeightObstacle, corridorCanPass, obstacleArrivalTime } from '../output/test/game/track/obstacleDynamics.js';
 import { createDrivingModel, NEUTRAL_INPUT } from '../output/test/game/driving/createDrivingModel.js';
 import { createRaceSession } from '../output/test/game/driving/createRaceSession.js';
 import { createRaceRecords } from '../output/test/game/driving/raceRecords.js';
 import { DEFAULT_DRONE_CONFIGURATION } from '../output/test/game/drone/droneConfiguration.js';
 import { ALTITUDE_PROFILES } from '../output/test/game/track/altitudeProfile.js';
 
-test('all catalog courses introduce both hazards on normal/hard while easy keeps static fields', () => {
+test('all catalog courses add corridors and moving fields (mine fields are on hold) on every challenge, getting denser and tighter', () => {
+  const total = t => t.heightObstacles.length + (t.corridorObstacles?.length ?? 0) + (t.mineFields?.length ?? 0);
+  const tracks = { easy: [], normal: [], hard: [] };
   for (const definition of TRACK_CATALOG) {
-    const easy = createCatalogTrack(definition, 'easy');
-    assert.equal(easy.corridorObstacles?.length ?? 0, 0);
-    assert.ok(easy.heightObstacles.every(o => !o.motion));
-    const normal = createCatalogTrack(definition, 'normal'), hard = createCatalogTrack(definition, 'hard');
-    for (const track of [normal, hard]) {
-      assert.ok(track.corridorObstacles.length >= 1, definition.name);
-      assert.ok(track.heightObstacles.some(o => o.motion), definition.name);
-      for (const o of [...track.corridorObstacles, ...track.heightObstacles.filter(o => o.motion)]) {
+    const [easy, normal, hard] = ['easy', 'normal', 'hard'].map(c => createCatalogTrack(definition, c));
+    for (const [name, track] of Object.entries({ easy, normal, hard })) {
+      tracks[name].push(track);
+      for (const o of [...track.corridorObstacles, ...track.heightObstacles.filter(o => o.motion), ...track.mineFields.map(f => ({ ...f, distance: f.distance + f.length / 2 }))]) {
         for (const offset of [-60, 0, 60]) {
           const f = track.sample(o.distance + offset, undefined, o.routeId);
           assert.equal(f.section, 'course'); assert.ok(Math.abs(f.curvature) < .008);
         }
       }
     }
-    assert.ok(hard.corridorObstacles.length >= normal.corridorObstacles.length);
-    assert.ok(hard.corridorObstacles[0].safeWidth < normal.corridorObstacles[0].safeWidth);
-    assert.ok(hard.heightObstacles.find(o => o.motion).motion.stepSeconds < normal.heightObstacles.find(o => o.motion).motion.stepSeconds);
+    assert.ok(total(easy) <= total(normal) && total(normal) <= total(hard), definition.name);
   }
+  for (const [name, list] of Object.entries(tracks)) {
+    assert.ok(list.some(t => t.corridorObstacles.length) && list.some(t => t.heightObstacles.some(o => o.motion)), name);
+    assert.ok(list.every(t => !t.mineFields.length), `${name}: no mine fields while on hold`);
+    assert.ok(list.filter(t => t.corridorObstacles.length && t.heightObstacles.some(o => o.motion)).length >= list.length * .6, `${name}: most courses show both hazards`);
+  }
+  const step = c => tracks[c].flatMap(t => t.heightObstacles.filter(o => o.motion).map(o => o.motion))[0];
+  assert.ok(step('hard').stepSeconds < step('normal').stepSeconds && step('normal').stepSeconds < step('easy').stepSeconds);
+  assert.ok(step('hard').clearance < step('normal').clearance && step('normal').clearance < step('easy').clearance);
+  assert.equal(step('easy').stepSeconds, 2); assert.equal(step('easy').clearance, .75);
+  const widths = c => tracks[c].flatMap(t => t.corridorObstacles.map(o => o.safeWidth / t.halfWidth))[0];
+  assert.ok(widths('easy') > widths('normal') && widths('normal') > widths('hard'));
+});
+
+test('free drive tracks get corridors too, and no mine fields while on hold', () => {
+  const track = configureExtraObstacles(createTrack(undefined, DIFFICULTIES.intermediate), 'normal');
+  assert.ok(track.corridorObstacles.length >= 1);
+  assert.equal(track.mineFields.length, 0);
 });
 
 test('moving openings visit every N level and allow a discrete level throughout their cycle', () => {
@@ -79,4 +94,16 @@ test('moving field clock is shared by all racers and frozen during pause', () =>
   session.step(1, NEUTRAL_INPUT); assert.equal(track.obstacleTime, clock);
   session.start(); session.step(.1, NEUTRAL_INPUT); assert.ok(track.obstacleTime > clock);
   session.restart(); assert.equal(track.obstacleTime, 0);
+});
+
+test('boost pad HUD feed reports the upcoming pad and lane, flags the lateral band, and yields to a nearer hazard', () => {
+  const pad = { distance: 500, lane: 'right', center: 6, width: 6, length: 14 };
+  const track = { length: 2000, boostPads: [pad, { ...pad, distance: 900, lane: 'left', center: -6, routeId: 'other' }] };
+  const guide = (distance, offset, hazard = null) => boostPadGuide(track, distance, offset, 'main', hazard);
+  assert.deepEqual(guide(400, 6), { distance: 100, lane: 'right', safe: true });
+  assert.equal(guide(400, 0).safe, false);
+  assert.equal(guide(300, 6), null, 'beyond 150 m');
+  assert.equal(guide(400, 6, 60), null, 'a nearer corridor or height field wins');
+  assert.equal(guide(400, 6, 160).lane, 'right');
+  assert.equal(guide(520, 6), null, 'passed pad is a lap away');
 });

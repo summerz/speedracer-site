@@ -11,10 +11,26 @@ test('checkpoint decorations contain only arches, and leave electrical obstacles
   assert.equal(gates.object.children.filter(child => child.name.startsWith('Start arch')).length, 4);
   for (const child of gates.object.children) {
     assert.equal(child.geometry.type, 'TorusGeometry');
-    if (!child.name.startsWith('Checkpoint arch')) continue;
+    if (!child.name.startsWith('Checkpoint arch') || !child.visible) continue;
     const index = Number(child.name.split(' ').at(-1));
     const distance = index * track.length / 24;
     assert.ok(track.heightObstacles.every(obstacle => Math.abs(distance - obstacle.distance) >= obstacle.depth / 2 + 18));
+  }
+});
+
+test('visible checkpoint arches keep clear of obstacles after positions are re-rolled', () => {
+  const seeded = seed => () => { seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+  const track = createTrack(undefined, DIFFICULTIES.intermediate), gates = createRaceGates(track, 24), random = seeded(5);
+  for (let run = 0; run < 10; run++) {
+    track.randomizeObstacles(random); gates.refresh();
+    for (const child of gates.object.children) {
+      if (!child.name.startsWith('Checkpoint arch') || !child.visible) continue;
+      const distance = Number(child.name.split(' ').at(-1)) * track.length / 24;
+      for (const o of [...track.heightObstacles, ...track.corridorObstacles ?? []]) {
+        const gap = Math.abs(distance - o.distance);
+        assert.ok(Math.min(gap, track.length - gap) >= o.depth / 2 + 18);
+      }
+    }
   }
 });
 

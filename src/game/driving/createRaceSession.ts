@@ -1,9 +1,12 @@
-import { upcomingFork, forkAt, branchChoiceOpen } from '../track/trackBranches.js';
+import { upcomingFork, forkAt, branchChoiceOpen, forkApproachDrift } from '../track/trackBranches.js';
 import { RACE_CHALLENGES, type RaceChallengeId } from '../track/raceChallenge.js';
 import { DRONE_CATALOG } from '../drone/droneCatalog.js';
+import { resolveDroneConfiguration } from '../drone/droneConfiguration.js';
 import type { DroneConfiguration } from '../drone/droneConfiguration.js';
 import { upcomingHeightObstacle } from '../track/createTrack.js';
 import { resolveHeightObstacle, obstacleArrivalTime, upcomingCorridor } from '../track/obstacleDynamics.js';
+import { CRAFT_HALF_WIDTH, mineLineOffset, MINE_CHAIN_SLOPE } from '../track/mineField.js';
+import type { MineField } from '../track/createTrack.js';
 import type { Track } from '../track/createTrack.js';
 import { steeringYawRate } from './createDrivingModel.js';
 import type { DrivingInput, DrivingState } from './createDrivingModel.js';
@@ -12,9 +15,13 @@ import { createTimeAttack } from './createTimeAttack.js';
 import { createRaceRecords } from './raceRecords.js';
 import { aiDrivingProfile, AI_STYLE_LABELS, AI_OPPONENT_COUNT, selectAiRacer } from './aiRoster.js';
 import type { AiControlMode, AiDrivingProfile } from './aiRoster.js';
-import { RIVAL_ITEMS, isRivalItem } from '../progression/catalog.js';
+import { RIVAL_ITEMS, isRivalItem, applyUpgrades, MAX_UPGRADE_LEVEL } from '../progression/catalog.js';
 import type { RivalItemId } from '../progression/catalog.js';
 
+/** Rival upgrade level by device and challenge; weakest-rated rivals sit one level lower. */
+const RIVAL_LEVELS = { desktop: { easy: 1, normal: 2, hard: 3 }, touch: { easy: 0, normal: 1, hard: 2 } } as const;
+/** Top-3 rated rivals chase a leader more than 80 m ahead, fading out within 30 m. */
+const CATCH_UP = { desktop: .03, touch: .03 } as const;
 export type RaceMode = 'time-attack' | 'competition';
 export interface Standing {
   id: string; name: string; color: string; player: boolean;
@@ -102,12 +109,57 @@ export function aiDrivingInput(track: Track, configuration: DroneConfiguration, 
   let lane = [preferredLane, -laneWidth, laneWidth, 0].find(candidate =>
     traffic.every(other => Math.abs(other.offset - candidate) >= 4.2)) ?? preferredLane;
   lane = Math.max(-edge, Math.min(edge, lane));
+  // A pad within 120 m is worth a lane change only when no field follows it within 150 m, or the pad lane is that corridor's safe lane (never before a mine field).
+  const ahead = (distance: number, from: number) => ((distance - from) % track.length + track.length) % track.length;
+  const onRoute = (o: { routeId?: string }) => !o.routeId || o.routeId === state.routeId;
+  const pad = (track.boostPads ?? []).filter(onRoute).map(pad => ({ pad, gap: ahead(pad.distance, state.distance) }))
+    .filter(({ gap }) => gap <= 120).sort((a, b) => a.gap - b.gap)[0];
+  if (pad) {
+    const after = (o: { distance: number }) => ahead(o.distance, pad.pad.distance) <= 150;
+    const follow = (track.corridorObstacles ?? []).find(o => onRoute(o) && after(o));
+    const clear = !track.heightObstacles.some(o => onRoute(o) && after(o)) && !(track.mineFields ?? []).some(o => onRoute(o) && after(o))
+      && (!follow || follow.lane === pad.pad.lane);
+    if (clear) lane = pad.pad.center;
+  }
   const corridor = upcomingCorridor(track, state.distance, state.routeId);
-  const enteringCorridor = corridor && corridor.distance < Math.max(80, state.speed * 1.2);
+  const enteringCorridor = corridor && corridor.distance < Math.max(130, state.speed * 1.8);
   if (enteringCorridor) lane = corridor.obstacle.safeCenter;
+  // Mine field: slide onto its safe line before it, then follow line and slope until it ends (inside a field wins over the next one's approach).
+  let lineSlope = 0, following = false;
+  const into = (field: MineField) => ((state.distance - field.distance) % track.length + track.length) % track.length;
+  const fields = (track.mineFields ?? []).filter(onRoute);
+  const field = fields.find(f => into(f) < f.length) ?? fields.filter(f => track.length - into(f) <= 150).sort((a, b) => into(b) - into(a))[0];
+  if (field) {
+    const along = into(field), inside = along < field.length, gap = track.length - along, entry = mineLineOffset(field, 0);
+    // The slide starts after the last corridor/height field before this one has been cleared (at most 150 m ahead).
+    const ramp = Math.min(150, ...[...track.heightObstacles, ...track.corridorObstacles ?? []].filter(onRoute).map(o => {
+      const before = ((field.distance - o.distance) % track.length + track.length) % track.length;
+      return before < 150 + o.depth / 2 ? before - o.depth / 2 - 4 : Infinity;
+    }));
+    if (inside || gap <= ramp) {
+      lineSlope = inside ? (mineLineOffset(field, along + 2) - mineLineOffset(field, along)) / 2 : (entry - lane) / ramp;
+      lane = inside ? mineLineOffset(field, along) : lane + (entry - lane) * (ramp - gap) / ramp; following = true;
+    }
+  }
+  // Arc rails: hold the safe half of the segment you are in (or the next one within 200 m), switching in the gaps. A ring is taken when it
+  // lies on the safe side of every segment before it and of the next one after it, or that next segment is 180 m away.
+  const wrap = (x: number) => (x % track.length + track.length) % track.length;
+  const segments = (track.arcRails ?? []).filter(onRoute).flatMap(r => r.segments.map(g => {
+    const before = wrap(r.distance + g.at - state.distance), start = before > track.length - g.length ? before - track.length : before;
+    return { start, end: start + g.length, side: g.side };
+  }));
+  const inside = segments.find(g => g.start <= 0), segment = inside ?? segments.filter(g => g.start <= 200).sort((a, b) => a.start - b.start)[0];
+  if (segment) lane = [0, 2.5, 5].map(extra => -segment.side * (CRAFT_HALF_WIDTH + 1.5 + extra)).find(candidate => traffic.every(other => Math.abs(other.offset - candidate) >= 4.2)) ?? -segment.side * (CRAFT_HALF_WIDTH + 1.5);
+  const ring = (track.boostRings ?? []).filter(onRoute).map(r => ({ r, gap: wrap(r.distance - state.distance) })).filter(({ gap }) => gap <= 120).sort((a, b) => a.gap - b.gap)[0];
+  if (ring && segments.every(g => g.start >= ring.gap ? g.start - ring.gap >= 180 || g.side * ring.r.offset < 0 : g.end > ring.gap || g.side * ring.r.offset < 0)) lane = ring.r.offset;
+  // Single file on a line: nobody can pass, so hold the pace of a craft right ahead instead of ramming it.
+  if (following) for (const other of traffic) {
+    const gap = ((other.distance - state.distance) % track.length + track.length) % track.length;
+    if (gap < 60 && Math.abs(other.offset - state.offset) < 3.6) goalSpeed = Math.min(goalSpeed, other.speed + Math.max(0, gap - 10) * .4);
+  }
   const next = upcomingHeightObstacle(track, state.distance, state.routeId);
   let lift = 0;
-  if (next && next.distance < Math.max(70, state.speed * 2.2)) {
+  if (next && next.distance < Math.max(110, state.speed * 3)) {
     const opening = resolveHeightObstacle(next.obstacle, track.altitudeProfile.levels,
       obstacleArrivalTime(track, state.elapsed, next.distance, state.speed, next.obstacle.depth, state.distance, state.routeId));
     const level = track.altitudeProfile.levels.map((height, index) => ({ height, index }))
@@ -116,12 +168,15 @@ export function aiDrivingInput(track: Track, configuration: DroneConfiguration, 
     if (level >= 0) lift = Math.sign(level - state.altitudeLevel);
   }
   if (fork) {
-    if (fork.kind === 'horizontal') lane = branchSide ? 3.5 : -3.5;
+    if (fork.kind === 'horizontal') { if (!following && !segment) lane = branchSide ? 3.5 : -3.5; }
     else if (!next || next.distance > fork.start - state.distance % track.length)
       lift = Math.sign((branchSide ? track.altitudeProfile.levels.length - 1 : 0) - state.altitudeLevel);
   }
+  // Pull toward the lane, but never ask for a sideways slope beyond what the stabilizer can hold (heading gain 14 x MINE_CHAIN_SLOPE),
+  // or the craft overshoots the lane and, for a weakly damped one, the road edge.
+  const lateralPull = following ? Math.max(-14 * MINE_CHAIN_SLOPE, Math.min(14 * MINE_CHAIN_SLOPE, (lane - state.offset) * .5)) : (lane - state.offset) * .14;
   return { throttle: true, brake: state.speed > goalSpeed + 1, boost,
-    steer: (curvature * state.speed - state.heading * (enteringCorridor ? 8 : 2.8) + (lane - state.offset) * .14) / Math.max(.1, steeringYawRate(state.speed, p)), lift };
+    steer: (curvature * forkApproachDrift(track, state.distance) * state.speed - (state.heading - lineSlope) * (following ? 14 : enteringCorridor ? 8 : 2.8) + lateralPull) / Math.max(.1, steeringYawRate(state.speed, p)), lift };
 }
 
 /** One clock, countdown and pause lifecycle for both modes; completed pilots become ghosts. */
@@ -144,7 +199,11 @@ export function createRaceSession(track: Track, configuration: DroneConfiguratio
     const { color } = racer;
     const profile = aiDrivingProfile(racer, controlMode);
     profile.pace *= RACE_CHALLENGES[challenge].aiPace;
-    const rivalConfiguration = { ...entry.configuration, boostStyle: {
+    const level = Math.max(0, Math.min(MAX_UPGRADE_LEVEL, RIVAL_LEVELS[controlMode][challenge] - (racer.rating <= 2 ? 1 : 0)));
+    const speed = challenge === 'hard' ? controlMode === 'touch' ? 1.015 : 1.03 : 1;
+    const upgraded = resolveDroneConfiguration(applyUpgrades(entry.configuration, { engine: level, brakes: level, steering: level, stabilizer: level, battery: level }),
+      [{ performanceMultiplier: { topSpeed: speed, boostSpeed: speed, boostStage2Speed: speed } }]);
+    const rivalConfiguration = { ...upgraded, boostStyle: {
       core: '#ffffff', body: color, tail: color, afterglow: color, pulseColor: color,
     } };
     return {
@@ -154,6 +213,7 @@ export function createRaceSession(track: Track, configuration: DroneConfiguratio
         createRaceRecords({ trackId: 'ai-memory', laps: rules.laps, configurationId: racer.id }), focusSlots, { laps: rules.laps }),
     };
   });
+  const chasers = new Set([...rivals].sort((a, b) => b.rating - a.rating).slice(0, 3));
   const participants = [{ id: 'player', name: craft?.name ?? 'PLAYER',
     color: playerColor, craftName: craft?.name ?? 'PLAYER', style: '', rating: 0, configuration, controller: player }, ...rivals];
   const contacts = new Map<string, number>();
@@ -240,7 +300,9 @@ export function createRaceSession(track: Track, configuration: DroneConfiguratio
         player.step(step, { ...input, lift: firstStep ? input.lift : 0 }); firstStep = false;
         rivals.forEach((rival, index) => {
           const opponents = participants.filter(p => p !== rival && p.controller.phase !== 'finished').map(p => p.controller.model.state);
-          const controls = aiDrivingInput(track, rival.configuration, rival.controller.model.state, index, opponents, rival.profile, rival.effects.jam > 1e-8 ? .5 : 1);
+          const gap = Math.max(0, ...opponents.map(o => o.distance)) - rival.controller.model.state.distance;
+          const chase = challenge !== 'easy' && chasers.has(rival) ? 1 + CATCH_UP[controlMode] * Math.max(0, Math.min(1, (gap - 30) / 50)) : 1;
+          const controls = aiDrivingInput(track, rival.configuration, rival.controller.model.state, index, opponents, rival.profile, rival.effects.jam > 1e-8 ? .5 : chase);
           rival.controller.step(step, { ...controls, ...(rival.effects.jam > 1e-8 ? { targetSpeedScale: .5 } : {}) }, rival.effects.freeze > 1e-8);
           rival.effects.freeze = Math.max(0, rival.effects.freeze - step);
           rival.effects.jam = Math.max(0, rival.effects.jam - step);

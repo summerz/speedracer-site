@@ -1,6 +1,6 @@
-import { RACE_CHALLENGES, type RaceChallengeId } from './raceChallenge.js';
+import type { RaceChallengeId } from './raceChallenge.js';
 import { createTrack, createTrackFrame } from './createTrack.js';
-import type { HeightObstacle, Track } from './createTrack.js';
+import type { Track } from './createTrack.js';
 import { authorClosedTrack } from './trackAuthoring.js';
 import { ALTITUDE_PROFILES } from './altitudeProfile.js';
 import type { DifficultyPreset } from './difficulty.js';
@@ -15,20 +15,7 @@ export function trackPreset(definition: TrackDefinition): DifficultyPreset {
 }
 export function createCatalogTrack(definition: TrackDefinition, challenge: RaceChallengeId = 'normal'): Track {
   const track = withTrackBranches(createTrack(undefined, trackPreset(definition), definition.layout ? authorClosedTrack(definition.layout) : undefined), definition.branches);
-  const obstacles = track.heightObstacles as HeightObstacle[];
-  const scale = RACE_CHALLENGES[challenge].obstacleScale;
-  if (scale < 1) {
-    let trunkIndex = 0;
-    obstacles.splice(0, obstacles.length, ...obstacles.filter(obstacle => obstacle.routeId || ++trunkIndex % 5 !== 1));
-  }
-  else if (scale > 1) {
-    const extra = obstacles.slice(0, -1).flatMap((obstacle, i) => {
-      if (i % 3 || obstacles[i + 1].routeId !== obstacle.routeId || obstacles[i + 1].distance - obstacle.distance < 180) return [];
-      return [{ ...obstacle, distance: (obstacle.distance + obstacles[i + 1].distance) / 2 }];
-    });
-    obstacles.push(...extra); obstacles.sort((a, b) => a.distance - b.distance);
-  }
-  return configureExtraObstacles(track, challenge);
+  return configureExtraObstacles(track, challenge, definition.id);
 }
 export function trackMetrics(track: Track) {
   const frame = createTrackFrame(); let maxCurvature = 0, minHeight = Infinity, maxHeight = -Infinity, rollingMetres = 0;

@@ -36,6 +36,9 @@
 .height-guide[data-readiness='switching'] .is-active::after { background:#ffc06c; }
 .height-changed .height-bars .is-active::after { outline:1px solid #e5fff366; }
 .height-guide>strong { position:absolute; left:0; bottom:calc(100% + 8px); color:#e9f9ff; font:10px 'IBM Plex Mono',monospace; white-space:nowrap; }
+.height-guide[data-pad='true']>strong { color:#5cfff0; text-shadow:0 0 8px #1ae6d2a0,0 2px 6px #000; }
+.height-guide[data-rail='true']>strong { color:#b6ff3c; text-shadow:0 0 8px #8cff1ab0,0 2px 6px #000; }
+.height-guide[data-mines='true']>strong { color:#ff5cf0; text-shadow:0 0 8px #ff1ad2a0,0 2px 6px #000; }
 .height-guide>strong:empty { display:none; }
 .driving-overlay.is-inset .height-guide { left:-18px; top:auto; bottom:0; gap:2px; }
 .driving-overlay.is-inset .height-bars { padding:0; gap:3px; }

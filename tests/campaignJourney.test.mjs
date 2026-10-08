@@ -6,7 +6,11 @@ import { DRONE_CATALOG } from '../output/test/game/drone/droneCatalog.js';
 import { createRaceSession, aiDrivingInput } from '../output/test/game/driving/createRaceSession.js';
 import { createRaceRecords } from '../output/test/game/driving/raceRecords.js';
 import { initialProgress, applyCommand, validateProgress } from '../output/test/game/progression/progress.js';
+import { applyUpgrades, MAX_UPGRADE_LEVEL } from '../output/test/game/progression/catalog.js';
 import { campaignStatus } from '../output/test/game/progression/campaign.js';
+
+// Skilled-player proxy (max upgrades + sharper cornering/pace): this test checks progression flow, not whether an AI-equal player beats the stronger rivals.
+const SKILLED = { pace: 1.1, cornerLimit: .9 };
 
 // Exercise the running session and use its actual result, rather than inventing lap times/ranks.
 function runCourse(definition, configuration, mode, platform, slowStart = false) {
@@ -20,7 +24,7 @@ function runCourse(definition, configuration, mode, platform, slowStart = false)
   let ticks = 0;
   const step = () => {
     const controls = aiDrivingInput(track, configuration, race.model.state, 1,
-      race.rivals.map(rival => rival.controller.model.state));
+      race.rivals.map(rival => rival.controller.model.state), mode === 'competition' ? SKILLED : undefined);
     if (slowStart && race.model.state.elapsed < 90) { controls.brake = true; controls.boost = false; }
     race.step(1 / 30, controls);
     ticks++;
@@ -86,9 +90,10 @@ for (const platform of ['desktop', 'touch']) {
     assert.equal(progress.rewards[loss.input.raceId].bonus, 0);
     assert.equal(campaignStatus(progress.campaign, 'competition', TRACK_CATALOG[1]), 'locked');
 
+    const tuned = applyUpgrades(needle, { engine: MAX_UPGRADE_LEVEL, brakes: MAX_UPGRADE_LEVEL, steering: MAX_UPGRADE_LEVEL, stabilizer: MAX_UPGRADE_LEVEL, battery: MAX_UPGRADE_LEVEL });
     for (const definition of TRACK_CATALOG) {
       assert.equal(campaignStatus(progress.campaign, 'competition', definition), 'available');
-      const command = runCourse(definition, needle, 'competition', platform);
+      const command = runCourse(definition, tuned, 'competition', platform);
       assert.ok(command.outcome.rank <= campaignRankLimit(definition), `${definition.name}: finish within the qualification cutoff`);
       progress = applyCommand(progress, command);
       assert.equal(campaignStatus(progress.campaign, 'competition', definition), 'cleared');

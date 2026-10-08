@@ -1,6 +1,6 @@
 # 트랙 카탈로그
 
-현재 v0.17.0 제작 데이터에서 생성한 문서입니다. 수정은 카탈로그와 이 문서 생성 스크립트에 반영하고 `npm run docs:world`로 갱신합니다. `npm run docs:world:check`는 데이터와 문서의 일치를 확인합니다.
+현재 v0.18.0 제작 데이터에서 생성한 문서입니다. 수정은 카탈로그와 이 문서 생성 스크립트에 반영하고 `npm run docs:world`로 갱신합니다. `npm run docs:world:check`는 데이터와 문서의 일치를 확인합니다.
 
 캠페인 규칙과 저장/해금은 [트랙 제작과 캠페인](TRACK_CAMPAIGN.md), 경로별 구성은 [갈림길 카탈로그](TRACK_BRANCHES.md), 주변 구조물은 [랜드마크 카탈로그](LANDMARK_CATALOG.md), 하늘·안개·천체는 [월드 환경](WORLD_ENVIRONMENTS.md)을 참조합니다.
 
