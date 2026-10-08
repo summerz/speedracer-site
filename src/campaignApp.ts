@@ -13,6 +13,8 @@ import { loadoutMarkup, mountLoadout } from './campaignLoadout';
 import './campaign.css';
 
 type View = 'districts' | 'tracks' | 'detail';
+interface CardInfo { url: string; stats: string; landmark: string }
+const cardCache = new Map<string, CardInfo>();
 interface Snapshot { view: View; district: DistrictId; trackId: string }
 const CHALLENGE_IDS = ['normal', 'easy', 'hard'] as const;
 const DEPTH: Record<View, number> = { districts: 0, tracks: 1, detail: 2 };
@@ -70,11 +72,14 @@ export function mountCampaign(root: HTMLDivElement, store: ProgressStore, contex
   const portraitPhone = () => matchMedia('(max-width: 760px) and (orientation: portrait), (max-width: 639px)').matches;
 
   const snapshot = (): Snapshot => ({ view, district, trackId: selected.id });
-  const syncPreview = () => {
-    if (view !== 'detail') return;
+  const ensurePreview = () => {
     if (!preview && !previewFailed) {
       try { preview = createTrackPreview(get('campaign-preview')); } catch { previewFailed = true; get('campaign-preview').textContent = '3D 미리보기를 표시할 수 없습니다.'; }
     }
+  };
+  const syncPreview = () => {
+    if (view !== 'detail') return;
+    ensurePreview();
     const key = `${selected.id}:${selected.revision}:${challenge}`;
     if (preview && key !== previewKey) { previewKey = key; preview.setTrack(createCatalogTrack(selected, challenge), DISTRICTS[selected.district].color, selected); }
   };
@@ -108,12 +113,13 @@ export function mountCampaign(root: HTMLDivElement, store: ProgressStore, contex
   const paintDistricts = (campaign: CampaignProgress) => {
     const cleared = TRACK_CATALOG.filter(t => campaignStatus(campaign, mode, t) === 'cleared').length;
     const starTotal = TRACK_CATALOG.reduce((sum, t) => sum + bestStars(campaign, t), 0), starMax = TRACK_CATALOG.length * 3;
+    const firstRun = TRACK_CATALOG.every(t => (['time-attack', 'competition'] as const).every(m => campaignStatus(campaign, m, t) !== 'cleared'));
     const finished = cleared === TRACK_CATALOG.length;
     const next = nextCampaignTrack(campaign, mode);
     const nextDistrict = finished ? undefined : next.district;
     const banner = finished
       ? `<div class="continue-banner" data-done="true"><span class="eyebrow">COMPLETE</span><strong>모든 코스 통과 · <span class="stat-stars">★ ${starTotal}/${starMax}</span></strong></div>`
-      : `<div class="continue-banner" style="--district-color:${DISTRICTS[next.district].color}"><span class="continue-copy"><span class="eyebrow">이어하기</span><strong><em>${DISTRICTS[next.district].name}</em> · <span class="mono">${number2(next.order)}</span> ${next.name}</strong></span><button id="campaign-continue" type="button" class="continue-button">이어서 도전 ↗</button></div>`;
+      : `<div class="continue-banner" style="--district-color:${DISTRICTS[next.district].color}"><span class="continue-copy"><span class="eyebrow">${firstRun ? '첫 코스' : '이어하기'}</span><strong><em>${DISTRICTS[next.district].name}</em> · <span class="mono">${number2(next.order)}</span> ${next.name}</strong></span><button id="campaign-continue" type="button" class="continue-button">${firstRun ? '첫 도전' : '이어서 도전'} ↗</button></div>`;
     get('districts-summary').innerHTML = `${banner}<div class="overall"><p class="mono"><span>통과 <b>${cleared}</b>/${TRACK_CATALOG.length}</span><span class="stat-stars">★ <b>${starTotal}</b>/${starMax}</span></p><span class="meter" aria-hidden="true"><i style="width:${starTotal / starMax * 100}%"></i></span></div>`;
     get('district-list').innerHTML = (Object.entries(DISTRICTS) as [DistrictId, typeof DISTRICTS[DistrictId]][]).map(([id, entry], index) => {
       const tracks = districtTracks(id);
@@ -136,6 +142,7 @@ export function mountCampaign(root: HTMLDivElement, store: ProgressStore, contex
     const clear = best && campaignClearRecord(campaign, mode, t, best);
     return clear && best ? `${RACE_CHALLENGES[best].label} · ${mode === 'competition' ? `${clear.rank}위` : `${clear.laps.length}랩`} · ${time(clear.total)}${clear.assisted ? ' · 보조' : ''}` : '';
   };
+  let mapToken = 0, mapTimer: ReturnType<typeof setTimeout> | undefined;
   const paintTracks = (campaign: CampaignProgress) => {
     const entry = DISTRICTS[district], tracks = districtTracks(district);
     const done = tracks.filter(t => campaignStatus(campaign, mode, t) === 'cleared').length, stars = tracks.reduce((sum, t) => sum + bestStars(campaign, t), 0);
@@ -147,12 +154,36 @@ export function mountCampaign(root: HTMLDivElement, store: ProgressStore, contex
     list.innerHTML = tracks.map(t => {
       const status = campaignStatus(campaign, mode, t);
       const fresh = !campaign.knownTracks.includes(t.id) ? '<em class="course-new">NEW</em>' : '';
+      const fork = t.branches?.length ? '<em class="course-fork">갈림길</em>' : '';
       const chip = status === 'locked' ? '잠김' : status === 'cleared' ? '✓ 통과' : '도전';
       const record = status === 'cleared' ? trackRecord(campaign, t) : '';
-      return `<button type="button" class="track-card" data-status="${status}" data-track="${t.id}"><span class="track-top"><span class="course-number mono">${number2(t.order)}</span><span class="track-chip">${chip}</span></span>
-        <strong class="track-name">${t.name}${fresh}</strong>
-        ${status === 'locked' ? '<span class="track-locked">이전 코스 통과 필요</span>' : `<span class="course-meta">${pips(t.rating)}<span>${t.altitudeLevels}단 고도</span>${mode === 'competition' ? `<span>${campaignRankLimit(t)}위 이내</span>` : ''}</span><span class="track-foot">${starsMarkup(bestStars(campaign, t))}${record ? `<span class="course-card-record">${record}</span>` : ''}</span>`}</button>`;
+      return `<button type="button" class="track-card" data-status="${status}" data-track="${t.id}"><span class="track-map-wrap" data-map="${t.id}">${status === 'locked' ? '<span class="track-lock" aria-hidden="true">🔒</span>' : ''}</span><span class="track-body"><span class="track-top"><span class="course-number mono">${number2(t.order)}</span><span class="track-chip">${chip}</span></span>
+        <strong class="track-name">${t.name}${fresh}${fork}</strong>
+        <span class="track-stats mono" data-stats="${t.id}"></span><span class="track-landmark" data-landmark="${t.id}"></span>
+        ${status === 'locked' ? '<span class="track-locked">이전 코스 통과 필요</span>' : `<span class="course-meta">${pips(t.rating)}<span>${t.altitudeLevels}단 고도</span>${mode === 'competition' ? `<span>${campaignRankLimit(t)}위 이내</span>` : ''}</span><span class="track-foot">${starsMarkup(bestStars(campaign, t))}${record ? `<span class="course-card-record">${record}</span>` : ''}</span>`}</span></button>`;
     }).join('');
+    // Thumbnails are snapshots of the detail preview's own scene; one track per idle tick.
+    const token = ++mapToken, km = (n: number) => (n / 1000).toFixed(1);
+    const probe = list.querySelector<HTMLElement>('[data-map]');
+    const w = Math.max(1, Math.round(probe?.clientWidth ?? 0)), h = Math.max(1, Math.round(probe?.clientHeight ?? 0));
+    const fill = (t: TrackDefinition, info: CardInfo) => {
+      const card = list.querySelector(`[data-track="${t.id}"]`); if (!card) return;
+      if (info.url) card.querySelector('[data-map]')!.insertAdjacentHTML('afterbegin', `<img class="track-map" alt="" src="${info.url}">`);
+      card.querySelector('[data-stats]')!.textContent = info.stats;
+      card.querySelector('[data-landmark]')!.textContent = info.landmark;
+    };
+    const pending = tracks.filter(t => { const hit = cardCache.get(`${t.id}:${t.revision}:${w}x${h}`); if (hit) fill(t, hit); return !hit; });
+    const step = () => {
+      const t = pending.shift(); if (!t || token !== mapToken) return;
+      const track = createCatalogTrack(t, 'normal'), m = trackMetrics(track);
+      ensurePreview(); let url = '';
+      try { url = preview?.snapshot(track, entry.color, t, w, h) ?? ''; previewKey = ''; } catch { /* WebGL unavailable: cards stay text-only */ }
+      const info = { url, landmark: describeTrackLandmarks(track, t)[0]?.name ?? '',
+        stats: `${km(m.lengthMin)}${km(m.lengthMin) !== km(m.lengthMax) ? `–${km(m.lengthMax)}` : ''} km · 고저차 ${Math.round(m.heightRange)} m · 장애물 ${m.obstacles} · ${t.laps}랩` };
+      cardCache.set(`${t.id}:${t.revision}:${w}x${h}`, info); fill(t, info); schedule();
+    };
+    const schedule = () => { if (pending.length) mapTimer = setTimeout(step, 0); };
+    clearTimeout(mapTimer); schedule();
   };
 
   const paintDetail = (campaign: CampaignProgress) => {
@@ -284,5 +315,5 @@ export function mountCampaign(root: HTMLDivElement, store: ProgressStore, contex
   get('shop-back').addEventListener('click', () => { location.hash = ''; }, listen);
   get('open-shop').addEventListener('click', () => { location.hash = 'shop'; }, listen);
   const returnFrame = returning ? requestAnimationFrame(focusEntry) : 0;
-  return () => { disposed = true; cancelAnimationFrame(returnFrame); events.abort(); unsubscribe(); preview?.dispose(); };
+  return () => { disposed = true; cancelAnimationFrame(returnFrame); events.abort(); unsubscribe(); preview?.dispose(); clearTimeout(mapTimer); mapToken++; };
 }

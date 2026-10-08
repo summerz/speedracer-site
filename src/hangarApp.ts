@@ -17,6 +17,8 @@ const MODE_LABEL: Record<RaceMode, string> = { 'time-attack': '타임어택', co
 
 /** Resume card: the next track to attempt in the last-played mode, deep-linked into the campaign detail. */
 function continueCard(campaign: CampaignProgress, mode: RaceMode): string {
+  const firstRun = TRACK_CATALOG.every(t => (['time-attack', 'competition'] as const).every(m => campaignStatus(campaign, m, t) !== 'cleared'));
+  if (firstRun) return `<section class="home-continue" aria-label="시작하기"><div class="continue-copy"><p class="eyebrow">시작하기</p><strong class="continue-track">CITY CIRCUITS 캠페인</strong><span class="continue-note">네온 주거지의 첫 코스부터 시작합니다</span></div><a class="primary-action continue-action" id="continue-campaign" href="#campaign">캠페인 시작 <span aria-hidden="true">↗</span></a></section>`;
   const next = nextCampaignTrack(campaign, mode);
   if (campaignStatus(campaign, mode, next) === 'cleared') return `<section class="home-continue" data-done="true" aria-label="이어하기"><div class="continue-copy"><p class="eyebrow">이어하기 · ${MODE_LABEL[mode]}</p><strong class="continue-track">모든 코스 통과</strong></div><a class="primary-action continue-action" id="continue-campaign" href="#campaign">캠페인 <span aria-hidden="true">↗</span></a></section>`;
   const stars = Math.max(...CHALLENGE_IDS.map(id => campaignStars(campaign, mode, next, id)));
@@ -52,7 +54,7 @@ export function mountHangar(root: HTMLDivElement, selected: DroneCatalogEntry, o
 
         <section class="hangar-panel" aria-labelledby="drone-title">
           ${continueCard(campaign, mode)}
-          <div class="home-actions"><button type="button" id="start-driving" class="home-secondary">캠페인 <span aria-hidden="true">↗</span></button><a class="home-secondary free-drive-link" href="#drive">자유 주행 <small>타임어택 / 경쟁 레이스</small></a></div>
+          <div class="home-actions"><button type="button" id="start-driving" class="home-secondary">캠페인 <span aria-hidden="true">↗</span></button></div>
           <p class="home-chips mono"><span>캠페인 통과 <b>${cleared}</b>/${TRACK_CATALOG.length}</span><span class="stat-stars">★ <b>${starTotal}</b>/${TRACK_CATALOG.length * 3}</span><span>보유 기체 <b>${ownedEntries.length}</b>/${DRONE_CATALOG.length}</span><a href="#shop">상점 ↗</a></p>
           <p class="progress-warning" id="hangar-progress-warning" role="status"></p>
           <section class="home-craft" aria-labelledby="home-craft-title">
@@ -69,6 +71,7 @@ export function mountHangar(root: HTMLDivElement, selected: DroneCatalogEntry, o
               <button type="button" data-thrust="boost" aria-pressed="false" aria-keyshortcuts="3"><kbd>3</kbd>부스트</button>
             </div>
           </div>
+          <div class="free-drive"><a class="free-drive-link" href="#drive">시험 주행 · NEON CIRCUIT <span aria-hidden="true">↗</span></a><span class="free-drive-note">포인트 획득 · 캠페인 기록 없음</span></div>
         </section>
       </div>
 

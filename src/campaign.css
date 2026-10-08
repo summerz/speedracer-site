@@ -93,11 +93,19 @@
 .tracks-progress { display:grid; gap:7px; }
 .tracks-progress p { display:flex; justify-content:space-between; margin:0; color:#99adb9; font-size:13px; }
 .tracks-progress b { color:#e0f5ef; font-weight:500; }
-.track-list { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); grid-auto-rows:minmax(200px,280px); gap:14px; }
+.track-list { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); grid-auto-rows:auto; gap:14px; }
 .track-card { appearance:none; display:flex; flex-direction:column; gap:10px; min-height:220px; min-width:0; padding:16px; text-align:left; color:#c9dadf; font:inherit; cursor:pointer; background:linear-gradient(180deg,color-mix(in srgb,var(--district-color) 10%,#0b1c28),#0b1c28 55%); border:1px solid #58717d70; border-radius:10px; transition:transform 140ms,border-color 140ms; }
 .track-card:hover { transform:translateY(-2px); border-color:var(--district-color); }
 .track-card[data-status=available] { border-color:#80ffe0a0; box-shadow:0 0 22px #80ffe015; }
-.track-card[data-status=locked] { opacity:.55; background:#09131c; }
+.track-card[data-status=locked] { opacity:.6; background:#09131c; }
+.track-map-wrap { position:relative; flex:none; height:150px; overflow:hidden; background:linear-gradient(135deg,color-mix(in srgb,var(--district-color) 22%,#050d14),#050d14 70%); border:1px solid color-mix(in srgb,var(--district-color) 28%,#213340); border-radius:6px; }
+.track-map { display:block; width:100%; height:100%; object-fit:cover; }
+.track-card[data-status=locked] .track-map { opacity:.35; filter:grayscale(1); }
+.track-lock { position:absolute; right:6px; top:4px; font-size:13px; z-index:1; }
+.track-body { display:flex; flex:1; flex-direction:column; gap:6px; min-width:0; }
+.track-stats { color:#a9bdc8; font-size:11px; line-height:1.4; min-height:1.4em; }
+.track-landmark { color:#78919e; font-size:11px; min-height:1.3em; }
+.course-fork { font:500 10px 'Noto Sans KR',sans-serif; font-style:normal; color:#ffd9a0; border:1px solid #ffd9a070; border-radius:3px; padding:1px 5px; }
 .track-top { display:flex; align-items:center; justify-content:space-between; gap:8px; }
 .course-number { font-size:22px; color:var(--district-color); }
 .track-chip { padding:3px 9px; border-radius:4px; font-size:11px; color:#8ea5b1; border:1px solid #58717d70; white-space:nowrap; }
@@ -255,12 +263,20 @@
   .district-card { flex:0 0 220px; scroll-snap-align:start; padding:14px; }
   .district-description { -webkit-line-clamp:4; }
   .view-tracks { display:flex; flex-direction:column; overflow:hidden; }
-  .tracks-head { margin-bottom:8px; padding:8px 14px; align-items:center; grid-template-columns:minmax(0,1fr) 240px; }
-  .tracks-title .eyebrow { display:none; }
-  .tracks-title h2 { font-size:22px; }
-  .tracks-description { margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .tracks-head { display:flex; margin-bottom:8px; padding:6px 14px; align-items:center; justify-content:space-between; gap:14px; }
+  .tracks-title .eyebrow, .tracks-description { display:none; }
+  .tracks-title h2 { font-size:20px; }
+  .tracks-progress { display:flex; align-items:center; gap:14px; }
+  .tracks-progress p { gap:14px; font-size:12px; }
+  .tracks-progress .meter { width:140px; }
   .track-list { flex:1; min-height:0; grid-template-columns:repeat(4,minmax(0,1fr)); grid-auto-rows:minmax(0,1fr); gap:10px; }
-  .track-card { min-height:0; padding:12px; gap:6px; }
+  .track-card { min-height:0; padding:8px; gap:5px; }
+  .track-map-wrap { height:70px; }
+  .track-top .course-number { font-size:16px; }
+  .track-body { gap:3px; }
+  .track-stats, .track-landmark { font-size:10px; }
+  .track-foot { gap:3px; }
+  .track-foot .course-stars { font-size:15px; }
   .course-number { font-size:18px; }
   .track-name { font-size:19px; }
   .course-meta { font-size:11px; }
@@ -312,15 +328,13 @@
   .district-lock { font-size:10px; }
   .tracks-head { grid-template-columns:1fr; padding:12px 14px; margin-bottom:10px; }
   .track-list { grid-template-columns:1fr; grid-auto-rows:auto; gap:8px; }
-  .track-card { display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:center; gap:4px 12px; min-height:0; padding:12px; }
-  .track-top { display:contents; }
-  .track-top .course-number { grid-column:1; grid-row:1 / 3; font-size:20px; }
-  .track-name { grid-column:2; font-size:19px; }
-  .track-top .track-chip { grid-column:3; grid-row:1; }
-  .track-card .course-meta { grid-column:2 / 4; }
-  .track-foot { grid-column:2 / 4; margin-top:0; grid-template-columns:auto minmax(0,1fr); align-items:center; gap:10px; }
+  .track-card { flex-direction:row; align-items:stretch; gap:12px; min-height:0; padding:10px; }
+  .track-map-wrap { width:112px; height:auto; min-height:112px; align-self:stretch; }
+  .track-body { gap:4px; }
+  .track-name { font-size:19px; gap:6px; }
+  .track-foot { margin-top:0; grid-template-columns:auto minmax(0,1fr); align-items:center; gap:10px; }
   .track-foot .course-stars { font-size:16px; }
-  .track-locked { grid-column:2 / 4; margin-top:0; }
+  .track-locked { margin-top:0; }
   .view-detail { display:block; padding-inline:0; padding-bottom:0; }
   .detail-media { display:grid; gap:10px; padding:0 var(--pad); overflow:visible; }
   .campaign-preview { height:clamp(150px,24dvh,230px); }
