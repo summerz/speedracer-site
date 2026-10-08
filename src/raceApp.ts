@@ -395,7 +395,8 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
     corner.textContent = state.upcomingSection === 'vertical-loop' ? '수직 루프 · 자동 추종' : state.upcomingSection === 'helix' ? '스프링 · 자동 추종' : Math.abs(curvature) < 0.004 ? '직선' : `${curvature > 0 ? '우' : '좌'}회전${Math.abs(curvature) > 0.02 ? ' · 급한 코너' : ''}`;
     const nextNotice = state.notice === 'off-track' ? `코스 이탈 · -${OFF_TRACK_PENALTY_POINTS}P` : state.notice === 'craft-collision' ? `기체 접촉 · -${COLLISION_PENALTY_POINTS}P` : state.notice === 'collision' ? `경계 접촉 · -${COLLISION_PENALTY_POINTS}P` : state.notice === 'obstacle-pass' ? '장애물 통과 · +1P' : state.notice === 'corridor-collision' ? `통로 방전 접촉 · -${OBSTACLE_COLLISION_PENALTY_POINTS}P` : state.notice === 'height-collision' ? `방전 접촉 · -${OBSTACLE_COLLISION_PENALTY_POINTS}P` : state.notice === 'recovery' ? '체크포인트 복귀' : '';
     if (notice.textContent !== nextNotice) notice.textContent = nextNotice;
-    if (state.phase !== lastPhase) {
+    const phaseChanged = state.phase !== lastPhase;
+    if (phaseChanged) {
       lastPhase = state.phase;
       if (state.phase === 'running' || state.phase === 'countdown' || state.phase === 'finished') { previewing = false; preferences.close(); }
       get('difficulty-picker').hidden = !!campaign || state.phase !== 'ready';
@@ -412,9 +413,10 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
       get('drive-overlay-copy').textContent = state.phase === 'ready' && campaign ? selectedMode === 'competition' ? `${campaign.track.laps}랩 경기에서 ${campaignRankLimit(campaign.track)}위 이내로 완주하면 다음 트랙이 열립니다.` : `매 랩 ${attack.lapLimit}초 안에 ${attack.totalLaps}랩을 완주하세요. 제한시간이 지나면 실격됩니다.` : state.phase === 'ready' ? (selectedMode === 'competition' ? `상대 기체 ${AI_OPPONENT_COUNT}대와 3랩을 겨룹니다. 직선에서 추월하고 급한 코너에서는 감속하세요.` : '3랩을 완주해 기록에 도전하세요. 자동으로 가속하며 급한 코너에서는 감속합니다.') : '';
       startButton.innerHTML = `${state.phase === 'paused' ? '계속하기' : state.phase === 'finished' ? '다시 도전' : '레이스 시작'} <span aria-hidden="true">↗</span>`;
       get('race-hangar').textContent = state.phase === 'paused' ? '포기하고 캠페인으로' : '캠페인으로';
-      if (state.phase === 'paused' || state.phase === 'finished' || (state.phase === 'ready' && !coarsePointer.matches)) startButton.focus({ preventScroll: true });
     }
     paintMenu();
+    // Focus only after paintMenu reveals the overlay; a hidden button cannot take focus.
+    if (phaseChanged && (state.phase === 'paused' || state.phase === 'finished' || (state.phase === 'ready' && !coarsePointer.matches))) startButton.focus({ preventScroll: true });
   };
   const events = new AbortController();
   const listen = { signal: events.signal };
