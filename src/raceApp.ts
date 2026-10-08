@@ -87,7 +87,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
           <p class="touch-help">메뉴: 화살표로 이동 · Enter로 선택. 게임패드: 방향 패드/스틱으로 이동 · A 선택 · B 돌아가기.<br />주행: 왼쪽 스틱 조향 · 방향 패드 ↑/↓ 고도 · LT 감속 · RT/RB 부스트 · X 콕핏 · Y 트랙 뷰 · LB 아이템 · Start 일시정지/계속.</p>
           <div class="drive-keys"><span>자동 가속 · <kbd>S</kbd> 감속</span><span><kbd>A</kbd> <kbd>D</kbd> 좌우 조향</span><span><kbd>↓</kbd> <kbd>↑</kbd> 고도 한 단계 전환</span><span><kbd>Space</kbd> 길게 눌러 부스트</span><span><kbd>C</kbd> 기체·콕핏 전환</span><span><kbd>X</kbd> 트랙 PIP·자리 교환·닫기</span><span><kbd>V</kbd> 아이템 사용</span><span><kbd>Esc</kbd> 일시정지·계속하기</span><span>대기·일시정지 중 <kbd>S</kbd> 설정</span></div>
           <p class="touch-help">자동으로 가속합니다. 왼쪽 조이스틱은 좌우 조향, 아래로 당기면 감속합니다. 대각선으로 두 조작을 함께 할 수 있습니다.<br />오른쪽 BOOST를 누른 채 위로 길게 밀수록 높게, 아래로 밀수록 낮게 고도를 선택합니다. 여러 단계도 한 번에 바꿀 수 있습니다. 손을 떼면 선택한 고도는 유지하고 부스트만 해제합니다. ↑/↓만 누르면 부스트 없이 고도를 바꿉니다. ${(configuration.performance.boostStage2Threshold / configuration.performance.boostDrain).toFixed(1)}초 연속 부스트 시 2단계에 진입합니다.<br />시점은 일시정지 메뉴의 시점 전환에서 바꿀 수 있습니다.</p>
-          <p>중간·어려움: 주황 방전 구역은 모든 고도에서 위험합니다. 민트색 화살표를 따라 왼쪽·가운데·오른쪽 통로로 이동하세요. 이동 전기선의 링과 화살표는 통과 구멍의 위치·이동 방향을 보여주며, 고도 안내는 도착 예상 시점의 통과 고도입니다.</p>
+          <p>중간·어려움: 주황 방전 구역은 모든 고도에서 위험합니다. 민트색 화살표를 따라 왼쪽·가운데·오른쪽 통로로 이동하세요. 자홍색 전기 지뢰밭은 모든 고도에서 위험하니, 기둥 사이 빈틈으로 통과하세요.</p>
         </details>
       </dialog>
       <dialog id="race-restart-confirm" class="race-preferences restart-confirm" aria-labelledby="restart-title" aria-describedby="restart-copy">
@@ -375,8 +375,20 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
       heightInstruction.textContent = '';
       heightGuide.classList.remove('height-ready', 'height-alert', 'height-urgent');
     }
-    const corridor = state.corridor;
-    if (!obstacle && corridor && corridor.distance < Math.max(120, state.speed * 3)) {
+    const corridor = state.corridor, pad = state.boostPad, mines = state.mineField, rail = state.arcRail, ring = state.boostRing;
+    heightGuide.dataset.pad = String(!obstacle && !rail && (!!pad || !!ring));
+    heightGuide.dataset.rail = String(!obstacle && !!rail);
+    heightGuide.dataset.mines = String(!obstacle && !rail && !ring && !pad && !!mines);
+    if (!obstacle && rail) {
+      heightInstruction.textContent = `⚡ 아크 레일 · ${rail.side > 0 ? '오른쪽 위험 ← 왼쪽으로' : '왼쪽 위험 → 오른쪽으로'}${rail.safe ? ' ✓' : ''}`;
+    } else if (!obstacle && ring) {
+      heightInstruction.textContent = `⚡ 부스트 링 ${ring.side === 'left' ? '← 왼쪽' : '오른쪽 →'}${ring.safe ? ' ✓' : ''}`;
+    } else if (!obstacle && pad) {
+      const lane = { left: '← 왼쪽', center: '가운데', right: '오른쪽 →' }[pad.lane];
+      heightInstruction.textContent = `⚡ 부스트 패드 ${lane}${pad.safe ? ' ✓' : ''}`;
+    } else if (!obstacle && mines) {
+      heightInstruction.textContent = `⚠ 전기 지뢰밭 · 빈틈으로 통과${mines.hint ? ` · ${{ left: '← 왼쪽에서 진입', center: '가운데에서 진입', right: '오른쪽에서 진입 →' }[mines.hint]}` : ''}`;
+    } else if (!obstacle && corridor && corridor.distance < Math.max(120, state.speed * 3)) {
       const lane = { left: '← 왼쪽', center: '가운데', right: '오른쪽 →' }[corridor.lane];
       heightInstruction.textContent = `${lane} 통로${corridor.safe ? ' ✓' : ''}`;
       heightGuide.dataset.readiness = corridor.safe ? 'ready' : 'blocked';
@@ -388,7 +400,8 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
     if (state.fork) {
       const fork = state.fork;
       forkGuide.textContent = fork.selected ? `${fork.selected} · 합류 ${Math.round(fork.distance)}m` :
-        `${fork.kind === 'horizontal' ? '←' : '↓'} ${fork.names[0]} / ${fork.kind === 'horizontal' ? '→' : '↑'} ${fork.names[1]}`;
+        fork.kind === 'horizontal' ? `← 왼쪽 길 ${fork.names[0]} · 오른쪽 길 ${fork.names[1]} →`
+          : `↑ 위쪽 길: ${fork.level}단 이상 ${fork.names[1]} / ↓ 아래쪽 길 ${fork.names[0]}`;
       forkGuide.dataset.selected = String(!!fork.selected);
     }
     const curvature = state.upcomingCurvature;

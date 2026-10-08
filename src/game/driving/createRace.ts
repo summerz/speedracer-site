@@ -40,11 +40,12 @@ import { createRivalVisuals } from './createRivalVisuals';
 import type { RacePhase } from './createTimeAttack';
 import { createRaceRecords } from './raceRecords';
 import { createRaceGates } from '../track/createRaceGates';
-import { forkAt, upcomingFork, physicalDistance, branchChoiceOpen } from '../track/trackBranches';
+import { forkAt, upcomingFork, physicalDistance, branchChoiceOpen, verticalThreshold } from '../track/trackBranches';
 import type { DrivingState, DrivingInput } from './createDrivingModel';
 import type { AltitudeProfile } from '../track/altitudeProfile';
 import type { TrackFrame } from '../track/createTrack';
-import { configureExtraObstacles, corridorCanPass, obstacleArrivalTime, resolveHeightObstacle, upcomingCorridor } from '../track/obstacleDynamics';
+import { arcRailGuide, boostRingGuide } from '../track/arcRail';
+import { boostPadGuide, configureExtraObstacles, corridorCanPass, mineFieldGuide, obstacleArrivalTime, resolveHeightObstacle, upcomingCorridor } from '../track/obstacleDynamics';
 
 export type DrivingPhase = RacePhase;
 export interface RaceSnapshot extends DrivingState {
@@ -58,9 +59,13 @@ export interface RaceSnapshot extends DrivingState {
   boostStage2Seconds: number;
   upcomingCurvature: number;
   upcomingSection: TrackFrame['section'];
-  fork: { kind: 'horizontal' | 'vertical'; names: readonly string[]; selected: string | null; distance: number } | null;
+  fork: { kind: 'horizontal' | 'vertical'; names: readonly string[]; level: number; selected: string | null; distance: number } | null;
   heightObstacle: { kind: 'rise' | 'descend' | 'middle'; distance: number; minAltitude: number; maxAltitude: number } | null;
   corridor: { distance: number; lane: 'left' | 'center' | 'right'; safe: boolean } | null;
+  mineField: { distance: number; hint: 'left' | 'center' | 'right' | null } | null;
+  boostPad: { distance: number; lane: 'left' | 'center' | 'right'; safe: boolean } | null;
+  arcRail: { distance: number; side: -1 | 1; safe: boolean } | null;
+  boostRing: { distance: number; side: 'left' | 'right'; safe: boolean } | null;
   timeAttack: ReturnType<ReturnType<typeof createRaceSession>['snapshot']>;
 }
 export interface Race {
@@ -109,7 +114,7 @@ export function createRace(
   const ambient = new THREE.HemisphereLight(environment.ambient, 0x152435, environment.ambientIntensity); scene.add(ambient);
   const sun = new THREE.DirectionalLight(environment.light, environment.lightIntensity);
   sun.position.set(-50, 150, -100); scene.add(sun);
-  const track = course ? createCatalogTrack(course, challenge) : configureExtraObstacles(createTrack(altitudeProfile, difficulty), challenge);
+  const track = course ? createCatalogTrack(course, challenge) : configureExtraObstacles(createTrack(altitudeProfile, difficulty), challenge, difficulty?.id);
   const sky = createNightSky(environment, track.sample(0).tangent); scene.add(sky.object);
   const weather = createRaceWeather(!!environment.rain, track.length, Math.random, environment.rainIntensity); scene.add(weather.object);
   container.dataset.rainIntensity = environment.rain ? weather.intensity : 'none';
@@ -197,20 +202,26 @@ export function createRace(
     track.sample(model.state.distance + Math.max(22, model.state.speed * 1.1), upcoming, model.state.routeId);
     const next = upcomingHeightObstacle(track, model.state.distance, model.state.routeId);
     const passage = upcomingCorridor(track, model.state.distance, model.state.routeId);
-    const corridor = passage ? { distance: passage.distance, lane: passage.obstacle.lane,
-      safe: corridorCanPass(model.state.offset, passage.obstacle) } : null;
-    const heightObstacle = next && (!passage || next.distance < passage.distance) ? {
+    const corridor = passage ? { distance: passage.distance, lane: passage.obstacle.lane, safe: corridorCanPass(model.state.offset, passage.obstacle) } : null;
+    const nearestHazard = Math.min(passage?.distance ?? Infinity, next?.distance ?? Infinity);
+    const mineField = mineFieldGuide(track, model.state.distance, model.state.speed, model.state.routeId, nearestHazard < Infinity ? nearestHazard : null, challenge === 'easy');
+    const heightObstacle = !mineField && next && (!passage || next.distance < passage.distance) ? {
       ...resolveHeightObstacle(next.obstacle, model.altitudeProfile.levels,
         obstacleArrivalTime(track, model.state.elapsed, next.distance, model.state.speed, next.obstacle.depth, model.state.distance, model.state.routeId)),
       distance: Math.max(0, next.distance),
     } : null;
+    const hazards = [passage?.distance, heightObstacle?.distance, mineField?.distance].filter((d): d is number => d !== undefined);
+    const arcRail = arcRailGuide(track, model.state.distance, model.state.offset, model.state.speed, model.state.routeId, hazards.length ? Math.min(...hazards) : null);
+    if (arcRail) hazards.push(arcRail.distance);
+    const boostPad = boostPadGuide(track, model.state.distance, model.state.offset, model.state.routeId, hazards.length ? Math.min(...hazards) : null);
+    const boostRing = boostRingGuide(track, model.state.distance, model.state.offset, model.state.routeId, hazards.length ? Math.min(...hazards) : null);
     const session = timeAttack.snapshot();
     const junction = forkAt(track, model.state.distance) ?? upcomingFork(track, model.state.distance, Math.max(170, model.state.speed * 2.5));
     const choosing = branchChoiceOpen(track, model.state.distance);
     const selected = choosing ? undefined : junction?.routes.find(r => r.id === model.state.routeId);
-    const fork = junction ? { kind: junction.kind, names: junction.routes.map(r => r.name), selected: selected?.name ?? null,
+    const fork = junction ? { kind: junction.kind, names: junction.routes.map(r => r.name), level: verticalThreshold(track) + 1, selected: selected?.name ?? null,
       distance: physicalDistance(track, model.state.distance, (selected ? junction.end : junction.start + junction.junctionLength) - model.state.distance % track.length, model.state.routeId) } : null;
-    onUpdate({ ...model.state, competition: session.competition, announcement: feedback.announcement, boostStage2Seconds: model.boostStage2Seconds, altitudeProfile: model.altitudeProfile, phase: timeAttack.phase, timeAttack: session, view: views.view, trackDisplay: views.trackDisplay, trackLength: track.length, upcomingCurvature: upcoming.curvature, upcomingSection: upcoming.section, heightObstacle, corridor, fork });
+    onUpdate({ ...model.state, competition: session.competition, announcement: feedback.announcement, boostStage2Seconds: model.boostStage2Seconds, altitudeProfile: model.altitudeProfile, phase: timeAttack.phase, timeAttack: session, view: views.view, trackDisplay: views.trackDisplay, trackLength: track.length, upcomingCurvature: upcoming.curvature, upcomingSection: upcoming.section, heightObstacle, corridor, mineField, boostPad, arcRail, boostRing, fork });
   };
   const heightRequests: { lift: number; targetAltitudeLevel?: number }[] = [];
   const touchControls = createTouchControls(container.parentElement ?? container, {
@@ -235,7 +246,7 @@ export function createRace(
     clearInput(); raceAudio.activate();
     if (timeAttack.phase === 'ready' || timeAttack.phase === 'finished') { feedback.reset(); raceAudio.reset(); }
     const fresh = timeAttack.phase === 'ready' || timeAttack.phase === 'finished';
-    timeAttack.start(); if (fresh) { soundFeedback.reset(); trackVisual.refreshObstacles(); weather.reset(); } touchControls.setRunning(timeAttack.phase === 'running'); previous = performance.now(); notify();
+    timeAttack.start(); if (fresh) { soundFeedback.reset(); trackVisual.refreshObstacles(); raceGates.refresh(); weather.reset(); } touchControls.setRunning(timeAttack.phase === 'running'); previous = performance.now(); notify();
   };
   const togglePause = () => {
     if (timeAttack.phase === 'running' || timeAttack.phase === 'countdown') pause();
@@ -243,7 +254,7 @@ export function createRace(
   };
   const restart = () => {
     if (lost || disposed) return;
-    clearInput(); feedback.reset(); soundFeedback.reset(); raceAudio.activate(); raceAudio.reset(); timeAttack.restart(); trackVisual.refreshObstacles(); weather.reset(); boostPulse.reset(); boostWarp.reset(); boostHaptics.stop(); boostEntryAge = 1; bank = 0; craftShake = 0; cameraSnap = true; touchControls.setRunning(false); previous = performance.now(); notify();
+    clearInput(); feedback.reset(); soundFeedback.reset(); raceAudio.activate(); raceAudio.reset(); timeAttack.restart(); trackVisual.refreshObstacles(); raceGates.refresh(); weather.reset(); boostPulse.reset(); boostWarp.reset(); boostHaptics.stop(); boostEntryAge = 1; bank = 0; craftShake = 0; cameraSnap = true; touchControls.setRunning(false); previous = performance.now(); notify();
   };
   const recover = () => {
     if (lost || disposed) return;
@@ -329,7 +340,7 @@ export function createRace(
     if (disposed || lost) return;
     const delta = Math.min((now - previous) / 1000, 0.1); previous = now;
     const oldRecoveries = model.state.recoveries;
-    const oldCollisions = model.state.collisions;
+    const oldCollisions = model.state.collisions, oldPads = model.state.boostPads, oldRings = model.state.boostRings;
     const oldExits = model.state.offTrackExits;
     const oldBoostStage = model.state.boostStage;
     const oldPhase = timeAttack.phase;
@@ -360,6 +371,8 @@ export function createRace(
     if (cues.length) notify();
     if (heightChanged) raceAudio.play('height');
     if (model.state.collisions > oldCollisions) raceAudio.play(model.state.notice === 'height-collision' || model.state.notice === 'corridor-collision' ? 'electric-impact' : 'impact');
+    if (model.state.boostRings > oldRings) { raceAudio.play('boost-full'); trackVisual.hitRing(model.state.distance, model.state.routeId); }
+    if (model.state.boostPads > oldPads) { raceAudio.play('boost-full'); trackVisual.hitPad(model.state.distance, model.state.routeId); }
     if (model.state.offTrackExits > oldExits) raceAudio.play('off-track');
     if (model.state.recoveries > oldRecoveries) raceAudio.play('recovery');
     if (phase !== oldPhase) {

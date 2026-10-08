@@ -1,4 +1,4 @@
-import { expandObstacleLayout, randomCorridorLanes, randomObstacleAltitudes } from './obstacleLayout.js';
+import { expandObstacleLayout, randomCorridorLanes, randomObstacleAltitudes, randomPadLanes, randomRingSides } from './obstacleLayout.js';
 import * as THREE from 'three';
 import { createDischargeBarrier } from './createDischargeBarrier.js';
 import { altitudeCanPass, resolveAltitudeProfile } from './altitudeProfile.js';
@@ -6,7 +6,11 @@ import type { DifficultyPreset } from './difficulty.js';
 import type { AltitudeProfile } from './altitudeProfile.js';
 import { resolveHeightObstacle, obstacleArrivalTime, corridorCanPass, upcomingCorridor } from './obstacleDynamics.js';
 import { createCorridorVisual } from './createCorridorVisual.js';
-import { roadBoundary, roadPaths, routeDistanceScale, type TrackFork } from './trackBranches.js';
+import { createBoostPadVisual } from './createBoostPadVisual.js';
+import { createMineFieldVisual } from './createMineFieldVisual.js';
+import { createArcRailVisual } from './createArcRailVisual.js';
+import { createBoostRingVisual } from './createBoostRingVisual.js';
+import { roadBoundary, roadPaths, routeDistanceScale, verticalThreshold, type TrackFork } from './trackBranches.js';
 
 export interface TrackFrame {
   position: THREE.Vector3;
@@ -44,6 +48,42 @@ export interface CorridorObstacle {
   readonly speedRetention: number;
 }
 
+/** Vertical discharge columns across the whole road height; `at` is metres from `distance` (the field's start), `offset` is lateral. */
+export interface MineField {
+  readonly routeId?: string;
+  readonly distance: number;
+  readonly length: number;
+  readonly mines: readonly { at: number; offset: number; radius: number }[];
+  /** The guaranteed safe line (lateral offset by `at`), followed by rivals and the feasibility tests. */
+  readonly line: readonly { at: number; offset: number }[];
+}
+
+/** A boost plate on the road: crossing it inside `|offset - center| <= width / 2` recharges and speeds the craft once per lap. */
+export interface BoostPad {
+  readonly routeId?: string;
+  readonly distance: number;
+  readonly lane: 'left' | 'center' | 'right';
+  readonly center: number;
+  readonly width: number;
+  readonly length: number;
+}
+
+/** Electrified stunt-section half roads: a segment's danger is `[0, side * halfWidth]`; `at` is metres from `distance` (the rail's start). */
+export interface ArcRail {
+  readonly routeId?: string;
+  readonly distance: number;
+  readonly length: number;
+  readonly segments: readonly { at: number; length: number; side: -1 | 1 }[];
+}
+
+/** A floating reward ring in a stunt section: the craft centre within `radius - .8` of `offset` when crossing `distance` earns a boost. */
+export interface BoostRing {
+  readonly routeId?: string;
+  readonly distance: number;
+  readonly offset: number;
+  readonly radius: number;
+}
+
 export interface Track {
   readonly altitudeProfile: AltitudeProfile;
   readonly sections: readonly { kind: TrackFrame['section']; start: number; end: number }[];
@@ -52,10 +92,18 @@ export interface Track {
   readonly checkpointSpacing: number;
   readonly heightObstacles: readonly HeightObstacle[];
   readonly corridorObstacles?: readonly CorridorObstacle[];
+  readonly boostPads?: readonly BoostPad[];
+  readonly mineFields?: readonly MineField[];
+  readonly arcRails?: readonly ArcRail[];
+  readonly boostRings?: readonly BoostRing[];
+  /** The one boost kind this track uses (set by configureExtraObstacles). */
+  readonly boostKind?: 'pad' | 'ring';
   readonly branches?: readonly TrackFork[];
   /** Shared session clock: AI freezes/items must not move the world's openings independently. */
   obstacleTime?: number;
   randomizeObstacles?(random: () => number): void;
+  /** Fresh per-run positions and type order with the base layout's per-path counts; set by configureExtraObstacles. */
+  rollObstacleLayout?(random: () => number): { heights: HeightObstacle[]; corridors: CorridorObstacle[]; pads: BoostPad[]; mineFields: MineField[]; arcRails: ArcRail[]; boostRings: BoostRing[] };
   sample(distance: number, target?: TrackFrame, routeId?: string | null): TrackFrame;
 }
 
@@ -178,8 +226,12 @@ export function createTrack(profile?: AltitudeProfile, preset?: DifficultyPreset
   const track: Track = {
     altitudeProfile, sections,
     randomizeObstacles(random) {
-      heightObstacles.splice(0, heightObstacles.length, ...randomObstacleAltitudes(heightObstacles, altitudeProfile.levels, random));
-      if (track.corridorObstacles) Object.assign(track, { corridorObstacles: randomCorridorLanes(track.corridorObstacles, track.halfWidth, random) });
+      const layout = track.rollObstacleLayout?.(random);
+      const corridors = layout?.corridors ?? track.corridorObstacles;
+      heightObstacles.splice(0, heightObstacles.length, ...randomObstacleAltitudes(layout?.heights ?? heightObstacles, altitudeProfile.levels, random));
+      if (corridors) Object.assign(track, { corridorObstacles: randomCorridorLanes(corridors, track.halfWidth, random) });
+      if (layout) Object.assign(track, { boostPads: randomPadLanes(track, layout.pads, track.corridorObstacles ?? [], random), mineFields: layout.mineFields,
+        arcRails: layout.arcRails, boostRings: randomRingSides(track, layout.boostRings, track.corridorObstacles ?? [], random) });
     },
     length, halfWidth: preset?.layout.halfWidth ?? 11, checkpointSpacing: length / 24,
     heightObstacles,
@@ -298,7 +350,7 @@ export function createTrackVisual(track: Track, lineColor?: string) {
         context.strokeStyle = lineColor ?? '#67dcd0'; context.lineWidth = 5; context.strokeRect(3, 3, 1018, 138);
         context.fillStyle = '#eaffff'; context.font = 'bold 34px sans-serif'; context.textAlign = 'center';
         fork.routes.forEach((r, i) => { context.fillText(`${arrows[i]} ${r.name}`, 256 + i * 512, 60);
-          context.font = '24px sans-serif'; context.fillStyle = '#91aebd'; context.fillText(i ? '전망 · 연속 가속' : '굽이 · 고도 대응', 256 + i * 512, 108);
+          context.font = '24px sans-serif'; context.fillStyle = '#91aebd'; context.fillText(fork.kind === 'horizontal' ? (i ? '오른쪽 길 →' : '← 왼쪽 길') : i ? `↑ 위쪽 길: ${verticalThreshold(track) + 1}단 이상` : '↓ 아래쪽 길', 256 + i * 512, 108);
           context.font = 'bold 34px sans-serif'; context.fillStyle = '#eaffff'; });
         const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace;
         const panel = new THREE.Mesh(new THREE.PlaneGeometry(36, 5), new THREE.MeshBasicMaterial({ map: texture, transparent: true, side: THREE.DoubleSide, toneMapped: false }));
@@ -320,6 +372,14 @@ export function createTrackVisual(track: Track, lineColor?: string) {
     const visual = createCorridorVisual(track, obstacle); group.add(visual.object); return visual;
   });
   let corridors = makeCorridors();
+  const makePads = () => { const visual = createBoostPadVisual(track); group.add(visual.object); return visual; };
+  let pads = makePads();
+  const makeMines = () => { const visual = createMineFieldVisual(track); group.add(visual.object); return visual; };
+  let mines = makeMines();
+  const makeRails = () => { const visual = createArcRailVisual(track); group.add(visual.object); return visual; };
+  let rails = makeRails();
+  const makeRings = () => { const visual = createBoostRingVisual(track); group.add(visual.object); return visual; };
+  let rings = makeRings();
   const refreshObstacles = () => {
     const geometries = new Set<THREE.BufferGeometry>(), materials = new Set<THREE.Material>();
     for (const barrier of [...barriers, ...corridors]) {
@@ -332,7 +392,8 @@ export function createTrackVisual(track: Track, lineColor?: string) {
       });
     }
     geometries.forEach(g => g.dispose()); materials.forEach(m => m.dispose());
-    barriers = makeBarriers(); corridors = makeCorridors();
+    pads.dispose(); mines.dispose(); rails.dispose(); rings.dispose();
+    barriers = makeBarriers(); corridors = makeCorridors(); pads = makePads(); mines = makeMines(); rails = makeRails(); rings = makeRings();
   };
   const bounds = new THREE.Box3().setFromPoints(left.concat(right));
   const extent = bounds.getSize(new THREE.Vector3()), center = bounds.getCenter(new THREE.Vector3());
@@ -351,8 +412,14 @@ export function createTrackVisual(track: Track, lineColor?: string) {
       const corridor = upcomingCorridor(track, distance, routeId);
       if (corridor && Math.abs(corridor.distance) <= corridor.obstacle.depth / 2 + 3.2)
         corridors[(track.corridorObstacles ?? []).indexOf(corridor.obstacle)].hit();
+      mines.hit(distance, routeId); rails.hit(distance, routeId);
     },
+    /** Flashes the pad nearest to `distance`, as a craft that just triggered it. */
+    hitPad(distance: number, routeId?: string | null) { pads.hit(distance, routeId); },
+    /** Flashes the boost ring nearest to `distance`. */
+    hitRing(distance: number, routeId?: string | null) { rings.hit(distance, routeId); },
     update(time: number, reducedMotion: boolean, distance = 0, altitude = 1.8, speed = 0, offset = 0, routeId?: string | null) {
+      pads.update(time, reducedMotion); mines.update(time, reducedMotion); rails.update(time, reducedMotion); rings.update(time, reducedMotion);
       const lap = Math.floor(distance / track.length);
       barriers.forEach((barrier, index) => {
         const obstacle = track.heightObstacles[index];

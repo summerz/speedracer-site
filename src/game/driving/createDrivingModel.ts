@@ -2,11 +2,13 @@ import { DEFAULT_DRONE_CONFIGURATION } from '../drone/droneConfiguration.js';
 import type { DronePerformance } from '../drone/droneConfiguration.js';
 import type { Track } from '../track/createTrack';
 import { createTrackFrame } from '../track/createTrack.js';
-import { forkAt, selectBranch, routeDistanceScale, branchChoiceOpen, advanceTrackDistance } from '../track/trackBranches.js';
+import { forkAt, selectBranch, routeDistanceScale, branchChoiceOpen, advanceTrackDistance, forkApproachDrift } from '../track/trackBranches.js';
 import { flightAcceleration, slopeHandling, impactSpeedRetention, impactAccelerationScale } from './flightDynamics.js';
 import { ALTITUDE_PROFILES, resolveAltitudeProfile } from '../track/altitudeProfile.js';
 import type { TravelSegment } from './raceProgress.js';
 import { resolveHeightObstacle, corridorCanPass } from '../track/obstacleDynamics.js';
+import { MINE_SPEED_RETENTION } from '../track/mineField.js';
+import { arcRailHit, RING_REACH } from '../track/arcRail.js';
 import { OFF_TRACK_PENALTY_POINTS, COLLISION_PENALTY_POINTS, OBSTACLE_COLLISION_PENALTY_POINTS } from './raceScoring.js';
 export { OFF_TRACK_PENALTY_POINTS, COLLISION_PENALTY_POINTS, OBSTACLE_COLLISION_PENALTY_POINTS } from './raceScoring.js';
 
@@ -34,6 +36,10 @@ export interface DrivingState {
   offTrackExits: number;
   penaltyPoints: number;
   obstaclesPassed: number;
+  /** Boost pads triggered so far; feedback compares it against the previous frame. */
+  boostPads: number;
+  /** Boost rings triggered so far (same feedback path as pads). */
+  boostRings: number;
   notice: 'collision' | 'craft-collision' | 'height-collision' | 'corridor-collision' | 'off-track' | 'recovery' | 'obstacle-pass' | null;
 }
 
@@ -60,7 +66,7 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
     routeId: null,
     distance: 0, offset: 0, heading: 0, altitude: initialAltitude, targetAltitude: initialAltitude, altitudeLevel: initialLevel,
     speed: 0, charge: 1, boosting: false, boostStage: 0, boostElapsed: 0, boostStageProgress: 0, boostNeedsRelease: false, checkpoint: 0, elapsed: 0,
-    collisions: 0, recoveries: 0, offTrackExits: 0, penaltyPoints: 0, obstaclesPassed: 0, notice: null,
+    collisions: 0, recoveries: 0, offTrackExits: 0, penaltyPoints: 0, obstaclesPassed: 0, boostPads: 0, boostRings: 0, notice: null,
   };
   const initial = { ...state };
   const frame = track.sample(0);
@@ -178,6 +184,8 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
           state.routeId = selectBranch(track, state.distance, state.offset, state.altitudeLevel);
         const sampled = track.sample(state.distance, frame, state.routeId);
         const curvature = sampled.curvature;
+        const fade = forkApproachDrift(track, state.distance);
+        const drift = curvature * fade;
         const bend = sampled.tangent ? sampled.tangent.distanceTo(track.sample(state.distance + 2, aheadFrame, state.routeId).tangent) / (2 * (sampled.distanceScale ?? 1)) : Math.abs(curvature);
         const grade = clamp((sampled.tangent?.y ?? 0) * Math.cos(state.heading) + (sampled.right?.y ?? 0) * Math.sin(state.heading), -1, 1);
         const steer = clamp(input.steer, -1, 1);
@@ -204,12 +212,14 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
         const damping = tuning.lateralBraking * stabilization;
         const decay = Math.exp(-damping * dt);
         const angularTravel = damping > 1e-8 ? (1 - decay) / damping : dt;
-        const dampedHeading = oldHeading * decay + (turnRate - curvature * travel) * angularTravel;
+        const dampedHeading = oldHeading * decay + (turnRate - drift * travel) * angularTravel;
         // Stabilizing side-slip consumes the same yaw capacity as steering. It
         // cannot turn an over-speed craft around a corner beyond that capacity.
-        const yaw = clamp((dampedHeading - oldHeading) / dt + curvature * travel, -yawCapacity, yawCapacity);
-        state.heading = clamp(oldHeading + (yaw - curvature * travel) * dt, -1.1, 1.1);
+        const yaw = clamp((dampedHeading - oldHeading) / dt + drift * travel, -yawCapacity, yawCapacity);
+        state.heading = clamp(oldHeading + (yaw - drift * travel) * dt, -1.1, 1.1);
         state.offset += speed * Math.sin((oldHeading + state.heading) * 0.5) * dt;
+        // Hands-off, the craft is also eased back to the trunk centre as the fork nears (steering overrides it).
+        if (Math.abs(steer) < .15) state.offset *= Math.exp(-6 * (1 - fade) * dt);
         const oldDistance = state.distance;
         state.distance = advanceTrackDistance(track, state.distance, travel * dt, state.routeId);
         // Commit the choice in the same tick that crosses the entrance, before
@@ -263,6 +273,69 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
             completedPassages.set(key, lap);
             if (safe && fieldPassages.get(key) !== lap) passedField();
           }
+        }
+        // Mines are vertical columns: any altitude hits. Swept travel catches boost-speed crossings.
+        for (let f = 0; f < (track.mineFields?.length ?? 0); f++) {
+          const field = track.mineFields![f];
+          if (field.routeId && field.routeId !== state.routeId) continue;
+          const lap = Math.floor(oldDistance / track.length), scale = routeDistanceScale(track, field.distance, field.routeId);
+          const swept = state.distance - oldDistance, fieldKey = `mine-${f}`;
+          for (let m = 0; m < field.mines.length; m++) {
+            const mine = field.mines[m], centre = field.distance + mine.at + lap * track.length, reach = (mine.radius + tuning.craftHalfLength) / scale;
+            const from = Math.max(oldDistance, centre - reach), to = Math.min(state.distance, centre + reach), key = `${fieldKey}-${m}`;
+            if (from > to || fieldPassages.get(key) === lap) continue;
+            const side = (distance: number) => (swept > 0 ? offsetFrom + (state.offset - offsetFrom) * clamp((distance - oldDistance) / swept, 0, 1) : state.offset) - mine.offset;
+            const [a, b] = [side(from), side(to)];
+            if ((a * b <= 0 ? 0 : Math.min(Math.abs(a), Math.abs(b))) < mine.radius + tuning.craftHalfWidth) {
+              fieldPassages.set(key, lap); fieldPassages.set(fieldKey, lap);
+              fieldImpact(MINE_SPEED_RETENTION, 'corridor-collision');
+            }
+          }
+          const end = field.distance + field.length + lap * track.length + tuning.craftHalfLength / scale;
+          if (oldDistance <= end && state.distance > end && completedPassages.get(fieldKey) !== lap) {
+            completedPassages.set(fieldKey, lap);
+            if (fieldPassages.get(fieldKey) !== lap) passedField();
+          }
+        }
+        // Arc rails electrify one half of the road at every altitude: touching it anywhere along a segment costs one corridor-style hit per lap.
+        for (let r = 0; r < (track.arcRails?.length ?? 0); r++) {
+          const rail = track.arcRails![r];
+          if (rail.routeId && rail.routeId !== state.routeId) continue;
+          const lap = Math.floor(oldDistance / track.length), swept = state.distance - oldDistance;
+          for (let g = 0; g < rail.segments.length; g++) {
+            const { at: from, length, side } = rail.segments[g], key = `rail-${r}-${g}`, start = rail.distance + from + lap * track.length;
+            if (oldDistance > start + length || state.distance < start || fieldPassages.get(key) === lap) continue;
+            const offsetAt = (distance: number) => swept > 0 ? offsetFrom + (state.offset - offsetFrom) * clamp((distance - oldDistance) / swept, 0, 1) : state.offset;
+            if (arcRailHit(offsetAt(Math.max(oldDistance, start)), side) || arcRailHit(offsetAt(Math.min(state.distance, start + length)), side)) {
+              fieldPassages.set(key, lap); fieldImpact(MINE_SPEED_RETENTION, 'corridor-collision');
+            }
+          }
+        }
+        // Pads trigger on the swept crossing of their distance, at any altitude, once per lap.
+        for (let i = 0; i < (track.boostPads?.length ?? 0); i++) {
+          const pad = track.boostPads![i], key = `pad-${i}`;
+          if (pad.routeId && pad.routeId !== state.routeId) continue;
+          const lap = Math.floor(oldDistance / track.length), at = pad.distance + lap * track.length;
+          if (oldDistance >= at || state.distance < at || fieldPassages.get(key) === lap) continue;
+          const crossing = offsetFrom + (state.offset - offsetFrom) * clamp((at - oldDistance) / (state.distance - oldDistance), 0, 1);
+          if (Math.abs(crossing - pad.center) > pad.width / 2) continue;
+          fieldPassages.set(key, lap);
+          state.charge = Math.min(1, state.charge + .35);
+          state.speed = Math.max(state.speed, Math.min(tuning.boostSpeed * speedScale, state.speed + 18));
+          state.boostPads++;
+        }
+        // Boost rings work like pads: the craft centre must cross within the ring's reach, at any altitude.
+        for (let i = 0; i < (track.boostRings?.length ?? 0); i++) {
+          const ring = track.boostRings![i], key = `ring-${i}`;
+          if (ring.routeId && ring.routeId !== state.routeId) continue;
+          const lap = Math.floor(oldDistance / track.length), at = ring.distance + lap * track.length;
+          if (oldDistance >= at || state.distance < at || fieldPassages.get(key) === lap) continue;
+          const crossing = offsetFrom + (state.offset - offsetFrom) * clamp((at - oldDistance) / (state.distance - oldDistance), 0, 1);
+          if (Math.abs(crossing - ring.offset) > RING_REACH) continue;
+          fieldPassages.set(key, lap);
+          state.charge = Math.min(1, state.charge + .3);
+          state.speed = Math.max(state.speed, Math.min(tuning.boostSpeed * speedScale, state.speed + 18));
+          state.boostRings++;
         }
         const boundary = track.halfWidth - tuning.craftHalfWidth;
         if (Math.abs(state.offset) < boundary - 0.5) offTrackEpisode = false;

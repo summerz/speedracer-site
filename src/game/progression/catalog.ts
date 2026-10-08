@@ -32,8 +32,12 @@ export const isRivalItem = (id: unknown): id is RivalItemId => RIVAL_ITEMS.some(
 export function upgradedConfiguration(craftId: string, levels: UpgradeLevels): DroneConfiguration {
   const entry = DRONE_CATALOG.find(craft => craft.configuration.id === craftId);
   if (!entry) throw new RangeError('Unknown craft');
-  for (const { id } of UPGRADES) if (!Number.isInteger(levels[id]) || levels[id] < 0 || levels[id] > 3) throw new RangeError('Invalid upgrade level');
-  return resolveDroneConfiguration(entry.configuration, [{ performanceMultiplier: {
+  return applyUpgrades(entry.configuration, levels);
+}
+export const MAX_UPGRADE_LEVEL = 3;
+export function applyUpgrades(base: DroneConfiguration, levels: UpgradeLevels): DroneConfiguration {
+  for (const { id } of UPGRADES) if (!Number.isInteger(levels[id]) || levels[id] < 0 || levels[id] > MAX_UPGRADE_LEVEL) throw new RangeError('Invalid upgrade level');
+  return resolveDroneConfiguration(base, [{ performanceMultiplier: {
     topSpeed: 1 + levels.engine * .04, boostSpeed: 1 + levels.engine * .04, boostStage2Speed: 1 + levels.engine * .04,
     acceleration: 1 + levels.engine * .03, boostAcceleration: 1 + levels.engine * .03, boostStage2Acceleration: 1 + levels.engine * .03,
     braking: 1 + levels.brakes * .12, maxYawRate: 1 + levels.steering * .05,

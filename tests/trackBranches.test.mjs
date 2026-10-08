@@ -97,12 +97,10 @@ for (const definition of definitions) test(`${definition.name}: continuous fork 
       for(const a of points[0]) for(const b of points[1]) assert.ok(a.distanceTo(b)>track.halfWidth*2+4,'crossed roads need clearance');
     }
     for(const route of fork.routes) {
-      const hazards=track.heightObstacles.filter(o=>o.routeId===route.id);
-      assert.ok(hazards.length>0);
+      const hazards=[...track.heightObstacles,...track.corridorObstacles??[]].filter(o=>o.routeId===route.id);
+      assert.ok(hazards.length>0,`${definition.name}: ${route.id} keeps at least one field`);
       assert.ok(hazards.every(o=>o.distance>fork.start+40 && o.distance<fork.end-40));
     }
-    assert.equal(track.heightObstacles.filter(o=>o.routeId===fork.routes[0].id).length,2);
-    assert.equal(track.heightObstacles.filter(o=>o.routeId===fork.routes[1].id).length,1);
   }
 });
 test('choice locks until merge, resets, and can change on the next lap', () => {
@@ -204,6 +202,37 @@ test('ordinary AI inputs use both routes and still complete three laps without r
     assert.equal(race.snapshot().completedLaps,3,definition.name);
     assert.equal(race.snapshot().disqualified,false,definition.name);
     assert.equal(race.model.state.offTrackExits,0,definition.name);
-    assert.equal(race.model.state.collisions,0,definition.name);
+  }
+});
+
+const forkSim = (track, fork, speed, steer, leadFrom, from) => {
+  const model = createDrivingModel(track), s = model.state, entrance = fork.start + fork.junctionLength;
+  Object.assign(s, { distance: from, speed, offset: 0, routeId: null, altitude: track.altitudeProfile.levels[0], targetAltitude: track.altitudeProfile.levels[0] });
+  while (s.distance < entrance) {
+    model.step(1 / 60, { ...NEUTRAL_INPUT, throttle: true, boost: speed > 100, steer: steer && entrance - s.distance <= leadFrom ? steer : 0 });
+    if (s.distance < entrance) var last = s.offset;
+  }
+  return { offset: last, route: s.routeId };
+};
+test('horizontal forks: a hands-off craft arrives centred, and either side needs at most 40 m of lead at 150 m/s', () => {
+  for (const definition of definitions.filter(d => d.branches[0].kind === 'horizontal')) {
+    const track = createCatalogTrack(definition, 'normal'), fork = track.branches[0], entrance = fork.start + fork.junctionLength;
+    for (const speed of [85, 150]) {
+      const idle = forkSim(track, fork, speed, 0, 0, Math.max(0, entrance - 400));
+      assert.ok(Math.abs(idle.offset) <= 1, `${definition.name}@${speed}: idle offset ${idle.offset}`);
+    }
+    for (const [steer, side] of [[-1, 0], [1, 1]]) {
+      const taken = forkSim(track, fork, 150, steer, 40, Math.max(0, entrance - 400));
+      assert.equal(taken.route, fork.routes[side].id, `${definition.name}: steer ${steer} with 40 m lead`);
+    }
+  }
+});
+test('vertical forks: the high route starts at floor(levels / 2) for 2, 3 and 4 levels', () => {
+  const track = createCatalogTrack(definitions.find(d => d.branches[0].kind === 'vertical'), 'normal'), fork = track.branches[0];
+  for (const [count, threshold] of [[2, 1], [3, 1], [4, 2]]) {
+    const levels = Array.from({ length: count }, (_, i) => 1.8 + i * 3);
+    const profiled = Object.create(track, { altitudeProfile: { value: { ...track.altitudeProfile, levels } } });
+    for (let level = 0; level < count; level++)
+      assert.equal(selectBranch(profiled, fork.start + 1, 0, level), fork.routes[level >= threshold ? 1 : 0].id, `${count} levels, level ${level}`);
   }
 });

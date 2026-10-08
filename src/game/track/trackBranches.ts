@@ -80,8 +80,16 @@ export function selectBranch(track: Track, distance: number, offset: number, alt
   const fork = forkAt(track, distance);
   if (!fork) return null;
   const index = fork.kind === 'horizontal' ? (offset > .4 ? 1 : 0) :
-    (altitudeLevel >= track.altitudeProfile.levels.length / 2 ? 1 : 0);
+    (altitudeLevel >= verticalThreshold(track) ? 1 : 0);
   return fork.routes[index].id;
+}
+/** Lowest 0-based altitude level that takes the high route: 2 levels -> 1, 3 -> 1, 4 -> 2. */
+export const verticalThreshold = (track: Pick<Track, 'altitudeProfile'>) => Math.floor(track.altitudeProfile.levels.length / 2);
+/** Curvature-induced lateral drift fades out over the trunk approach, so a neutral craft arrives centred at the entrance. */
+export function forkApproachDrift(track: Track, distance: number) {
+  const d = localDistance(track, distance);
+  const fork = track.branches?.find(f => d >= f.start - 150 && d < f.start + f.junctionLength);
+  return fork ? 1 - smooth((d - fork.start + 150) / (150 + fork.junctionLength)) : 1;
 }
 export function routeDistanceScale(track: Track, distance: number, routeId?: string | null) {
   const fork = forkAt(track, distance);

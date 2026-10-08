@@ -90,9 +90,9 @@ export function aiDrivingProfile(racer: AiRacer, controlMode: AiControlMode): Ai
   }[racer.style];
   const touch = controlMode === 'touch';
   return {
-    pace: (.82 + skill * .18) * style.pace * (touch ? .88 : 1),
-    cornerLimit: (.5 + skill * .2 + style.corner) * (touch ? .86 : 1),
-    boostStartCharge: style.charge + (1 - skill) * .12 + (touch ? .12 : 0),
+    pace: (.82 + skill * .18) * style.pace * (touch ? .95 : 1),
+    cornerLimit: (.5 + skill * .2 + style.corner + (racer.rating >= 5 ? touch ? .06 : .12 : 0)) * (touch ? .93 : 1),
+    boostStartCharge: style.charge + (1 - skill) * .12 + (touch ? .05 : 0),
     boostEndCharge: style.end,
     boostCurvature: racer.style === 'straight' ? .0025 : .003,
   };

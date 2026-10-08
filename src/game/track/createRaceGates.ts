@@ -24,15 +24,23 @@ export function createRaceGates(track: Track, count: number) {
   for (let i = 0; i < 4; i++) arch(i * 10, 'Start arch ' + (i + 1), startMaterial);
   for (let i = 1; i < count; i++) {
     const distance = i * track.length / count;
-    // Obstacles retain invisible timing gates, without an overlapping decorative arch.
-    const overlapsObstacle = track.heightObstacles.some(obstacle => {
-      const gap = Math.abs(distance - obstacle.distance);
-      return Math.min(gap, track.length - gap) < obstacle.depth / 2 + 18;
-    });
-    if (!overlapsObstacle && !forkAt(track, distance) && distance > 35) gates.set(i, arch(distance, 'Checkpoint arch ' + i, new THREE.MeshBasicMaterial({ color: inactiveColor })));
+    if (!forkAt(track, distance) && distance > 35) gates.set(i, arch(distance, 'Checkpoint arch ' + i, new THREE.MeshBasicMaterial({ color: inactiveColor })));
   }
+  /** Obstacles retain invisible timing gates, without an overlapping decorative arch. */
+  const refresh = () => {
+    const fields = [...track.heightObstacles, ...track.corridorObstacles ?? [],
+      ...(track.mineFields ?? []).map(f => ({ distance: f.distance + (f.length - 40) / 2, depth: f.length + 40 }))]; // incl. the 40 m warning band
+    for (const [i, mesh] of gates) {
+      const distance = i * track.length / count;
+      mesh.visible = !fields.some(obstacle => {
+        const gap = Math.abs(distance - obstacle.distance);
+        return Math.min(gap, track.length - gap) < obstacle.depth / 2 + 18;
+      });
+    }
+  };
+  refresh();
   let previous = -1;
-  return { object, update(nextDistance: number) {
+  return { object, refresh, update(nextDistance: number) {
     const index = Math.round(nextDistance / track.length * count) % count;
     if (index === previous) return;
     gates.get(previous)?.material.color.copy(inactiveColor);
