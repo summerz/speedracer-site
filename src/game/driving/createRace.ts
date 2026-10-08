@@ -11,7 +11,7 @@ import type { RenderQuality } from '../../platform/renderQuality';
 import { createExhaustHaze } from './createExhaustHaze';
 import { gamepadDriving } from '../../platform/gamepadInput';
 import * as THREE from 'three';
-import { createRaceViews, raceViewLayout, VIEW_LABELS } from './createRaceViews';
+import { createRaceViews, overviewPose, raceViewLayout, VIEW_LABELS } from './createRaceViews';
 import type { RaceView, TrackDisplay, Viewport } from './createRaceViews';
 import type { DifficultyPreset } from '../track/difficulty';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
@@ -39,6 +39,12 @@ import type { RaceMode, CompetitionSnapshot } from './createRaceSession';
 import { createRivalVisuals } from './createRivalVisuals';
 import type { RacePhase } from './createTimeAttack';
 import { createRaceRecords } from './raceRecords';
+import { createGhostRecorder, ghostDelta, ghostKey, loadGhost, saveGhost, shouldSaveGhost } from './raceGhost';
+import { createGhostVisual } from './createGhostVisual';
+import { SWING_SECONDS, cinematicSeconds, finishSwing, finishTimeScale, introProgress } from './raceCinematic';
+import type { CinematicKind } from './raceCinematic';
+import { createOvertakeCallouts, isPerfectStart, PERFECT_START_SPEED, PERFECT_START_WINDOW } from './raceCallouts';
+import type { Callout } from './raceCallouts';
 import { createRaceGates } from '../track/createRaceGates';
 import { forkAt, upcomingFork, physicalDistance, branchChoiceOpen, verticalThreshold } from '../track/trackBranches';
 import type { DrivingState, DrivingInput } from './createDrivingModel';
@@ -67,11 +73,16 @@ export interface RaceSnapshot extends DrivingState {
   arcRail: { distance: number; side: -1 | 1; safe: boolean } | null;
   boostRing: { distance: number; side: 'left' | 'right'; safe: boolean } | null;
   timeAttack: ReturnType<ReturnType<typeof createRaceSession>['snapshot']>;
+  cinematic: { kind: CinematicKind; reduced: boolean; seconds: number } | null;
+  callout: Callout | null;
+  /** Seconds behind (+) / ahead (-) of the stored best run at the current distance; null without a ghost. */
+  ghostDelta: number | null;
 }
 export interface Race {
   start(): void;
   togglePause(): void;
   restart(): void;
+  skipCinematic(): void;
   useFocus(): boolean;
   useRivalItem(item: RivalItemId): boolean;
   recover(): void;
@@ -97,6 +108,7 @@ export function createRace(
   rivalSlots: readonly RivalItemId[] = [],
   environment: NightEnvironment = NIGHT_ENVIRONMENTS[0],
   challenge: RaceChallengeId = 'normal',
+  intro = false,
 ): Race {
   const config = resolveDroneConfiguration(configuration);
   const visuals = config.speedEffects;
@@ -134,9 +146,14 @@ export function createRace(
   const coarsePointer = window.matchMedia('(any-pointer: coarse)');
   let storage: Storage | undefined;
   try { storage = window.localStorage; } catch { /* Private browsing can deny storage. */ }
-  const records = createRaceRecords({ laps: course?.laps, trackId: course ? `${course.id}:v${course.revision}` : `neon-circuit-v1:${difficulty?.id ?? 'beginner'}`, configurationId: JSON.stringify({ ...(challenge !== 'normal' ? { challenge } : {}), performance: config.performance, altitude: track.altitudeProfile, ...(focusSlots || rivalSlots.length ? { assisted: true } : {}), ...(mode === 'competition' ? { mode } : {}) }) }, storage);
+  const trackId = course ? `${course.id}:v${course.revision}` : `neon-circuit-v1:${difficulty?.id ?? 'beginner'}`;
+  const records = createRaceRecords({ laps: course?.laps, trackId, configurationId: JSON.stringify({ ...(challenge !== 'normal' ? { challenge } : {}), performance: config.performance, altitude: track.altitudeProfile, ...(focusSlots || rivalSlots.length ? { assisted: true } : {}), ...(mode === 'competition' ? { mode } : {}) }) }, storage);
   const timeAttack = createRaceSession(track, config, records, focusSlots, mode, Math.random, coarsePointer.matches ? 'touch' : 'desktop', course ? { laps: course.laps, ...(mode === 'time-attack' ? { lapLimit: challengeLapLimit(course, challenge) } : {}) } : {}, course?.rating, rivalSlots, challenge);
   const rivalVisuals = createRivalVisuals(scene, track, timeAttack.rivals);
+  const ghostStorageKey = ghostKey(trackId, challenge);
+  const ghost = mode === 'time-attack' ? loadGhost(storage, ghostStorageKey) : null;
+  const ghostVisual = ghost && createGhostVisual(scene, track, ghost, config.modelVariant);
+  const ghostRecorder = createGhostRecorder();
   const model = timeAttack.model;
   const raceGates = createRaceGates(track, timeAttack.snapshot().gatesPerLap);
   scene.add(raceGates.object);
@@ -197,6 +214,20 @@ export function createRace(
   let bank = 0;
   let boostEntryAge = 1;
   let craftShake = 0;
+  const newCinematic = (kind: CinematicKind) => { const reduced = reducedMotion.matches; return { kind, t: 0, reduced, duration: cinematicSeconds(kind, reduced) }; };
+  let cinematic: ReturnType<typeof newCinematic> | null = intro ? newCinematic('intro') : null;
+  let padArmed = false;
+  // Perfect start: seconds left until GO when boost was pressed (null = not pressed), and whether the launch window is settled.
+  let untilGo = 3, pressAt: number | null = null, launched = false, spaceHeld = false, boostHeld = false;
+  let callout: Callout | null = null;
+  const overtakes = createOvertakeCallouts();
+  const armStart = () => { untilGo = 3; pressAt = null; launched = false; boostHeld = false; overtakes.reset(); };
+  const say = (kind: Callout['kind'], text: string) => { callout = { id: (callout?.id ?? 0) + 1, kind, text }; notify(); };
+  const swallowed = new Set<string>();
+  const introPos = new THREE.CatmullRomCurve3([new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()]);
+  const introLook = new THREE.CatmullRomCurve3([new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()]);
+  const introTarget = new THREE.Vector3(), worldUp = new THREE.Vector3(0, 1, 0);
+  let introAspect = 0;
 
   const notify = () => {
     track.sample(model.state.distance + Math.max(22, model.state.speed * 1.1), upcoming, model.state.routeId);
@@ -221,7 +252,7 @@ export function createRace(
     const selected = choosing ? undefined : junction?.routes.find(r => r.id === model.state.routeId);
     const fork = junction ? { kind: junction.kind, names: junction.routes.map(r => r.name), level: verticalThreshold(track) + 1, selected: selected?.name ?? null,
       distance: physicalDistance(track, model.state.distance, (selected ? junction.end : junction.start + junction.junctionLength) - model.state.distance % track.length, model.state.routeId) } : null;
-    onUpdate({ ...model.state, competition: session.competition, announcement: feedback.announcement, boostStage2Seconds: model.boostStage2Seconds, altitudeProfile: model.altitudeProfile, phase: timeAttack.phase, timeAttack: session, view: views.view, trackDisplay: views.trackDisplay, trackLength: track.length, upcomingCurvature: upcoming.curvature, upcomingSection: upcoming.section, heightObstacle, corridor, mineField, boostPad, arcRail, boostRing, fork });
+    onUpdate({ ...model.state, competition: session.competition, announcement: feedback.announcement, boostStage2Seconds: model.boostStage2Seconds, altitudeProfile: model.altitudeProfile, phase: timeAttack.phase, timeAttack: session, cinematic: cinematic && { kind: cinematic.kind, reduced: cinematic.reduced, seconds: cinematic.duration }, callout, ghostDelta: ghost && timeAttack.phase !== 'finished' && model.state.elapsed > 0 ? ghostDelta(ghost, model.state.elapsed, model.state.distance) : null, view: views.view, trackDisplay: views.trackDisplay, trackLength: track.length, upcomingCurvature: upcoming.curvature, upcomingSection: upcoming.section, heightObstacle, corridor, mineField, boostPad, arcRail, boostRing, fork });
   };
   const heightRequests: { lift: number; targetAltitudeLevel?: number }[] = [];
   const touchControls = createTouchControls(container.parentElement ?? container, {
@@ -241,12 +272,18 @@ export function createRace(
     clearInput(); model.interruptBoost(); raceAudio.pause(); boostHaptics.stop(); boostPulse.reset(); boostWarp.reset(); boostEntryAge = 1;
     timeAttack.pause(); touchControls.setRunning(false); notify();
   };
+  const finishGhost = () => {
+    const { result, disqualified } = timeAttack.snapshot();
+    if (result && shouldSaveGhost({ mode, disqualified, isNewBest: result.isNewBest })) saveGhost(storage, ghostStorageKey, ghostRecorder.finish(model.state, model.state.elapsed, model.state.distance));
+  };
+  const endCinematic = () => { if (cinematic) { cinematic = null; notify(); } };
   const start = () => {
     if (lost || disposed) return;
+    if (cinematic) { endCinematic(); return; }
     clearInput(); raceAudio.activate();
     if (timeAttack.phase === 'ready' || timeAttack.phase === 'finished') { feedback.reset(); raceAudio.reset(); }
     const fresh = timeAttack.phase === 'ready' || timeAttack.phase === 'finished';
-    timeAttack.start(); if (fresh) { soundFeedback.reset(); trackVisual.refreshObstacles(); raceGates.refresh(); weather.reset(); } touchControls.setRunning(timeAttack.phase === 'running'); previous = performance.now(); notify();
+    timeAttack.start(); if (fresh) { ghostRecorder.reset(); armStart(); soundFeedback.reset(); trackVisual.refreshObstacles(); raceGates.refresh(); weather.reset(); } touchControls.setRunning(timeAttack.phase === 'running'); previous = performance.now(); notify();
   };
   const togglePause = () => {
     if (timeAttack.phase === 'running' || timeAttack.phase === 'countdown') pause();
@@ -254,7 +291,7 @@ export function createRace(
   };
   const restart = () => {
     if (lost || disposed) return;
-    clearInput(); feedback.reset(); soundFeedback.reset(); raceAudio.activate(); raceAudio.reset(); timeAttack.restart(); trackVisual.refreshObstacles(); raceGates.refresh(); weather.reset(); boostPulse.reset(); boostWarp.reset(); boostHaptics.stop(); boostEntryAge = 1; bank = 0; craftShake = 0; cameraSnap = true; touchControls.setRunning(false); previous = performance.now(); notify();
+    clearInput(); feedback.reset(); soundFeedback.reset(); raceAudio.activate(); raceAudio.reset(); timeAttack.restart(); ghostRecorder.reset(); armStart(); trackVisual.refreshObstacles(); raceGates.refresh(); weather.reset(); boostPulse.reset(); boostWarp.reset(); boostHaptics.stop(); boostEntryAge = 1; bank = 0; craftShake = 0; cameraSnap = true; touchControls.setRunning(false); previous = performance.now(); notify();
   };
   const recover = () => {
     if (lost || disposed) return;
@@ -283,6 +320,18 @@ export function createRace(
     else if (action === 'track') cycleTrack();
     else if (action === 'focus') window.dispatchEvent(new CustomEvent('speedracer:focus-request'));
   }, listen);
+  // Any key, tap or pad button skips a cinematic and is consumed, so it cannot also press the start button.
+  window.addEventListener('keydown', (event) => {
+    if (event.ctrlKey || event.metaKey || event.altKey || (!cinematic && !swallowed.has(event.code))) return;
+    event.preventDefault(); event.stopImmediatePropagation();
+    if (cinematic) { swallowed.add(event.code); endCinematic(); }
+  }, { ...listen, capture: true });
+  window.addEventListener('keyup', (event) => {
+    if (swallowed.delete(event.code)) { event.preventDefault(); event.stopImmediatePropagation(); }
+  }, { ...listen, capture: true });
+  window.addEventListener('click', (event) => {
+    if (cinematic) { event.preventDefault(); event.stopImmediatePropagation(); endCinematic(); }
+  }, { ...listen, capture: true });
   window.addEventListener('keydown', (event) => {
     if (event.defaultPrevented || document.querySelector('dialog[open]')) return;
     if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
@@ -293,6 +342,10 @@ export function createRace(
     if (!event.repeat && event.code === 'KeyX') { cycleTrack(); return; }
     if (!event.repeat && event.code === 'Escape') { togglePause(); return; }
     if (!event.repeat && event.code === 'KeyR') { window.dispatchEvent(new CustomEvent('speedracer:restart-request')); return; }
+    if (event.code === 'Space') {
+      spaceHeld = true;
+      if (!event.repeat && !launched && (timeAttack.phase === 'countdown' || timeAttack.phase === 'running')) pressAt = untilGo;
+    }
     if (timeAttack.phase !== 'running') return;
     raceAudio.activate();
     if (event.code === 'ArrowDown' || event.code === 'ArrowUp') {
@@ -302,7 +355,7 @@ export function createRace(
     keys.add(event.code);
   }, listen);
   window.addEventListener('keyup', (event) => {
-    keys.delete(event.code);
+    keys.delete(event.code); if (event.code === 'Space') spaceHeld = false;
     if (event.code === 'Space' && !touchControls.read().boost && !gamepadDriving.boost) { model.interruptBoost(); boostHaptics.stop(); notify(); }
   }, listen);
   window.addEventListener('blur', pause, listen);
@@ -344,13 +397,22 @@ export function createRace(
     const oldExits = model.state.offTrackExits;
     const oldBoostStage = model.state.boostStage;
     const oldPhase = timeAttack.phase;
+    const oldNearMisses = model.state.nearMisses;
     let heightChanged = false;
+    if (cinematic) {
+      const pressed = Array.from(navigator.getGamepads?.() ?? []).some(pad => pad?.buttons.some(button => button.pressed));
+      if (!pressed) padArmed = true; else if (padArmed) endCinematic();
+    } else padArmed = false;
+    const slow = cinematic?.kind === 'finish' ? finishTimeScale(cinematic.t, cinematic.reduced) : 1;
     if (oldPhase === 'running' || oldPhase === 'countdown') {
       const touch = touchControls.read();
       input.brake = keys.has('KeyS') || touch.brake || gamepadDriving.brake;
       input.throttle = !input.brake;
       input.steer = THREE.MathUtils.clamp(Number(keys.has('KeyD')) - Number(keys.has('KeyA')) + touch.steer + gamepadDriving.steer, -1, 1);
       input.boost = keys.has('Space') || touch.boost || gamepadDriving.boost;
+      const padBoost = touch.boost || gamepadDriving.boost;
+      if (padBoost && !boostHeld && !launched) pressAt = untilGo;
+      boostHeld = padBoost;
       for (const request of heightRequests) {
         const previousLevel = model.state.altitudeLevel;
         model.step(0, { ...input, ...request });
@@ -359,9 +421,23 @@ export function createRace(
       heightRequests.length = 0;
       input.lift = 0; timeAttack.step(delta, input);
     }
-    if (oldPhase === 'finished') timeAttack.step(delta, { throttle: false, brake: false, boost: false, steer: 0, lift: 0 });
+    if (oldPhase === 'finished') timeAttack.step(delta * slow, { throttle: false, brake: false, boost: false, steer: 0, lift: 0 });
     const phase = timeAttack.phase;
-    rivalVisuals.update(delta, reducedMotion.matches);
+    if (oldPhase === 'countdown' || oldPhase === 'running') untilGo = Math.max(-1, untilGo - delta);
+    if (phase === 'running' && !launched) {
+      if (isPerfectStart(pressAt)) {
+        launched = true; model.launch(config.performance.topSpeed * PERFECT_START_SPEED); if (spaceHeld) keys.add('Space');
+        raceAudio.play('boost-full'); say('perfect', 'PERFECT START');
+      } else if (untilGo < -PERFECT_START_WINDOW) launched = true;
+    }
+    if (mode === 'competition' && phase === 'running') {
+      const rank = timeAttack.snapshot().competition?.playerRank, move = rank ? overtakes.update(rank, model.state.elapsed) : null;
+      if (move) say(move.gained ? 'gain' : 'loss', `P${move.from} → P${move.to}`);
+    }
+    if (model.state.nearMisses > oldNearMisses) { raceAudio.play('boost-full'); boostPulse.trigger(); notify(); }
+    rivalVisuals.update(delta * slow, reducedMotion.matches);
+    if (mode === 'time-attack' && timeAttack.phase === 'running') ghostRecorder.sample(model.state);
+    ghostVisual?.update(model.state.elapsed, cinematic?.kind !== 'intro' && phase !== 'finished' && model.state.elapsed > 0);
     const cues = feedback.update({ ...timeAttack.snapshot(), phase, elapsed: model.state.elapsed });
     raceAudio.update(phase, model.state.boostStage, model.state.boostStageProgress, model.state.speed / visuals.referenceSpeed, input.brake);
     const sound = soundFeedback.update(phase, model.state);
@@ -377,9 +453,10 @@ export function createRace(
     if (model.state.recoveries > oldRecoveries) raceAudio.play('recovery');
     if (phase !== oldPhase) {
       touchControls.setRunning(phase === 'running');
-      if (phase === 'finished') { clearInput(); boostHaptics.stop(); boostPulse.reset(); boostWarp.reset(); }
+      if (phase === 'finished') { clearInput(); boostHaptics.stop(); boostPulse.reset(); boostWarp.reset(); cinematic = newCinematic('finish'); finishGhost(); }
       notify();
     }
+    if (cinematic && (cinematic.t += delta) >= cinematic.duration) endCinematic();
     if (oldRecoveries !== model.state.recoveries) { cameraSnap = true; boostPulse.reset(); boostWarp.reset(); boostEntryAge = 1; }
     const state = model.state;
     const simulationDelta = phase === 'running' ? delta : 0;
@@ -424,6 +501,35 @@ export function createRace(
         .addScaledVector(flightUp, Math.sin(boostEntryAge * 87 + 1) * shake);
     }
     lookAt.copy(drone.position).addScaledVector(flightForward, 9).addScaledVector(flightUp, cameraAltitude - state.altitude - 0.5); camera.up.copy(flightUp); camera.lookAt(lookAt);
+    const introActive = cinematic?.kind === 'intro' && !cinematic.reduced;
+    if (introActive) {
+      const s = introProgress(cinematic!.t, cinematic!.duration);
+      if (introAspect !== camera.aspect) {
+        introAspect = camera.aspect;
+        const overview = overviewPose(track, camera.aspect, camera.fov), landmark = scenery?.landmark;
+        introPos.points[0].copy(overview.position); introLook.points[0].copy(overview.center);
+        if (landmark) {
+          const away = introTarget.copy(track.sample(0).position).sub(landmark.position).setY(0).normalize();
+          introPos.points[1].copy(landmark.position).addScaledVector(away, landmark.radius * 1.4 + 50).setY(landmark.position.y + landmark.height * .55);
+          introLook.points[1].copy(landmark.position).setY(landmark.position.y + landmark.height * .5);
+        } else {
+          const mid = track.sample(track.length * .5);
+          introPos.points[1].copy(mid.position).addScaledVector(mid.up, 70).addScaledVector(mid.right, 90); introLook.points[1].copy(mid.position);
+        }
+      }
+      introPos.points[2].copy(camera.position); introLook.points[2].copy(lookAt);
+      introPos.getPoint(s, camera.position); introLook.getPoint(s, introTarget);
+      camera.up.lerpVectors(worldUp, flightUp, s).normalize(); camera.lookAt(introTarget);
+      if (scene.fog instanceof THREE.FogExp2) scene.fog.density = environment.fogDensity * (.12 + .88 * introProgress(s - .35, .55));
+    } else if (scene.fog instanceof THREE.FogExp2) scene.fog.density = environment.fogDensity;
+    const far = introActive ? 9000 : 3200;
+    if (camera.far !== far) { camera.far = far; camera.updateProjectionMatrix(); }
+    if (phase === 'finished' && !reducedMotion.matches) {
+      const swing = finishSwing(cinematic?.kind === 'finish' ? cinematic.t : SWING_SECONDS, false);
+      camera.position.copy(drone.position).addScaledVector(flightForward, Math.cos(swing.azimuth) * swing.radius)
+        .addScaledVector(flightRight, Math.sin(swing.azimuth) * swing.radius).addScaledVector(flightUp, swing.height);
+      lookAt.copy(drone.position).addScaledVector(flightUp, .4); camera.up.copy(flightUp); camera.lookAt(lookAt);
+    }
     views.update(flightForward, flightUp, bank, state.elapsed, state.boosting, reducedMotion.matches, state.routeId);
     thrusters.setMode(state.boostStage === 2 ? 'boost-stage2' : phase === 'running' && state.boosting ? 'boost' : phase === 'running' && input.throttle && state.speed > 1 ? 'accelerate' : 'idle');
     thrusters.setBoostCharge(state.boostStageProgress);
@@ -439,7 +545,7 @@ export function createRace(
     speedLines.update(state.elapsed, state.speed, state.boosting, reducedMotion.matches, state.boostStage === 2);
     views.prepareDriving();
     scenery?.setOverview(false); scenery?.update(drone.position); sky.update(camera.position);
-    const weatherFrame = weather.update(camera.position, state.distance, delta, phase === 'running', reducedMotion.matches);
+    const weatherFrame = weather.update(camera.position, state.distance, delta * slow, phase === 'running', reducedMotion.matches);
     ambient.intensity = environment.ambientIntensity + weatherFrame.flash * 5;
     sun.intensity = environment.lightIntensity + weatherFrame.flash * 10;
     sky.setLightning(weatherFrame.flash);
@@ -479,7 +585,7 @@ export function createRace(
   }, listen);
   notify(); animation = requestAnimationFrame(tick);
   return {
-    start, togglePause, restart, useFocus() { const used = timeAttack.useFocus(); if (used) notify(); return used; }, useRivalItem(item) { const used = timeAttack.useRivalItem(item); if (used) notify(); return used; }, recover, toggleCockpit, cycleTrack,
+    start, togglePause, restart, skipCinematic: endCinematic, useFocus() { const used = timeAttack.useFocus(); if (used) notify(); return used; }, useRivalItem(item) { const used = timeAttack.useRivalItem(item); if (used) notify(); return used; }, recover, toggleCockpit, cycleTrack,
     setBloom(enabled) { bloom.enabled = enabled; },
     setQuality(quality) { scenery?.setQuality(quality); weather.setQuality(quality); renderQuality = quality; resize(); },
     setExhaustHaze(enabled) { exhaustHaze.setEnabled(enabled); },

@@ -14,11 +14,12 @@ import { DIFFICULTIES } from './game/track/difficulty';
 import type { DifficultyId } from './game/track/difficulty';
 import { raceViewLayout } from './game/driving/createRaceViews';
 import { createRace } from './game/driving/createRace';
+import { finishSplash, introTitle } from './game/driving/raceCinematic';
 import type { RaceMode } from './game/driving/createRaceSession';
 import type { Race, RaceSnapshot } from './game/driving/createRace';
 import './race.css';
 import './campaign.css';
-import { TRACK_CATALOG, campaignRankLimit } from './game/track/trackCatalog';
+import { TRACK_CATALOG, DISTRICTS, campaignRankLimit } from './game/track/trackCatalog';
 import { trackPreset } from './game/track/trackRuntime';
 import type { TrackDefinition } from './game/track/trackCatalog';
 import type { CampaignOutcome } from './game/progression/campaign';
@@ -27,6 +28,7 @@ import type { RewardInput } from './game/progression/progress';
 import './shop.css';
 import { createRaceAnalytics } from './platform/analytics';
 import { gameAnalytics } from './platform/gameAnalytics';
+import { formatDelta } from './game/driving/raceGhost';
 
 const formatTime = (seconds: number) => {
   const ms = Math.round(Math.max(0, seconds) * 1000);
@@ -41,11 +43,13 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
       <div id="race-scene" class="race-scene"></div>
       <div id="race-impact" class="race-impact" aria-hidden="true"></div>
       <div id="race-boost-flash" class="race-boost-flash" aria-hidden="true"></div>
+      <section id="race-intro" class="race-intro" aria-label="코스 소개" hidden><p class="intro-eyebrow"></p><h2 class="intro-name"></h2><p class="intro-meta"></p><p class="intro-skip">건너뛰기 · 아무 키나 탭</p></section>
+      <div id="race-splash" class="race-splash" role="status" hidden><strong></strong><span></span><em></em></div>
       <header class="race-header">
-        <div class="race-telemetry" aria-label="주행 정보"><div class="telemetry-row"><span class="speed-readout" aria-label="현재 주행 속도"><strong id="drive-speed">000</strong><span class="speed-unit mono"><small>속도</small>km/h</span></span><span id="race-rank" class="rank-readout mono" hidden></span><span id="race-lap" class="lap-readout mono">LAP 1/3</span><time id="drive-time" class="mono">00:00.000</time></div><div class="corner-guide"><span id="lap-deadline" hidden></span><strong id="corner-text">직선</strong><span class="corner-hint">급한 코너에서는 S로 감속</span></div></div>
+        <div class="race-telemetry" aria-label="주행 정보"><div class="telemetry-row"><span class="speed-readout" aria-label="현재 주행 속도"><strong id="drive-speed">000</strong><span class="speed-unit mono"><small>속도</small>km/h</span></span><span id="race-rank" class="rank-readout mono" hidden></span><span id="race-lap" class="lap-readout mono">LAP 1/3</span><time id="drive-time" class="mono">00:00.000</time><span id="race-ghost" class="ghost-delta mono" aria-label="고스트와의 시간 차이" hidden></span></div><div class="corner-guide"><span id="lap-deadline" hidden></span><strong id="corner-text">직선</strong><span class="corner-hint">급한 코너에서는 S로 감속</span></div></div>
       </header>
       <button type="button" id="race-pause" class="race-pause" aria-label="일시정지 메뉴" aria-keyshortcuts="Escape" aria-controls="drive-overlay" aria-expanded="false"><span aria-hidden="true">Ⅱ</span></button>
-      <div class="driving-overlay"><div id="race-announcement" class="race-announcement" role="status" aria-live="polite" hidden><strong></strong><span></span><em id="race-clean" hidden>클린 +${CLEAN_HALF_LAP_POINTS}P</em></div><p id="race-notice" class="race-notice" role="status" aria-live="polite"></p><div id="race-countdown" class="race-countdown" role="status" aria-live="assertive" hidden><span>READY</span><strong>3</strong></div>
+      <div class="driving-overlay"><div id="race-announcement" class="race-announcement" role="status" aria-live="polite" hidden><strong></strong><span></span><em id="race-clean" hidden>클린 +${CLEAN_HALF_LAP_POINTS}P</em></div><p id="race-callout" class="race-callout" role="status" hidden></p><p id="race-nearmiss" class="race-nearmiss" aria-hidden="true" hidden>NEAR MISS</p><p id="race-streak" class="race-streak" aria-hidden="true" hidden></p><p id="race-notice" class="race-notice" role="status" aria-live="polite"></p><div id="race-countdown" class="race-countdown" role="status" aria-live="assertive" hidden><span>READY</span><strong>3</strong></div>
       <div class="race-items"><button id="race-focus" type="button" class="race-focus" aria-keyshortcuts="V" hidden>집중 모드</button>${RIVAL_ITEMS.map(item => `<button type="button" id="race-${item.id}" class="race-focus" data-use-item="${item.id}" hidden>${item.name}</button>`).join('')}</div><p id="focus-feedback" class="focus-feedback" role="status" aria-live="polite"></p><footer class="drive-hud" aria-label="고도와 부스트 계기판">
         <aside class="height-guide" aria-label="고도 안내: 선택 단계, 민트색 통과 가능, 빨강 통과 불가, 주황 전환 중"><div id="height-level" class="height-bars"></div><strong id="height-instruction"></strong></aside>
         <div class="boost-readout"><div class="hud-pair"><span class="hud-label">BOOST</span><span id="boost-value" class="mono">100%</span></div><div id="boost-meter" class="boost-meter" role="progressbar" aria-label="부스트 잔량" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"><span></span></div><div id="boost-stage-meter" class="boost-stage-meter" role="progressbar" aria-label="부스트 2단계 축적" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span></span></div><span id="boost-status">Space 유지 · 3초 후 2단계</span></div>
@@ -122,6 +126,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
   const charge = get('boost-value');
   const boostStatus = get('boost-status');
   const time = get('drive-time');
+  const ghostDeltaEl = get('race-ghost'); let ghostShownAt = 0;
   const corner = get('corner-text');
   const notice = get('race-notice');
   const heightBars = get('height-level');
@@ -144,6 +149,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
   let standingsKey = '';
   const restartConfirm = get<HTMLDialogElement>('race-restart-confirm');
   let lastPhase = '';
+  let introPending = true; let cinematicKind = ''; let cinematicEndedAt = 0;
   let rewardInput: RewardInput | undefined; let rewardPending = false; let focusPending = false; let canFocus = false; let activeRaceId = '';
   let screenDisposed = false; let focusSerial = 0; let focusMessageUntil = 0;
   const saveReward = async () => {
@@ -175,7 +181,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
   const preferences = get<HTMLDialogElement>('race-preferences');
   const paintMenu = () => {
     const racing = lastPhase === 'running' || lastPhase === 'countdown';
-    overlay.hidden = racing || previewing || lost;
+    overlay.hidden = racing || previewing || lost || !!cinematicKind;
     get('view-preview').hidden = racing || !previewing || lost;
     screen.dataset.preview = String(previewing);
     pauseButton.innerHTML = `<span aria-hidden="true">${previewing ? '×' : lastPhase === 'paused' ? '▶' : 'Ⅱ'}</span>`;
@@ -188,7 +194,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
   let impactAnimation: Animation | undefined;
   let boostFlashAnimation: Animation | undefined;
   let lastBoostStage = 0;
-  let lastAnnouncement = 0;
+  let lastAnnouncement = 0; let lastCallout = 0; let lastNearMisses = 0; let lastStreak = 0;
   let lost = false;
   let previousLevel = -1;
   let highlightUntil = 0;
@@ -293,6 +299,29 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
     }
     lastBoostStage = state.boostStage;
     if (state.phase !== 'running') boostFlashAnimation?.cancel();
+    // Callouts, near miss and clean streak: opacity only under reduced motion; no shatter then.
+    const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const pop = (el: HTMLElement, ms: number, from: string, to: string) => {
+      el.getAnimations().forEach(a => a.cancel()); el.hidden = false;
+      const move = (y: string, scale: number) => still ? '' : `translate(-50%,${y}) scale(${scale})`;
+      el.animate([{ opacity: 0, transform: move(from, .85) }, { opacity: 1, transform: move(from, 1.05), offset: .12 }, { opacity: 1, transform: move(to, 1), offset: .75 }, { opacity: 0, transform: move(to, 1) }],
+        { duration: ms }).onfinish = () => { el.hidden = true; };
+    };
+    if (state.callout && state.callout.id !== lastCallout) {
+      lastCallout = state.callout.id; const el = get('race-callout');
+      el.textContent = state.callout.text; el.dataset.kind = state.callout.kind; pop(el, 1400, '6px', '0px');
+    }
+    if (state.nearMisses > lastNearMisses && state.phase === 'running') pop(get('race-nearmiss'), 700, '8px', '-10px');
+    lastNearMisses = state.nearMisses;
+    if (state.cleanStreak !== lastStreak) {
+      const streak = get('race-streak'), n = state.cleanStreak, broke = n < lastStreak && lastStreak >= 2 && state.phase === 'running';
+      lastStreak = n; streak.getAnimations().forEach(a => a.cancel());
+      if (n >= 2) { streak.hidden = false; streak.textContent = `CLEAN ×${n}`; streak.dataset.tier = String(Number(n >= 5) + Number(n >= 10) + Number(n >= 20)); }
+      else if (broke && !still) {
+        streak.animate([{ opacity: 1, transform: 'none', filter: 'none' }, { opacity: 1, transform: 'translateX(-4px) skewX(-8deg)', offset: .2 },
+          { opacity: 0, transform: 'translate(10px,14px) skewX(12deg) scale(1.25)', letterSpacing: '10px', filter: 'blur(3px)' }], { duration: 450 }).onfinish = () => { streak.hidden = true; };
+      } else streak.hidden = true;
+    }
     const announcement = get('race-announcement');
     announcement.hidden = !state.announcement || state.phase !== 'running';
     if (state.announcement && state.announcement.id !== lastAnnouncement) {
@@ -324,6 +353,11 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
       : state.boostNeedsRelease ? `${boostControl}를 놓았다가 다시 눌러주세요` : percentage < 15 ? '회복 중'
       : `${boostControl} 유지 · ${state.boostStage2Seconds.toFixed(1)}초 후 2단계`;
     time.textContent = formatTime(state.elapsed);
+    if (state.ghostDelta === null) ghostDeltaEl.hidden = true;
+    else if (performance.now() - ghostShownAt >= 250) { // ~4 Hz keeps the digits readable
+      ghostShownAt = performance.now(); const d = formatDelta(state.ghostDelta);
+      ghostDeltaEl.hidden = false; ghostDeltaEl.textContent = d.text; ghostDeltaEl.classList.toggle('is-ahead', d.ahead);
+    }
     const levels = state.altitudeProfile.levels;
     // Keep altitude, boost and notices within the renderer’s driving viewport.
     const layoutKey = `${screen.clientWidth}/${screen.clientHeight}/${state.trackDisplay}/${state.view}/${coarsePointer.matches}`;
@@ -408,6 +442,26 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
     corner.textContent = state.upcomingSection === 'vertical-loop' ? '수직 루프 · 자동 추종' : state.upcomingSection === 'helix' ? '스프링 · 자동 추종' : Math.abs(curvature) < 0.004 ? '직선' : `${curvature > 0 ? '우' : '좌'}회전${Math.abs(curvature) > 0.02 ? ' · 급한 코너' : ''}`;
     const nextNotice = state.notice === 'off-track' ? `코스 이탈 · -${OFF_TRACK_PENALTY_POINTS}P` : state.notice === 'craft-collision' ? `기체 접촉 · -${COLLISION_PENALTY_POINTS}P` : state.notice === 'collision' ? `경계 접촉 · -${COLLISION_PENALTY_POINTS}P` : state.notice === 'obstacle-pass' ? '장애물 통과 · +1P' : state.notice === 'corridor-collision' ? `통로 방전 접촉 · -${OBSTACLE_COLLISION_PENALTY_POINTS}P` : state.notice === 'height-collision' ? `방전 접촉 · -${OBSTACLE_COLLISION_PENALTY_POINTS}P` : state.notice === 'recovery' ? '체크포인트 복귀' : '';
     if (notice.textContent !== nextNotice) notice.textContent = nextNotice;
+    const cine = state.cinematic?.kind ?? '';
+    const cinematicEnded = !!cinematicKind && !cine;
+    if (cine !== cinematicKind) {
+      if (cinematicEnded) cinematicEndedAt = performance.now();
+      cinematicKind = cine; screen.dataset.cinematic = cine;
+      const intro = get('race-intro'), splash = get('race-splash');
+      intro.hidden = cine !== 'intro'; splash.hidden = cine !== 'finish';
+      if (cine === 'intro') {
+        const title = introTitle({ district: campaign && DISTRICTS[campaign.track.district].name, order: campaign?.track.order, name: campaign?.track.name ?? 'NEON CIRCUIT',
+          difficulty: campaign ? RACE_CHALLENGES[challenge].label : DIFFICULTIES[selectedDifficulty].label, laps: attack.totalLaps, field: competition?.standings.length });
+        intro.style.setProperty('--cine', `${state.cinematic!.seconds}s`);
+        intro.querySelector('.intro-eyebrow')!.textContent = title.eyebrow; intro.querySelector('.intro-name')!.textContent = title.name;
+        intro.querySelector('.intro-meta')!.textContent = title.meta.join(' · ');
+      } else if (cine === 'finish') {
+        const result = finishSplash({ rank: competition?.playerRank ?? null, disqualified: attack.disqualified, isNewBest: !!attack.result?.isNewBest, total: formatTime(state.elapsed) });
+        splash.dataset.kind = result.kind; splash.style.setProperty('--cine', `${state.cinematic!.seconds}s`);
+        splash.querySelector('strong')!.textContent = result.title; splash.querySelector('span')!.textContent = result.detail; splash.querySelector('em')!.textContent = result.badge;
+        splash.querySelector('span')!.hidden = !result.detail; splash.querySelector('em')!.hidden = !result.badge;
+      }
+    }
     const phaseChanged = state.phase !== lastPhase;
     if (phaseChanged) {
       lastPhase = state.phase;
@@ -429,7 +483,10 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
     }
     paintMenu();
     // Focus only after paintMenu reveals the overlay; a hidden button cannot take focus.
-    if (phaseChanged && (state.phase === 'paused' || state.phase === 'finished' || (state.phase === 'ready' && !coarsePointer.matches))) startButton.focus({ preventScroll: true });
+    if ((phaseChanged || cinematicEnded) && !cinematicKind && (state.phase === 'paused' || state.phase === 'finished' || (state.phase === 'ready' && !coarsePointer.matches))) {
+      const next = get<HTMLButtonElement>('campaign-next');
+      (state.phase === 'finished' && !next.hidden ? next : startButton).focus({ preventScroll: true });
+    }
   };
   const events = new AbortController();
   const listen = { signal: events.signal };
@@ -507,10 +564,11 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
     get('race-mode-title').textContent = `${selectedMode === 'competition' ? 'COMPETITION RACE' : 'TIME ATTACK'} · ${campaign ? RACE_CHALLENGES[challenge].label : DIFFICULTIES[selectedDifficulty].label}`;
     get('race-loadout').textContent = `${selectedMode === 'competition' ? `상대 기체 ${AI_OPPONENT_COUNT}대와 경쟁` : '타임어택'} · ${focusSlots || equippedRivalSlots.length ? `아이템 ${focusSlots + equippedRivalSlots.length}개 · 기본 보상 80%` : '아이템 없음'}`;
     rewardInput = undefined; campaignOutcome = undefined; get('result-reward').textContent = ''; get('reward-retry').hidden = true; get('result-shop').hidden = true; get('campaign-next').hidden = true;
-    race?.dispose(); lastPhase = ''; lastViewKey = ''; previewing = false; lastCollisions = 0; lastBoostStage = 0; lastAnnouncement = 0; impactAnimation?.cancel(); boostFlashAnimation?.cancel();
+    race?.dispose(); lastPhase = ''; lastViewKey = ''; previewing = false; lastCollisions = 0; lastBoostStage = 0; lastAnnouncement = 0; lastCallout = 0; lastNearMisses = 0; lastStreak = 0; impactAnimation?.cancel(); boostFlashAnimation?.cancel();
     get('difficulty-description').textContent = `${campaign?.track.features ?? DIFFICULTIES[selectedDifficulty].description} · ${environment.label}${environment.rainIntensity ? ` · ${RAIN_INTENSITIES[environment.rainIntensity].label}` : ''}`;
     try {
-      race = createRace(get<HTMLDivElement>('race-scene'), update, showError, configuration, undefined, campaign ? trackPreset(campaign.track) : DIFFICULTIES[selectedDifficulty], focusSlots, selectedMode, campaign?.track, equippedRivalSlots, environment, challenge);
+      race = createRace(get<HTMLDivElement>('race-scene'), update, showError, configuration, undefined, campaign ? trackPreset(campaign.track) : DIFFICULTIES[selectedDifficulty], focusSlots, selectedMode, campaign?.track, equippedRivalSlots, environment, challenge, introPending);
+      introPending = false;
       race.setQuality(qualitySelect.value as RenderQuality);
       race.setExhaustHaze(hazeButton.getAttribute('aria-pressed') === 'true');
       race.setBloom(bloomButton.getAttribute('aria-pressed') === 'true');
@@ -528,6 +586,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
   }, listen);
   window.addEventListener('speedracer:pause-request', () => { if (lastPhase === 'running' || lastPhase === 'countdown') race?.togglePause(); }, listen);
   window.addEventListener('speedracer:menu-back', () => {
+    if (cinematicKind) { race?.skipCinematic(); return; }
     if (previewing) leavePreview();
     else if (lastPhase === 'paused') race?.togglePause();
     else if (lastPhase === 'ready' || lastPhase === 'finished') get('race-hangar').click();
@@ -559,6 +618,8 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
     if (event.code !== 'Escape' || !previewing || root.querySelector('dialog[open]')) return;
     event.preventDefault(); event.stopImmediatePropagation(); leavePreview();
   }, { ...listen, capture: true });
+  // The press that skipped a cinematic (pad A, a held key) must not also activate a button revealed under it.
+  overlay.addEventListener('click', event => { if (performance.now() - cinematicEndedAt < 400) { event.preventDefault(); event.stopImmediatePropagation(); } }, { ...listen, capture: true });
   startButton.addEventListener('click', () => { startButton.blur(); if (lastPhase === 'finished') prepareRace(); race?.start(); }, listen);
   pauseButton.addEventListener('click', () => { pauseButton.blur(); if (previewing) leavePreview(); else race?.togglePause(); }, listen);
   const requestRestart = () => {

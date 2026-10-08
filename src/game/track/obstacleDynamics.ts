@@ -40,6 +40,13 @@ export function resolveHeightObstacle(obstacle: HeightObstacle, levels: readonly
     : maxAltitude >= levels.at(-1)! ? 'rise' : 'middle' };
 }
 
+/** True while a moving field's opening is sliding between two levels. */
+export function obstacleInTransition(obstacle: HeightObstacle, levels: readonly number[], time: number) {
+  if (!obstacle.motion) return false;
+  const { stepSeconds, transitionSeconds, phase } = obstacle.motion;
+  return ((Math.max(0, time) + phase) / stepSeconds) % ((levels.length - 1) * 2) % 1 > 1 - transitionSeconds / stepSeconds;
+}
+
 export function obstacleArrivalTime(track: Track, fallbackTime: number, distance: number, speed: number, depth = 0,
   fromDistance = 0, routeId?: string | null) {
   // The nose reaches the front of the field before its centre reaches the gate.

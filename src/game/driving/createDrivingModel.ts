@@ -4,11 +4,12 @@ import type { Track } from '../track/createTrack';
 import { createTrackFrame } from '../track/createTrack.js';
 import { forkAt, selectBranch, routeDistanceScale, branchChoiceOpen, advanceTrackDistance, forkApproachDrift } from '../track/trackBranches.js';
 import { flightAcceleration, slopeHandling, impactSpeedRetention, impactAccelerationScale } from './flightDynamics.js';
-import { ALTITUDE_PROFILES, resolveAltitudeProfile } from '../track/altitudeProfile.js';
+import { ALTITUDE_PROFILES, altitudeCanPass, resolveAltitudeProfile } from '../track/altitudeProfile.js';
 import type { TravelSegment } from './raceProgress.js';
-import { resolveHeightObstacle, corridorCanPass } from '../track/obstacleDynamics.js';
+import { resolveHeightObstacle, obstacleInTransition, corridorCanPass } from '../track/obstacleDynamics.js';
 import { MINE_SPEED_RETENTION } from '../track/mineField.js';
 import { arcRailHit, RING_REACH } from '../track/arcRail.js';
+import { CRAFT_HALF_WIDTH } from '../track/mineField.js';
 import { OFF_TRACK_PENALTY_POINTS, COLLISION_PENALTY_POINTS, OBSTACLE_COLLISION_PENALTY_POINTS } from './raceScoring.js';
 export { OFF_TRACK_PENALTY_POINTS, COLLISION_PENALTY_POINTS, OBSTACLE_COLLISION_PENALTY_POINTS } from './raceScoring.js';
 
@@ -40,6 +41,11 @@ export interface DrivingState {
   boostPads: number;
   /** Boost rings triggered so far (same feedback path as pads). */
   boostRings: number;
+  /** Clean passes within `NEAR_MISS_MARGIN` / a late altitude call; the HUD diffs it per event. */
+  nearMisses: number;
+  /** Hazard passes in a row without an obstacle hit, and the best run so far. */
+  cleanStreak: number;
+  bestStreak: number;
   notice: 'collision' | 'craft-collision' | 'height-collision' | 'corridor-collision' | 'off-track' | 'recovery' | 'obstacle-pass' | null;
 }
 
@@ -48,6 +54,9 @@ export const DRIVING_TUNING = {
   minAltitude: ALTITUDE_PROFILES.beginner.levels[0], maxAltitude: ALTITUDE_PROFILES.beginner.levels[1],
   defaultAltitude: ALTITUDE_PROFILES.beginner.levels[0], craftHalfWidth: 1.6, craftHalfLength: 2.2,
 } as const;
+
+/** Metres of clearance, or seconds since the altitude became safe, under which a pass counts as a near miss. */
+export const NEAR_MISS_MARGIN = 1.2, NEAR_MISS_LATE_SECONDS = .4, NEAR_MISS_CHARGE = .08;
 
 export const NEUTRAL_INPUT: DrivingInput = { throttle: false, brake: false, steer: 0, lift: 0, boost: false };
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
@@ -66,7 +75,7 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
     routeId: null,
     distance: 0, offset: 0, heading: 0, altitude: initialAltitude, targetAltitude: initialAltitude, altitudeLevel: initialLevel,
     speed: 0, charge: 1, boosting: false, boostStage: 0, boostElapsed: 0, boostStageProgress: 0, boostNeedsRelease: false, checkpoint: 0, elapsed: 0,
-    collisions: 0, recoveries: 0, offTrackExits: 0, penaltyPoints: 0, obstaclesPassed: 0, boostPads: 0, boostRings: 0, notice: null,
+    collisions: 0, recoveries: 0, offTrackExits: 0, penaltyPoints: 0, obstaclesPassed: 0, boostPads: 0, boostRings: 0, nearMisses: 0, cleanStreak: 0, bestStreak: 0, notice: null,
   };
   const initial = { ...state };
   const frame = track.sample(0);
@@ -85,6 +94,8 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
   const completedPassages = new Map<string, number>();
   // One penalty per field passage, even when the craft remains inside its volume.
   const fieldPassages = new Map<string, number>();
+  // Smallest clearance per corridor/rail pass, and the altitude-call timing per height field and lap.
+  const margins = new Map<string, number>(), lateCalls = new Map<string, boolean>(), safeSince = new Map<string, number>();
   const tuning = { ...DRIVING_TUNING, ...performance };
   const boostStage2Seconds = tuning.boostStage2Threshold / tuning.boostDrain;
   const interruptBoost = () => {
@@ -108,10 +119,13 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
     const severity = (1 - retention) / DEFAULT_DRONE_CONFIGURATION.performance.collisionSpeedLoss;
     state.speed *= impactSpeedRetention(tuning.collisionSpeedLoss, severity);
     impairAcceleration(1.6); damageBoost(.18); state.collisions++;
-    state.penaltyPoints += OBSTACLE_COLLISION_PENALTY_POINTS;
+    state.penaltyPoints += OBSTACLE_COLLISION_PENALTY_POINTS; state.cleanStreak = 0;
     state.notice = notice; noticeRemaining = 1.2;
   };
-  const passedField = () => {
+  const passedField = (near = false, counted = true) => {
+    state.cleanStreak++; state.bestStreak = Math.max(state.bestStreak, state.cleanStreak);
+    if (near) { state.nearMisses++; state.charge = Math.min(1, state.charge + NEAR_MISS_CHARGE); }
+    if (!counted) return;
     state.obstaclesPassed++;
     if (!state.notice || state.notice === 'obstacle-pass') { state.notice = 'obstacle-pass'; noticeRemaining = .8; }
   };
@@ -130,11 +144,13 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
     },
     reset() {
       Object.assign(state, initial);
-      fieldPassages.clear(); completedPassages.clear(); accelerationRecovery = 0;
+      fieldPassages.clear(); completedPassages.clear(); margins.clear(); lateCalls.clear(); safeSince.clear(); accelerationRecovery = 0;
       rechargeDelay = 0; impactCooldown = 0; noticeRemaining = 0; heightSwitchSpeed = 0;
       offTrackEpisode = false;
     },
     recover,
+    /** Instant launch (perfect start): never slows a craft that is already faster. */
+    launch(speed: number) { state.speed = Math.max(state.speed, speed); },
     step(delta: number, input: DrivingInput, onTravel?: (segment: TravelSegment) => boolean) {
       if (input.lift !== 0 || Number.isFinite(input.targetAltitudeLevel)) {
         const nextLevel = clamp(Number.isFinite(input.targetAltitudeLevel) ? Math.round(input.targetAltitudeLevel!)
@@ -239,6 +255,11 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
           const clearance = (obstacle.depth / 2 + tuning.craftHalfLength) / routeDistanceScale(track, obstacle.distance, obstacle.routeId);
           const front = center - clearance;
           const rear = center + clearance;
+          if (altitudeCanPass(levels[state.altitudeLevel], obstacle)) { if (!safeSince.has(key)) safeSince.set(key, state.elapsed); } else safeSince.delete(key);
+          const lateKey = `${key}:${lap}`;
+          if (oldDistance <= rear && state.distance >= front && !lateCalls.has(lateKey))
+            lateCalls.set(lateKey, track.heightObstacles[i].motion ? obstacleInTransition(track.heightObstacles[i], levels, track.obstacleTime ?? state.elapsed)
+              : state.elapsed - (safeSince.get(key) ?? -Infinity) < NEAR_MISS_LATE_SECONDS);
           if (oldDistance <= rear && state.distance >= front && fieldPassages.get(key) !== lap
             && Math.abs(state.offset) < track.halfWidth + tuning.craftHalfWidth
             && (state.altitude < obstacle.minAltitude || state.altitude > obstacle.maxAltitude)) {
@@ -249,8 +270,9 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
             completedPassages.set(key, lap);
             if (fieldPassages.get(key) !== lap && Math.abs(state.offset) <= track.halfWidth - tuning.craftHalfWidth
               && state.altitude >= obstacle.minAltitude && state.altitude <= obstacle.maxAltitude) {
-              passedField();
+              passedField(lateCalls.get(lateKey));
             }
+            lateCalls.delete(lateKey);
           }
         }
         for (let i = 0; i < (track.corridorObstacles?.length ?? 0); i++) {
@@ -266,12 +288,16 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
             * clamp((distance - oldDistance) / swept, 0, 1) : state.offset;
           const safe = corridorCanPass(at(Math.max(oldDistance, front)), obstacle, tuning.craftHalfWidth)
             && corridorCanPass(at(Math.min(state.distance, rear)), obstacle, tuning.craftHalfWidth);
+          const edge = (distance: number) => obstacle.safeWidth / 2 - Math.abs(at(distance) - obstacle.safeCenter) - tuning.craftHalfWidth;
+          const marginKey = `${key}:${lap}`;
+          margins.set(marginKey, Math.min(margins.get(marginKey) ?? Infinity, edge(Math.max(oldDistance, front)), edge(Math.min(state.distance, rear))));
           if (!safe && fieldPassages.get(key) !== lap && Math.abs(state.offset) < track.halfWidth + tuning.craftHalfWidth) {
             fieldPassages.set(key, lap); fieldImpact(obstacle.speedRetention, 'corridor-collision');
           }
           if (state.distance > rear && completedPassages.get(key) !== lap) {
             completedPassages.set(key, lap);
-            if (safe && fieldPassages.get(key) !== lap) passedField();
+            if (safe && fieldPassages.get(key) !== lap) passedField(margins.get(marginKey)! < NEAR_MISS_MARGIN);
+            margins.delete(marginKey);
           }
         }
         // Mines are vertical columns: any altitude hits. Swept travel catches boost-speed crossings.
@@ -308,6 +334,12 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
             const offsetAt = (distance: number) => swept > 0 ? offsetFrom + (state.offset - offsetFrom) * clamp((distance - oldDistance) / swept, 0, 1) : state.offset;
             if (arcRailHit(offsetAt(Math.max(oldDistance, start)), side) || arcRailHit(offsetAt(Math.min(state.distance, start + length)), side)) {
               fieldPassages.set(key, lap); fieldImpact(MINE_SPEED_RETENTION, 'corridor-collision');
+            }
+            const marginKey = `${key}:${lap}`, gap = (distance: number) => -side * offsetAt(distance) - CRAFT_HALF_WIDTH;
+            margins.set(marginKey, Math.min(margins.get(marginKey) ?? Infinity, gap(Math.max(oldDistance, start)), gap(Math.min(state.distance, start + length))));
+            if (state.distance > start + length) {
+              if (fieldPassages.get(key) !== lap) { completedPassages.set(key, lap); passedField(margins.get(marginKey)! < NEAR_MISS_MARGIN, false); }
+              margins.delete(marginKey);
             }
           }
         }
