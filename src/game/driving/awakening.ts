@@ -4,6 +4,7 @@ import { resolveHeightObstacle } from '../track/obstacleDynamics.js';
 import { mineLineOffset, CRAFT_HALF_WIDTH, CRAFT_HALF_LENGTH } from '../track/mineField.js';
 
 export const AWAKENING_SECONDS = 5, AWAKENING_SPEED_SCALE = 1.05, CORE_REACH = 3.5;
+export const AWAKENING_CAPACITY = 3;
 export interface AwakeningCore { distance: number; offset: number }
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
@@ -16,15 +17,11 @@ export function createAwakeningCores(track: Track): AwakeningCore[] {
     && !track.arcRails?.some(o => d > o.distance - 45 && d < o.distance + o.length + 45)
     && !track.boostPads?.some(o => Math.abs(o.distance - d) < 30)
     && !track.boostRings?.some(o => Math.abs(o.distance - d) < 30);
-  const cores: AwakeningCore[] = [];
-  for (let mark = Math.min(100, track.length * .12); mark < track.length - 35; mark += 900) {
-    for (let shift = 0; shift <= 600; shift += 15) {
-      const d = mark + shift;
-      if (d >= Math.min(mark + 900, track.length - 35)) break;
-      if (clear(d)) { cores.push({ distance: d, offset: 0 }); break; }
-    }
+  // One pickup per lap leaves most of the lap under manual control, even at awakening speed.
+  for (let d = Math.max(100, track.length * .2); d < Math.min(track.length * .7, track.length - 35); d += 15) {
+    if (clear(d)) return [{ distance: d, offset: 0 }];
   }
-  return cores;
+  return [];
 }
 
 /** A track-relative flight corridor, independent of the manual yaw/speed limits.

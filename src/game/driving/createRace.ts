@@ -321,7 +321,7 @@ export function createRace(
     if (lost || disposed) return;
     views.cycleTrack(); resize(); notify();
   };
-  const controlCodes = new Set(['KeyS', 'KeyA', 'KeyD', 'KeyE', 'ArrowDown', 'ArrowUp', 'Space', 'KeyR', 'KeyC', 'KeyX', 'Escape']);
+  const controlCodes = new Set(['KeyS', 'KeyA', 'KeyD', 'KeyW', 'ArrowDown', 'ArrowUp', 'Space', 'KeyR', 'KeyC', 'KeyX', 'Escape']);
   window.addEventListener('speedracer:pad-action', (event) => {
     if (lost || document.querySelector('dialog[open]')) return;
     const action = (event as CustomEvent<string>).detail;
@@ -354,7 +354,7 @@ export function createRace(
     if (!event.repeat && event.code === 'KeyX') { cycleTrack(); return; }
     if (!event.repeat && event.code === 'Escape') { togglePause(); return; }
     if (!event.repeat && event.code === 'KeyR') { window.dispatchEvent(new CustomEvent('speedracer:restart-request')); return; }
-    if (event.code === 'KeyE') { if (!event.repeat) useAwakening(); return; }
+    if (event.code === 'KeyW') { if (!event.repeat) useAwakening(); return; }
     if (event.code === 'Space') {
       spaceHeld = true;
       if (!event.repeat && !launched && (timeAttack.phase === 'countdown' || timeAttack.phase === 'running')) pressAt = untilGo;

@@ -2,10 +2,12 @@ import * as THREE from 'three';
 import { createTrackFrame, type Track } from '../track/createTrack.js';
 import type { createDrivingModel } from './createDrivingModel.js';
 
-/** Gold, faceted cores are distinct from the mint plates and round boost rings. */
+/** Gold cubes match the inventory icons and differ from mint plates and round boost rings. */
 export function createAwakeningCoreVisual(track: Track, model: ReturnType<typeof createDrivingModel>) {
   const object = new THREE.Group(); object.name = 'awakening-cores';
-  const crystal = new THREE.OctahedronGeometry(1.2);
+  const crystal = new THREE.BoxGeometry(1.6, 1.6, 1.6);
+  const edges = new THREE.EdgesGeometry(crystal);
+  const outline = new THREE.LineBasicMaterial({ color: '#fff1bf', toneMapped: false });
   const ring = new THREE.TorusGeometry(1.9, .06, 6, 32);
   const stem = new THREE.CylinderGeometry(.035, .035, 1, 4);
   const gold = new THREE.MeshBasicMaterial({ color: new THREE.Color('#ffd46a').multiplyScalar(1.65), toneMapped: false });
@@ -25,6 +27,7 @@ export function createAwakeningCoreVisual(track: Track, model: ReturnType<typeof
         layout = model.cores; object.clear(); entries.length = 0;
         for (const core of layout) {
           const group = new THREE.Group(), spin = new THREE.Mesh(crystal, body), halo = new THREE.Mesh(ring, gold);
+          spin.add(new THREE.LineSegments(edges, outline)); spin.rotation.x = Math.PI / 7; spin.rotation.z = Math.PI / 10;
           const altitude = track.altitudeProfile.levels[track.altitudeProfile.initialLevel] + .7;
           spin.position.y = altitude; halo.position.y = altitude; halo.rotation.x = Math.PI / 2;
           const beam = new THREE.Mesh(stem, gold); beam.scale.y = altitude; beam.position.y = altitude / 2;
@@ -43,6 +46,6 @@ export function createAwakeningCoreVisual(track: Track, model: ReturnType<typeof
         halo.rotation.z = reducedMotion ? 0 : time * .65;
       });
     },
-    dispose() { object.removeFromParent(); object.clear(); crystal.dispose(); ring.dispose(); stem.dispose(); gold.dispose(); body.dispose(); texture.dispose(); label.dispose(); },
+    dispose() { object.removeFromParent(); object.clear(); crystal.dispose(); edges.dispose(); outline.dispose(); ring.dispose(); stem.dispose(); gold.dispose(); body.dispose(); texture.dispose(); label.dispose(); },
   };
 }

@@ -27,10 +27,12 @@ test('a corridor pass within 1.2 m of the band edge is a near miss worth +.08 ch
 test('near-miss charge banks reserves and is capped at 150%', () => {
   for (const charge of [1, 1.48, 1.5]) {
     const model = createDrivingModel(straight({ corridorObstacles: [corridor(100, -5)] }));
+    const centred = createDrivingModel(straight({ corridorObstacles: [corridor(100, -5)] }));
     Object.assign(model.state, { distance: 72, speed: 155, offset: -3.5, charge });
-    drive(model, 120);
+    Object.assign(centred.state, { distance: 72, speed: 155, offset: -5, charge });
+    drive(model, 120); drive(centred, 120);
     assert.equal(model.state.nearMisses, 1);
-    assert.equal(model.state.charge, Math.min(1.5, charge + NEAR_MISS_CHARGE));
+    assert.ok(Math.abs(model.state.charge - Math.min(1.5, centred.state.charge + NEAR_MISS_CHARGE)) < 1e-9);
   }
 });
 

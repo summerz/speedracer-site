@@ -57,16 +57,23 @@
 @keyframes height-warning { from { box-shadow:0 0 4px #64e9ae40; } to { box-shadow:0 0 12px #64e9ae; } }
 .drive-hud { position:absolute; bottom:max(22px,env(safe-area-inset-bottom)); left:50%; width:min(320px,calc(100% - 84px)); transform:translateX(-50%); pointer-events:none; text-shadow:0 2px 6px #000; }
 .awakening-control { display:flex; flex-direction:column; align-items:center; gap:4px; margin-bottom:12px; }
-.awakening-control button { pointer-events:auto; touch-action:manipulation; min-height:44px; min-width:136px; display:flex; align-items:center; justify-content:center; gap:8px; padding:9px 14px; border:1px solid #e4c57870; border-radius:9px; background:#17232bea; color:#e7dcbf; font:13px 'IBM Plex Mono',monospace; cursor:pointer; }
+.awakening-heading { display:flex; align-items:center; gap:8px; color:#fff0bd; font:11px 'IBM Plex Mono',monospace; }
+.awakening-cores { display:flex; align-items:center; justify-content:center; gap:6px; min-height:44px; }
+.awakening-control button { pointer-events:auto; touch-action:manipulation; width:44px; height:44px; display:flex; align-items:center; justify-content:center; padding:5px; border:1px solid #ffdc88; border-radius:9px; background:#483921ed; box-shadow:0 0 14px #ffd46a20; cursor:pointer; }
+.awakening-control button[hidden] { display:none; }
+.awakening-control svg { width:28px; height:32px; overflow:visible; stroke:#fff1bf; stroke-width:1; stroke-linejoin:round; }
+.cube-top { fill:#ffe49b; }
+.cube-left { fill:#c88b32; }
+.cube-right { fill:#f4bd57; }
+.awakening-empty { color:#b8b5a9; font:11px 'IBM Plex Mono',monospace; }
 .awakening-control button:disabled { cursor:default; opacity:.65; }
-.awakening-control button.is-ready { color:#fff0bd; border-color:#ffdc88; background:#483921ed; box-shadow:0 0 14px #ffd46a30; }
-.awakening-control button.is-active { color:#fff5d2; border-color:#ffdf84; background:#514025ed; opacity:1; }
+.awakening-cores.is-active button { border-color:#ffdf84; background:#514025ed; }
 .awakening-control button:focus-visible { outline:2px solid #fff1bf; outline-offset:3px; }
 .awakening-control>span { color:#e8d6a9; font:10px 'IBM Plex Mono',monospace; text-align:center; }
 .is-awakened .speed-readout { border-left-color:#ffe29a; }
 .is-awakened .speed-readout strong { color:#ffe29a; }
 .driving-overlay.is-inset .awakening-control { margin-bottom:4px; gap:0; }
-.driving-overlay.is-inset .awakening-control button { min-width:0; width:100%; padding:5px; font-size:10px; }
+.driving-overlay.is-inset .awakening-control button { padding:5px; }
 .driving-overlay.is-inset .awakening-control>span { display:none; }
 .hud-pair { display:flex; justify-content:space-between; gap:12px; align-items:baseline; }
 .hud-pair .mono { font-size:11px; color:var(--accent); }

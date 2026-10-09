@@ -122,7 +122,7 @@ test('boost tiers and item speed scaling retain grade effects, bounded overspeed
 test('braking still crawls uphill/downhill and 30/60/120 Hz agree through 3D bends', () => {
   for (const grade of [-1, 1]) {
     const model = createDrivingModel(road(() => grade)); advance(model, 4, input({ brake: true, boost: true }));
-    assert.equal(model.state.speed, p.crawlSpeed); assert.equal(model.state.charge, 1);
+    assert.equal(model.state.speed, p.crawlSpeed); assert.equal(model.state.charge, 1.5);
     const distance = model.state.distance; advance(model, 1, input({ brake: true }));
     assert.ok(Math.abs(model.state.distance - distance - p.crawlSpeed) < 1e-8);
   }
@@ -182,7 +182,8 @@ test('boost maneuver load is small, proportional to steering, frame-rate indepen
     lifted.step(1 / fps, input({ boost: true, lift: 1 })); flat.step(1 / fps, input({ boost: true }));
     assert.ok(Math.abs(flat.state.charge - lifted.state.charge - p.boostDrain * .04) < 1e-9, 'upper limit does not charge a second tap');
     const cruise = createDrivingModel(road()); cruise.step(1 / fps, input({ steer: 1, lift: 1 }));
-    assert.equal(cruise.state.charge, 1, 'ordinary movement has no battery penalty');
+    const idle = createDrivingModel(road()); idle.step(1 / fps, input());
+    assert.equal(cruise.state.charge, idle.state.charge, 'ordinary movement has no battery penalty');
   }
 });
 

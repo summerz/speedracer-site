@@ -4,7 +4,7 @@ import { createDrivingModel, NEUTRAL_INPUT } from '../output/test/game/driving/c
 import { createTimeAttack } from '../output/test/game/driving/createTimeAttack.js';
 import { createRaceSession } from '../output/test/game/driving/createRaceSession.js';
 import { createRaceRecords } from '../output/test/game/driving/raceRecords.js';
-import { createAwakeningCores, AWAKENING_SPEED_SCALE } from '../output/test/game/driving/awakening.js';
+import { createAwakeningCores, AWAKENING_SPEED_SCALE, AWAKENING_CAPACITY } from '../output/test/game/driving/awakening.js';
 import { DRONE_CATALOG } from '../output/test/game/drone/droneCatalog.js';
 import { TRACK_CATALOG } from '../output/test/game/track/trackCatalog.js';
 import { createCatalogTrack } from '../output/test/game/track/trackRuntime.js';
@@ -44,6 +44,31 @@ test('cores bank independently of boost, use swept lateral pickup, and return ne
   assert.equal(model.state.awakeningCores, 0);
   assert.equal(model.state.coresCollected, 0);
   assert.equal(model.coreAvailable(0, 0), true);
+});
+
+test('inventory holds three cores and a full inventory leaves the pickup available until space opens', () => {
+  const model = createDrivingModel(road());
+  const core = model.cores[0];
+  const cross = lap => {
+    Object.assign(model.state, { distance: lap * 5000 + core.distance - 1, speed: 150, offset: 0, heading: 0 });
+    model.step(1 / 60, input());
+  };
+  for (let lap = 0; lap < AWAKENING_CAPACITY; lap++) {
+    cross(lap);
+    assert.equal(model.state.awakeningCores, lap + 1);
+  }
+  cross(3);
+  assert.equal(model.state.awakeningCores, 3);
+  assert.equal(model.state.coresCollected, 3);
+  assert.equal(model.coreAvailable(0, 3), true, 'full inventory does not destroy the pickup');
+  assert.equal(model.useAwakening(), true);
+  assert.equal(model.state.awakeningCores, 2);
+  cross(3);
+  assert.equal(model.state.awakeningCores, 3);
+  assert.equal(model.state.coresCollected, 4);
+  assert.equal(model.coreAvailable(0, 3), false);
+  cross(4);
+  assert.equal(model.state.awakeningCores, 3, 'collecting during awakening also respects capacity');
 });
 
 test('an activation costs exactly one core, lasts five seconds at every frame rate, and preserves boost', () => {
@@ -174,7 +199,7 @@ test('every catalog course offers clear shared-road cores and can be crossed und
   for (const definition of TRACK_CATALOG) {
     const track = createCatalogTrack(definition);
     const cores = createAwakeningCores(track);
-    assert.ok(cores.length >= 2, `${definition.name}: enough pickups`);
+    assert.equal(cores.length, 1, `${definition.name}: one pickup per lap`);
     for (const core of cores) {
       assert.equal(forkAt(track, core.distance), undefined, 'both fork choices can access the core');
       assert.ok(core.distance > 0 && core.distance < track.length);
@@ -193,6 +218,19 @@ test('every catalog course offers clear shared-road cores and can be crossed und
         assert.ok(Number.isFinite(model.state.distance + model.state.offset + model.state.altitude));
         assert.ok(Math.abs(model.state.offset) < track.halfWidth - 1.7);
       }
+    }
+  }
+});
+
+test('all challenge levels keep one shared-road core per lap after obstacle randomization', () => {
+  for (const definition of TRACK_CATALOG) for (const challenge of ['easy', 'normal', 'hard']) {
+    const track = createCatalogTrack(definition, challenge);
+    for (let seed = 1; seed <= 5; seed++) {
+      let value = seed;
+      track.randomizeObstacles?.(() => ((value = (value * 1664525 + 1013904223) >>> 0) / 2 ** 32));
+      const cores = createAwakeningCores(track);
+      assert.equal(cores.length, 1, `${definition.name}/${challenge}/${seed}: one core`);
+      assert.equal(forkAt(track, cores[0].distance), undefined);
     }
   }
 });

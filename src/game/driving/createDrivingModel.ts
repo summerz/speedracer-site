@@ -11,7 +11,7 @@ import { MINE_SPEED_RETENTION } from '../track/mineField.js';
 import { arcRailHit, RING_REACH } from '../track/arcRail.js';
 import { CRAFT_HALF_WIDTH } from '../track/mineField.js';
 import { OFF_TRACK_PENALTY_POINTS, COLLISION_PENALTY_POINTS, OBSTACLE_COLLISION_PENALTY_POINTS } from './raceScoring.js';
-import { AWAKENING_SECONDS, AWAKENING_SPEED_SCALE, CORE_REACH, createAwakeningCores, awakeningTarget } from './awakening.js';
+import { AWAKENING_SECONDS, AWAKENING_SPEED_SCALE, AWAKENING_CAPACITY, CORE_REACH, createAwakeningCores, awakeningTarget } from './awakening.js';
 export { OFF_TRACK_PENALTY_POINTS, COLLISION_PENALTY_POINTS, OBSTACLE_COLLISION_PENALTY_POINTS } from './raceScoring.js';
 
 /** lift is a single tap impulse (-1 / 0 / 1), never a held key. */
@@ -237,8 +237,8 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
         } else {
           interruptBoost();
           rechargeDelay = Math.max(0, rechargeDelay - dt);
-          // Passive recovery fills the ordinary battery without discarding pickup reserves.
-          if (!awake && rechargeDelay === 0 && state.charge < 1) state.charge = Math.min(1, state.charge + tuning.boostRecovery * dt);
+          // Natural recovery and pickups share the same 150% storage capacity.
+          if (!awake && rechargeDelay === 0 && state.charge < BOOST_CAPACITY) state.charge = Math.min(BOOST_CAPACITY, state.charge + tuning.boostRecovery * dt);
         }
         const oldSpeed = state.speed;
         const fork = forkAt(track, state.distance);
@@ -434,7 +434,9 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
         }
         // The third pickup banks one manual activation, independently of boost.
         for (let i = 0; i < cores.length; i++) {
+          if (state.awakeningCores >= AWAKENING_CAPACITY) break;
           for (let lap = Math.floor(oldDistance / track.length); lap <= Math.floor(state.distance / track.length); lap++) {
+            if (state.awakeningCores >= AWAKENING_CAPACITY) break;
             const core = cores[i], at = core.distance + lap * track.length;
             if (lap < 0 || oldDistance >= at || state.distance < at || collectedCores.get(i) === lap) continue;
             const crossing = offsetFrom + (state.offset - offsetFrom) * clamp((at - oldDistance) / (state.distance - oldDistance), 0, 1);

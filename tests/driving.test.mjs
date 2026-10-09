@@ -40,16 +40,16 @@ test('holding boost after depletion cannot repeatedly trigger recharged boost', 
   advance(model, 4.5, input({ boost: true }));
   assert.ok(model.state.speed > tuning.boostStage2Speed * .99 && model.state.speed < tuning.boostStage2Speed);
   assert.ok(model.state.boosting && model.state.charge < 0.11);
-  advance(model, 9, input({ boost: true }));
+  advance(model, 12, input({ boost: true }));
   assert.equal(model.state.boosting, false);
   assert.equal(model.state.boostNeedsRelease, true);
-  assert.equal(model.state.charge, 1);
+  assert.equal(model.state.charge, 1.5);
   assert.ok(model.state.speed <= tuning.topSpeed);
   model.step(1 / 60, input());
   assert.equal(model.state.boostNeedsRelease, false);
   model.step(1 / 60, input({ boost: true }));
   assert.equal(model.state.boosting, true);
-  assert.ok(model.state.charge < 1);
+  assert.ok(model.state.charge < 1.5);
 });
 
 test('brake takes priority over throttle and boost without draining charge', () => {
@@ -58,7 +58,7 @@ test('brake takes priority over throttle and boost without draining charge', () 
   const before = model.state.speed;
   advance(model, .5, input({ throttle: true, brake: true, boost: true }));
   assert.ok(model.state.speed < before);
-  assert.equal(model.state.charge, 1);
+  assert.equal(model.state.charge, 1.5);
   assert.equal(model.state.boosting, false);
 });
 
@@ -230,7 +230,7 @@ test('holding the brake from rest accelerates smoothly to crawl without boost or
   advance(model, 2, input({ brake: true, boost: true }));
   assert.equal(model.state.speed, tuning.crawlSpeed);
   assert.equal(model.state.boostStage, 0);
-  assert.equal(model.state.charge, 1);
+  assert.ok(model.state.charge > 1 && model.state.charge <= 1.5, 'braking permits recovery without boost consumption');
 });
 
 test('boost speeds increase lateral travel for the same steering input', () => {

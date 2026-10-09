@@ -71,6 +71,24 @@ test('150% storage spends at most 100% per press and preserves 50% for a second 
   }
 });
 
+test('passive recovery repeatedly reaches 150% and each uninterrupted use leaves the 50% reserve', () => {
+  for (const fps of [30, 60, 120]) {
+    const model = createDrivingModel(track);
+    for (let cycle = 0; cycle < 3; cycle++) {
+      advance(model, 10, NEUTRAL_INPUT, fps);
+      assert.equal(model.state.charge, 1.5, `cycle ${cycle}: full passive storage`);
+      advance(model, 5, boost, fps);
+      assert.ok(Math.abs(model.state.charge - .5) < 1e-8, `cycle ${cycle}: only 100% spent`);
+      assert.equal(model.state.boostNeedsRelease, true);
+      advance(model, .5, boost, fps);
+      assert.ok(Math.abs(model.state.charge - .5) < 1e-8, 'keeping the button down preserves the reserve');
+    }
+    advance(model, 1 / fps, NEUTRAL_INPUT, fps);
+    advance(model, .5, boost, fps);
+    assert.ok(Math.abs(model.state.charge - .4) < 1e-8, 'a new press can use the remaining reserve');
+  }
+});
+
 test('collecting a pickup while boosting does not extend the 100% allowance for that press', () => {
   const model = createDrivingModel({ ...track, boostRings: [{ distance: 300, offset: 0, radius: 3.5 }] });
   advance(model, 5);
@@ -115,8 +133,8 @@ test('depletion exits stage 2; recharged boost starts again in stage 1 after rel
   assert.equal(model.state.charge, 0);
   assert.equal(model.state.boostStage, 0);
   assert.equal(model.state.boostNeedsRelease, true);
-  advance(model, 8);
-  assert.equal(model.state.charge, 1);
+  advance(model, 12);
+  assert.equal(model.state.charge, 1.5);
   assert.equal(model.state.boostStage, 0);
   model.step(1 / 60, NEUTRAL_INPUT);
   model.step(1 / 60, boost);
@@ -154,7 +172,9 @@ test('stored boost loses a small amount on contacts and departures even without 
   const model=createDrivingModel(track);model.state.speed=100;
   model.contact();assert.ok(Math.abs(model.state.charge-.98)<1e-8);
   model.reset(); model.state.speed=100;model.state.altitude=5;model.state.offset=track.halfWidth+5;
+  const control=createDrivingModel(track);control.state.speed=100;control.state.altitude=5;
+  control.step(1/120,NEUTRAL_INPUT);
   model.step(1/120,NEUTRAL_INPUT);
-  assert.equal(model.state.offTrackExits,1);assert.ok(Math.abs(model.state.charge-.9625)<.001);
+  assert.equal(model.state.offTrackExits,1);assert.ok(Math.abs(model.state.charge-(control.state.charge-.0375))<1e-8);
   const charge=model.state.charge;model.step(1/120,NEUTRAL_INPUT);assert.equal(model.state.charge,charge);
 });
