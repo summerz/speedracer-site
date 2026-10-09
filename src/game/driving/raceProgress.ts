@@ -19,6 +19,7 @@ export function createRaceProgress(length: number, gatesPerLap: number, _halfWid
   let finishTime: number | null = null;
   let lapStart = 0;
   const lapTimes: number[] = [];
+  const checkpointTimes: number[] = [];
   const snapshot = () => ({
     lap: Math.min(totalLaps, Math.floor(passed / gatesPerLap) + 1),
     completedLaps: lapTimes.length,
@@ -26,12 +27,12 @@ export function createRaceProgress(length: number, gatesPerLap: number, _halfWid
     gatesPerLap,
     checkpoint: passed * spacing,
     nextCheckpoint: (passed + 1) * spacing,
-    lapTimes: [...lapTimes], finishTime,
+    lapTimes: [...lapTimes], checkpointTimes: [...checkpointTimes], finishTime,
   });
   return {
     snapshot,
     get checkpoint() { return passed * spacing; },
-    reset() { passed = 0; finishTime = null; lapStart = 0; lapTimes.length = 0; },
+    reset() { passed = 0; finishTime = null; lapStart = 0; lapTimes.length = 0; checkpointTimes.length = 0; },
     cross(segment: TravelSegment) {
       if (finishTime !== null || !Object.values(segment).every(Number.isFinite) || segment.to <= segment.from || segment.timeTo <= segment.timeFrom) return null;
       while (passed < gatesPerLap * totalLaps) {
@@ -41,8 +42,9 @@ export function createRaceProgress(length: number, gatesPerLap: number, _halfWid
         if (segment.from >= gate || segment.to < gate) break;
         const fraction = (gate - segment.from) / (segment.to - segment.from);
         passed++;
+        const time = Math.round((segment.timeFrom + (segment.timeTo - segment.timeFrom) * fraction) * 1000) / 1000;
+        checkpointTimes.push(time);
         if (passed % gatesPerLap === 0) {
-          const time = Math.round((segment.timeFrom + (segment.timeTo - segment.timeFrom) * fraction) * 1000) / 1000;
           lapTimes.push(time - lapStart); lapStart = time;
           if (lapTimes.length === totalLaps) { finishTime = time; return time; }
         }

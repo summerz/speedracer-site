@@ -25,10 +25,9 @@ export function createRivalVisuals(scene: THREE.Scene, track: Track, rivals: Ret
         entry.marker.visible = frozen || jammed;
         entry.marker.material.color.set(frozen ? '#b3f6ff' : '#ff9a42');
         entry.marker.material.opacity = reduced ? .85 : .65 + .2 * Math.sin(entry.rival.controller.model.state.elapsed * 18);
-        const state = entry.rival.controller.model.state;
+        const state = entry.rival.finishCoast?.pose ?? entry.rival.controller.model.state;
         const finished = entry.rival.controller.phase === 'finished';
-        // Keep the overview position, but clear the finish line for active racers.
-        entry.object.visible = !finished;
+        entry.object.visible = true;
         track.sample(state.distance, frame, state.routeId);
         entry.object.position.copy(frame.position).addScaledVector(frame.right, state.offset).addScaledVector(frame.up, state.altitude);
         forward.copy(frame.tangent).multiplyScalar(Math.cos(state.heading)).addScaledVector(frame.right, Math.sin(state.heading));
@@ -38,7 +37,7 @@ export function createRivalVisuals(scene: THREE.Scene, track: Track, rivals: Ret
         if (!reduced) entry.object.rotateOnAxis(bankAxis, -state.heading * .35);
         entry.thrusters.setMode(state.boostStage === 2 ? 'boost-stage2' : state.boosting ? 'boost' : state.speed > 1 ? 'accelerate' : 'idle');
         entry.thrusters.setBoostCharge(state.boostStageProgress);
-        entry.thrusters.update(entry.rival.controller.phase === 'running' ? delta : 0, reduced || finished);
+        entry.thrusters.update(entry.rival.controller.phase === 'paused' ? 0 : delta, reduced || finished);
       }
     },
     dispose() { entries.forEach(entry => entry.thrusters.dispose()); },
