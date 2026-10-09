@@ -39,6 +39,7 @@
   background: #56dacf13;
 }
 .menu-header .menu-header-button[aria-current='page'] { opacity: 1; cursor: default; }
+.menu-header .menu-music[aria-pressed='false'] { opacity: .55; }
 .menu-balance { color: #bce6eb; font-size: 14px; font-weight: 400; white-space: nowrap; }
 .menu-header [hidden] { display: none !important; }
 @media (max-width: 760px) and (orientation: portrait) {

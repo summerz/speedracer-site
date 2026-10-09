@@ -3,6 +3,7 @@ import { NIGHT_ENVIRONMENTS, RAIN_INTENSITIES, selectRaceEnvironment, selectRain
 import { AI_OPPONENT_COUNT } from './game/driving/aiRoster';
 import { RIVAL_ITEMS } from './game/progression/catalog';
 import type { RivalItemId } from './game/progression/catalog';
+import { sfxPreference } from './game/audio/sfxPreference';
 import { soundtrack } from './game/audio/soundtrack';
 import { OFF_TRACK_PENALTY_POINTS, COLLISION_PENALTY_POINTS, OBSTACLE_COLLISION_PENALTY_POINTS, CLEAN_HALF_LAP_POINTS } from './game/driving/raceScoring';
 import { RENDER_QUALITIES } from './platform/renderQuality';
@@ -83,7 +84,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
       </nav>
       <dialog id="race-preferences" class="race-preferences" aria-labelledby="preferences-title">
         <header><h2 id="preferences-title">설정</h2><button type="button" id="preferences-close" aria-label="설정 닫기">닫기</button></header>
-        <div class="preference-options"><button type="button" id="race-bloom" aria-pressed="true"><span>네온 발광 <small>Bloom</small></span></button><button type="button" id="race-sound" aria-pressed="true"><span>주행 효과음</span></button><button type="button" id="race-music" aria-pressed="true" aria-keyshortcuts="M"><span>배경 음악 <small>로비 1곡 · 경주 8곡</small></span><kbd class="key-badge">M</kbd></button><button type="button" id="race-haptics" aria-pressed="true"><span>진동</span></button></div>
+        <div class="preference-options"><button type="button" id="race-bloom" aria-pressed="true"><span>네온 발광 <small>Bloom</small></span></button><button type="button" id="race-sound" aria-pressed="true" aria-keyshortcuts="N"><span>주행 효과음 <kbd class="key-badge">N</kbd></span></button><button type="button" id="race-music" aria-pressed="true" aria-keyshortcuts="M"><span>배경 음악 <kbd class="key-badge">M</kbd> <small>로비 1곡 · 경주 8곡</small></span></button><button type="button" id="race-haptics" aria-pressed="true"><span>진동</span></button></div>
         <div class="render-options"><label for="race-quality">렌더링 품질</label><select id="race-quality">${Object.entries(RENDER_QUALITIES).map(([id, option]) => `<option value="${id}" ${id === 'balanced' ? 'selected' : ''}>${option.label}</option>`).join('')}</select></div>
         <div class="preference-options"><button type="button" id="race-haze" aria-pressed="false"><span>배기 아지랑이 <small>추적 시점</small></span></button></div>
         <p class="quality-hint">아지랑이는 배기 주변에만 적용합니다. 성능이 낮으면 끄거나 ‘성능 우선’을 선택하세요.</p>
@@ -111,6 +112,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
   const soundButton = get<HTMLButtonElement>('race-sound');
   const musicButton = get<HTMLButtonElement>('race-music');
   musicButton.setAttribute('aria-pressed', String(soundtrack.enabled));
+  soundButton.setAttribute('aria-pressed', String(sfxPreference.enabled));
   const hapticsButton = get<HTMLButtonElement>('race-haptics');
   const coarsePointer = window.matchMedia('(any-pointer: coarse)');
   const refreshHaptics = () => {
@@ -646,7 +648,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
   }, listen);
   soundButton.addEventListener('click', () => {
     const enabled = soundButton.getAttribute('aria-pressed') !== 'true';
-    soundButton.setAttribute('aria-pressed', String(enabled)); race?.setSoundEnabled(enabled);
+    soundButton.setAttribute('aria-pressed', String(enabled)); sfxPreference.set(enabled); race?.setSoundEnabled(enabled);
   }, listen);
   musicButton.addEventListener('click', () => {
     const enabled = musicButton.getAttribute('aria-pressed') !== 'true';

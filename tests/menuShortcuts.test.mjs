@@ -19,8 +19,11 @@ test('Digit4 opens sound lab only in dev and not from itself', () => {
   assert.equal(menuShortcut('Digit4', ctx('sound-lab')), null);
 });
 
-test('KeyM toggles music everywhere, including the race', () => {
-  for (const screen of ['hangar', 'campaign', 'shop', 'sound-lab', 'drive']) assert.deepEqual(menuShortcut('KeyM', ctx(screen)), { kind: 'music' });
+test('KeyM toggles music and KeyN sound effects everywhere, including the race and track detail', () => {
+  for (const screen of ['hangar', 'campaign', 'shop', 'sound-lab', 'drive']) for (const extra of [{}, { difficultyVisible: true }]) {
+    assert.deepEqual(menuShortcut('KeyM', ctx(screen, extra)), { kind: 'music' });
+    assert.deepEqual(menuShortcut('KeyN', ctx(screen, extra)), { kind: 'sfx' });
+  }
 });
 
 test('campaign T/R pick the mode only on campaign', () => {
@@ -30,12 +33,9 @@ test('campaign T/R pick the mode only on campaign', () => {
   assert.equal(menuShortcut('KeyR', ctx('drive')), null);
 });
 
-test('visible difficulty group: E/M/D choose it and M no longer toggles music', () => {
-  const c = ctx('campaign', { difficultyVisible: true });
-  assert.deepEqual(menuShortcut('KeyE', c), { kind: 'challenge', challenge: 'easy' });
-  assert.deepEqual(menuShortcut('KeyM', c), { kind: 'challenge', challenge: 'normal' });
-  assert.deepEqual(menuShortcut('KeyD', c), { kind: 'challenge', challenge: 'hard' });
-  assert.deepEqual(menuShortcut('KeyM', ctx('campaign')), { kind: 'music' });
-  assert.equal(menuShortcut('KeyE', ctx('campaign')), null);
+test('KeyD rotates difficulty only on campaign with the group visible; KeyE does nothing', () => {
+  assert.deepEqual(menuShortcut('KeyD', ctx('campaign', { difficultyVisible: true })), { kind: 'difficulty' });
+  assert.equal(menuShortcut('KeyD', ctx('campaign')), null);
   assert.equal(menuShortcut('KeyD', ctx('hangar', { difficultyVisible: true })), null);
+  assert.equal(menuShortcut('KeyE', ctx('campaign', { difficultyVisible: true })), null);
 });

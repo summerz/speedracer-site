@@ -8,7 +8,8 @@ export function menuHeader(current: 'hangar' | 'shop' | 'campaign' | 'sound-lab'
       SPEEDRACER<span class="wordmark-divider"></span><span class="wordmark-caption">DRONE RACING</span>
     </a>
     <div class="menu-header-tools">
-      <button class="menu-header-button menu-music" type="button" data-music-toggle aria-pressed="true" aria-keyshortcuts="M"><span data-music-label>음악 켜짐</span><kbd class="key-badge">M</kbd></button>
+      <button class="menu-header-button menu-music" type="button" data-music-toggle aria-pressed="true" aria-keyshortcuts="M">음악 <kbd class="key-badge">M</kbd></button>
+      <button class="menu-header-button menu-music" type="button" data-sfx-toggle aria-pressed="true" aria-keyshortcuts="N">효과음 <kbd class="key-badge">N</kbd></button>
       <button class="menu-header-button" type="button" data-analytics-settings hidden>이용 분석</button>
       <div class="app-tools" data-app-tools></div>
     </div>

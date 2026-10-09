@@ -1,4 +1,5 @@
 import { raceChallenge } from './game/track/raceChallenge';
+import { sfxPreference } from './game/audio/sfxPreference';
 import { soundtrack } from './game/audio/soundtrack';
 import { DRONE_CATALOG } from './game/drone/droneCatalog';
 import { createProgressStore, indexedProgressRepository } from './game/progression/progressStore';
@@ -27,9 +28,14 @@ export function mountApp(root: HTMLDivElement): () => void {
     if (raceMusic) { if (!raceMusic.disabled) raceMusic.click(); return; }
     soundtrack.setEnabled(!soundtrack.enabled); refreshMusicButton();
   };
+  const toggleSfx = () => {
+    const raceSound = root.querySelector<HTMLButtonElement>('#race-sound');
+    if (raceSound) { if (!raceSound.disabled) raceSound.click(); return; }
+    sfxPreference.set(!sfxPreference.enabled); refreshMusicButton();
+  };
   const musicToggle = (event: Event) => {
-    if (!(event.target instanceof Element) || !event.target.closest('[data-music-toggle]')) return;
-    toggleMusic();
+    const target = event.target instanceof Element ? event.target.closest('[data-music-toggle], [data-sfx-toggle]') : null;
+    if (target) (target.hasAttribute('data-sfx-toggle') ? toggleSfx : toggleMusic)();
   };
   const shortcut = (event: KeyboardEvent) => {
     if (event.ctrlKey || event.metaKey || event.altKey || event.repeat || event.defaultPrevented) return;
@@ -40,13 +46,18 @@ export function mountApp(root: HTMLDivElement): () => void {
     if (!action) return;
     event.preventDefault();
     if (action.kind === 'music') toggleMusic();
-    else if (action.kind === 'go') location.hash = action.hash;
-    else root.querySelector<HTMLElement>(action.kind === 'mode' ? `[data-mode="${action.mode}"]` : `[data-challenge="${action.challenge}"]`)?.click();
+    else if (action.kind === 'sfx') toggleSfx();
+    else if (action.kind === 'difficulty') {
+      const buttons = [...root.querySelectorAll<HTMLElement>('[data-challenge]')];
+      buttons[(buttons.findIndex(button => button.getAttribute('aria-pressed') === 'true') + 1) % buttons.length]?.click();
+    } else if (action.kind === 'go') location.hash = action.hash;
+    else root.querySelector<HTMLElement>(`[data-mode="${action.mode}"]`)?.click();
   };
   const refreshMusicButton = () => {
     for (const button of root.querySelectorAll<HTMLButtonElement>('[data-music-toggle]')) {
-      button.setAttribute('aria-pressed', String(soundtrack.enabled)); button.querySelector('[data-music-label]')!.textContent = soundtrack.enabled ? '음악 켜짐' : '음악 꺼짐';
+      button.setAttribute('aria-pressed', String(soundtrack.enabled));
     }
+    for (const button of root.querySelectorAll<HTMLButtonElement>('[data-sfx-toggle]')) button.setAttribute('aria-pressed', String(sfxPreference.enabled));
   };
   document.addEventListener('pointerdown', activateAudio);
   document.addEventListener('keydown', activateAudio);
