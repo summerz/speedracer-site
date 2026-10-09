@@ -71,7 +71,7 @@
 .hazard-edges { position:absolute; inset:0; z-index:1; pointer-events:none; overflow:hidden; --c:#ff8a3c; }
 .hazard-edge,.hazard-arrow { --c:#ff8a3c; --o:.4; }
 .hazard-edge[data-tone='rail'],.hazard-arrow[data-tone='rail'] { --c:#b6ff3c; }
-.hazard-edge { position:absolute; top:0; bottom:0; width:clamp(56px,14vw,180px); opacity:var(--o); }
+.hazard-edge { position:absolute; top:0; bottom:0; width:clamp(84px,22vw,280px); opacity:var(--o); }
 .hazard-edge[hidden],.hazard-arrow[hidden] { display:none; }
 .hazard-edge[data-side='left'] { left:0; background:linear-gradient(90deg,var(--c) 0 5px,color-mix(in srgb,var(--c) 75%,transparent) 5px,transparent); }
 .hazard-edge[data-side='right'] { right:0; background:linear-gradient(270deg,var(--c) 0 5px,color-mix(in srgb,var(--c) 75%,transparent) 5px,transparent); }

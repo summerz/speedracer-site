@@ -170,11 +170,11 @@ test('a headless rival lapping courses with a loop and helix (and a forked helix
   assert.ok(rings / laps >= 1, `${rings} rings over ${laps} laps`);
 });
 
-test('arc rail HUD cue: 200 m (or 3 s) ahead, 0 inside, next switch in the gaps, mirrored sides, and a nearer hazard wins', () => {
+test('arc rail HUD cue: 200 m (or 4.5 s) ahead, 0 inside, next switch in the gaps, mirrored sides, and a nearer hazard wins', () => {
   const track = { length: 3000, halfWidth: 13, arcRails: [rail, { distance: 900, length: 100, routeId: 'other', segments: [{ at: 0, length: 100, side: 1 }] }] };
   const guide = (d, offset = 0, speed = 60, hazard = null) => arcRailGuide(track, d, offset, speed, 'main', hazard);
-  assert.equal(guide(250), null, '250 m is too early'); assert.deepEqual(guide(300), { distance: 200, side: 1, safe: false });
-  assert.equal(guide(300, -3, 60).safe, true); assert.equal(guide(250, 0, 100).distance, 250, '3 s at 100 m/s is 300 m');
+  assert.equal(guide(200), null, '300 m is too early at 60 m/s (270 m)'); assert.deepEqual(guide(300), { distance: 200, side: 1, safe: false });
+  assert.equal(guide(300, -3, 60).safe, true); assert.equal(guide(250, 0, 100).distance, 250, '4.5 s at 100 m/s is 450 m');
   assert.equal(guide(520).distance, 0, 'inside segment 1'); assert.equal(guide(520).side, 1);
   assert.deepEqual(guide(620, 3), { distance: 130, side: -1, safe: true }, 'before the switch: the next segment');
   assert.equal(guide(620, 3).side, -1); assert.equal(guide(740, -3).side, -1, 'inside segment 2 the cue shows its danger side');

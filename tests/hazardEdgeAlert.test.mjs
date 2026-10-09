@@ -7,11 +7,11 @@ const rail = (distance, side, safe = false) => ({ arcRail: { distance, side, saf
 const corr = (distance, lane, safe = false) => ({ corridor: { distance, lane, safe } });
 
 test('nothing without a guide', () => assert.deepEqual(run({}), { left: null, right: null, arrow: null }));
-test('window is max(120, speed*3) ahead', () => {
-  assert.equal(run(rail(130, 1)).right, null);
-  assert.equal(run(rail(110, 1)).right?.level, 'warn');
-  assert.equal(run({ ...rail(130, 1), speed: 50 }).right?.level, 'warn');
-  assert.equal(run(corr(125, 'left')).right, null);
+test('window is max(180, speed*4.5) ahead', () => {
+  assert.equal(run(rail(190, 1)).right, null);
+  assert.equal(run(rail(170, 1)).right?.level, 'warn');
+  assert.equal(run({ ...rail(190, 1), speed: 50 }).right?.level, 'warn');
+  assert.equal(run(corr(185, 'left')).right, null);
 });
 test('rail lights the danger side with rail tone and points to the opposite side', () => {
   assert.deepEqual(run(rail(100, 1)), { left: null, right: { tone: 'rail', level: 'warn' }, arrow: 'left' });
