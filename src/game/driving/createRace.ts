@@ -43,8 +43,11 @@ import type { RacePhase } from './createTimeAttack';
 import { createRaceRecords } from './raceRecords';
 import { createGhostRecorder, ghostDelta, ghostKey, loadGhost, saveGhost, shouldSaveGhost } from './raceGhost';
 import { createGhostVisual } from './createGhostVisual';
-import { SWING_SECONDS, cinematicSeconds, finishSwing, finishTimeScale, introProgress } from './raceCinematic';
-import type { CinematicKind } from './raceCinematic';
+import { INTRO_SECONDS, SWING_SECONDS, cinematicSeconds, finishSwing, finishTimeScale, introProgress, replayShot, showcaseAt, showcasePlan } from './raceCinematic';
+import type { CinematicKind, CinematicShot, ShowcaseAt } from './raceCinematic';
+import { createReplayBuffer } from './raceReplay';
+import type { ReplayPose } from './raceReplay';
+import { DRONE_CATALOG } from '../drone/droneCatalog';
 import { createOvertakeCallouts, isPerfectStart, PERFECT_START_SPEED, PERFECT_START_WINDOW } from './raceCallouts';
 import type { Callout } from './raceCallouts';
 import { createRaceGates } from '../track/createRaceGates';
@@ -75,7 +78,7 @@ export interface RaceSnapshot extends DrivingState {
   arcRail: { distance: number; side: -1 | 1; safe: boolean } | null;
   boostRing: { distance: number; side: 'left' | 'right'; safe: boolean } | null;
   timeAttack: ReturnType<ReturnType<typeof createRaceSession>['snapshot']>;
-  cinematic: { kind: CinematicKind; reduced: boolean; seconds: number } | null;
+  cinematic: { kind: CinematicKind; reduced: boolean; seconds: number; shot?: CinematicShot } | null;
   callout: Callout | null;
   /** Seconds behind (+) / ahead (-) of the stored best run at the current distance; null without a ghost. */
   ghostDelta: number | null;
@@ -221,7 +224,16 @@ export function createRace(
   let bank = 0;
   let boostEntryAge = 1;
   let craftShake = 0;
-  const newCinematic = (kind: CinematicKind) => { const reduced = reducedMotion.matches; return { kind, t: 0, reduced, duration: cinematicSeconds(kind, reduced) }; };
+  const craftEntry = DRONE_CATALOG.find(c => c.configuration.modelVariant === config.modelVariant);
+  const newCinematic = (kind: CinematicKind) => {
+    const reduced = reducedMotion.matches, plan = showcasePlan(kind === 'intro' ? timeAttack.rivals.length : 0, reduced);
+    const infos: CinematicShot[] = plan.shots.map((shot, i) => {
+      const rival = shot.kind === 'rival' ? timeAttack.rivals[shot.index] : null;
+      return rival ? { kind: 'rival', name: rival.name, color: rival.color, detail: `${rival.craftName.toUpperCase()} · ${rival.style} · ★${rival.rating}`, index: i, total: plan.shots.length }
+        : { kind: 'player', name: (craftEntry?.name ?? 'PLAYER').toUpperCase(), color: craftEntry?.lineColor, index: i, total: plan.shots.length };
+    });
+    return { kind, t: 0, reduced, duration: cinematicSeconds(kind, reduced, kind === 'intro' ? timeAttack.rivals.length : 0), plan, infos };
+  };
   let cinematic: ReturnType<typeof newCinematic> | null = intro ? newCinematic('intro') : null;
   let padArmed = false;
   // Perfect start: seconds left until GO when boost was pressed (null = not pressed), and whether the launch window is settled.
@@ -235,6 +247,16 @@ export function createRace(
   const introLook = new THREE.CatmullRomCurve3([new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()]);
   const introTarget = new THREE.Vector3(), worldUp = new THREE.Vector3(0, 1, 0);
   let introAspect = 0;
+  const shotAt: ShowcaseAt = { shot: 0, u: 0, blend: 0 }, noteAt: ShowcaseAt = { shot: 0, u: 0, blend: 0 };
+  const shotPos = new THREE.Vector3(), shotLook = new THREE.Vector3(), shotF = new THREE.Vector3(), shotR = new THREE.Vector3(), shotU = new THREE.Vector3();
+  const currentShot = () => cinematic?.kind === 'intro' && !cinematic.reduced && cinematic.t >= INTRO_SECONDS && showcaseAt(cinematic.plan, cinematic.t - INTRO_SECONDS, noteAt) ? cinematic.infos[noteAt.shot] : undefined;
+  // Finish replay: the last seconds of running, looped behind the result screen with three hard-cut camera shots.
+  const replayBuffer = createReplayBuffer(), replayPose: ReplayPose = { x: 0, y: 0, z: 0, qx: 0, qy: 0, qz: 0, qw: 1, speed: 0, mode: 0 }, replayAnchor: ReplayPose = { ...replayPose };
+  const replayPick = { shot: 0 as 0 | 1 | 2, u: 0, v: 0 }, replayQuat = new THREE.Quaternion(), replayShotFov = [38, 56, 56] as const;
+  // Portrait screens widen the vertical field so the craft is not cropped.
+  const fitFov = (fov: number) => THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(fov / 2)) * Math.min(2, Math.max(1, 1.3 / camera.aspect))));
+  const SHOWCASE_FOV = 42, REPLAY_MODES = ['idle', 'accelerate', 'boost', 'boost-stage2'] as const;
+  let replayClock = 0, replayT = 0, replaying = false;
 
   const notify = () => {
     track.sample(model.state.distance + Math.max(22, model.state.speed * 1.1), upcoming, model.state.routeId);
@@ -259,7 +281,7 @@ export function createRace(
     const selected = choosing ? undefined : junction?.routes.find(r => r.id === model.state.routeId);
     const fork = junction ? { kind: junction.kind, names: junction.routes.map(r => r.name), level: verticalThreshold(track) + 1, selected: selected?.name ?? null,
       distance: physicalDistance(track, model.state.distance, (selected ? junction.end : junction.start + junction.junctionLength) - model.state.distance % track.length, model.state.routeId) } : null;
-    onUpdate({ ...model.state, competition: session.competition, announcement: feedback.announcement, boostStage2Seconds: model.boostStage2Seconds, altitudeProfile: model.altitudeProfile, phase: timeAttack.phase, timeAttack: session, cinematic: cinematic && { kind: cinematic.kind, reduced: cinematic.reduced, seconds: cinematic.duration }, callout, ghostDelta: ghost && timeAttack.phase !== 'finished' && model.state.elapsed > 0 ? ghostDelta(ghost, model.state.elapsed, model.state.distance) : null, view: views.view, trackDisplay: views.trackDisplay, trackLength: track.length, upcomingCurvature: upcoming.curvature, upcomingSection: upcoming.section, heightObstacle, corridor, mineField, boostPad, arcRail, boostRing, fork });
+    onUpdate({ ...model.state, competition: session.competition, announcement: feedback.announcement, boostStage2Seconds: model.boostStage2Seconds, altitudeProfile: model.altitudeProfile, phase: timeAttack.phase, timeAttack: session, cinematic: cinematic && { kind: cinematic.kind, reduced: cinematic.reduced, seconds: cinematic.duration, shot: currentShot() }, callout, ghostDelta: ghost && timeAttack.phase !== 'finished' && model.state.elapsed > 0 ? ghostDelta(ghost, model.state.elapsed, model.state.distance) : null, view: views.view, trackDisplay: views.trackDisplay, trackLength: track.length, upcomingCurvature: upcoming.curvature, upcomingSection: upcoming.section, heightObstacle, corridor, mineField, boostPad, arcRail, boostRing, fork });
   };
   const heightRequests: { lift: number; targetAltitudeLevel?: number }[] = [];
   const touchControls = createTouchControls(container.parentElement ?? container, {
@@ -290,7 +312,7 @@ export function createRace(
     clearInput(); raceAudio.activate();
     if (timeAttack.phase === 'ready' || timeAttack.phase === 'finished') { feedback.reset(); raceAudio.reset(); }
     const fresh = timeAttack.phase === 'ready' || timeAttack.phase === 'finished';
-    timeAttack.start(); if (fresh) { ghostRecorder.reset(); armStart(); soundFeedback.reset(); trackVisual.refreshObstacles(); raceGates.refresh(); weather.reset(); } touchControls.setRunning(timeAttack.phase === 'running'); previous = performance.now(); notify();
+    timeAttack.start(); if (fresh) { ghostRecorder.reset(); replayBuffer.reset(); replayClock = 0; replayT = 0; armStart(); soundFeedback.reset(); trackVisual.refreshObstacles(); raceGates.refresh(); weather.reset(); } touchControls.setRunning(timeAttack.phase === 'running'); previous = performance.now(); notify();
   };
   const togglePause = () => {
     if (timeAttack.phase === 'running' || timeAttack.phase === 'countdown') pause();
@@ -298,7 +320,7 @@ export function createRace(
   };
   const restart = () => {
     if (lost || disposed) return;
-    clearInput(); feedback.reset(); soundFeedback.reset(); raceAudio.activate(); raceAudio.reset(); timeAttack.restart(); ghostRecorder.reset(); armStart(); trackVisual.refreshObstacles(); raceGates.refresh(); weather.reset(); boostPulse.reset(); boostWarp.reset(); boostHaptics.stop(); boostEntryAge = 1; bank = 0; craftShake = 0; cameraSnap = true; touchControls.setRunning(false); previous = performance.now(); notify();
+    clearInput(); feedback.reset(); soundFeedback.reset(); raceAudio.activate(); raceAudio.reset(); timeAttack.restart(); ghostRecorder.reset(); replayBuffer.reset(); replayClock = 0; replayT = 0; armStart(); trackVisual.refreshObstacles(); raceGates.refresh(); weather.reset(); boostPulse.reset(); boostWarp.reset(); boostHaptics.stop(); boostEntryAge = 1; bank = 0; craftShake = 0; cameraSnap = true; touchControls.setRunning(false); previous = performance.now(); notify();
   };
   const recover = () => {
     if (lost || disposed) return;
@@ -418,6 +440,7 @@ export function createRace(
       const pressed = Array.from(navigator.getGamepads?.() ?? []).some(pad => pad?.buttons.some(button => button.pressed));
       if (!pressed) padArmed = true; else if (padArmed) endCinematic();
     } else padArmed = false;
+    replaying = oldPhase === 'finished' && !cinematic && !reducedMotion.matches && replayBuffer.seconds() >= .5;
     const slow = cinematic?.kind === 'finish' ? finishTimeScale(cinematic.t, cinematic.reduced) : 1;
     if (oldPhase === 'running' || oldPhase === 'countdown') {
       const touch = touchControls.read();
@@ -489,7 +512,7 @@ export function createRace(
     const entry = !reducedMotion.matches && state.boostStage === 2 && boostEntryAge < 0.45
       ? boostEntryAge < 0.055 ? boostEntryAge / 0.055 : (1 - (boostEntryAge - 0.055) / 0.395) ** 2 : 0;
     const targetFov = reducedMotion.matches ? visuals.baseFov : Math.min(100, visuals.baseFov + Math.min(state.speed / visuals.referenceSpeed, 2) * visuals.cruiseFovGain + (state.boosting ? visuals.boostFovGain : 0) + (state.boostStage === 2 ? visuals.boostStage2FovGain : 0) + entry * visuals.boostEntryFovGain);
-    const fov = THREE.MathUtils.lerp(camera.fov, targetFov, 1 - Math.exp(-delta * (entry > 0 ? Math.max(18, visuals.fovResponse) : visuals.fovResponse)));
+    const fov = replaying || (cinematic?.kind === 'intro' && !cinematic.reduced && cinematic.t >= INTRO_SECONDS) ? camera.fov : THREE.MathUtils.lerp(camera.fov, targetFov, 1 - Math.exp(-delta * (entry > 0 ? Math.max(18, visuals.fovResponse) : visuals.fovResponse)));
     if (Math.abs(camera.fov - fov) > 0.001) { camera.fov = fov; camera.updateProjectionMatrix(); }
     const cameraScale = Math.tan(THREE.MathUtils.degToRad(visuals.baseFov / 2)) / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
     track.sample(state.distance, frame, state.routeId);
@@ -507,6 +530,16 @@ export function createRace(
     drone.rotateZ(bank + Math.sin(state.elapsed * 51) * craftShake);
     drone.rotateX(Math.sin(state.elapsed * 67 + 1) * craftShake * .5 + (reducedMotion.matches ? 0 : (state.targetAltitude - state.altitude) * -0.045));
     drone.rotateY(Math.sin(state.elapsed * 43) * craftShake * .35);
+    if (oldPhase === 'running') {
+      replayClock += delta;
+      replayBuffer.record(replayClock, drone.position.x, drone.position.y, drone.position.z, drone.quaternion.x, drone.quaternion.y, drone.quaternion.z, drone.quaternion.w,
+        state.speed, awake || state.boostStage === 2 ? 3 : state.boosting ? 2 : input.throttle && state.speed > 1 ? 1 : 0, phase !== 'running');
+    }
+    if (replaying) {
+      replayT += delta; replayShot(replayT, replayBuffer.seconds(), replayPick); replayBuffer.sample(replayPick.v, replayPose);
+      drone.position.set(replayPose.x, replayPose.y, replayPose.z); drone.quaternion.set(replayPose.qx, replayPose.qy, replayPose.qz, replayPose.qw);
+      flightForward.set(0, 0, -1).applyQuaternion(drone.quaternion); flightRight.set(1, 0, 0).applyQuaternion(drone.quaternion); flightUp.set(0, 1, 0).applyQuaternion(drone.quaternion);
+    } else replayT = 0;
     desiredCameraOffset.copy(flightForward).multiplyScalar(-8.5).addScaledVector(flightUp, 3.5);
     const targetCameraAltitude = model.altitudeProfile.levels[0] + (state.altitude - model.altitudeProfile.levels[0]) * 0.62;
     cameraAltitude = cameraSnap ? targetCameraAltitude : THREE.MathUtils.lerp(cameraAltitude, targetCameraAltitude, 1 - Math.exp(-delta * (reducedMotion.matches ? 12 : 4)));
@@ -521,9 +554,9 @@ export function createRace(
         .addScaledVector(flightUp, Math.sin(boostEntryAge * 87 + 1) * shake);
     }
     lookAt.copy(drone.position).addScaledVector(flightForward, 9).addScaledVector(flightUp, cameraAltitude - state.altitude - 0.5); camera.up.copy(flightUp); camera.lookAt(lookAt);
-    const introActive = cinematic?.kind === 'intro' && !cinematic.reduced;
+    const introActive = cinematic?.kind === 'intro' && !cinematic.reduced && cinematic.t < INTRO_SECONDS;
     if (introActive) {
-      const s = introProgress(cinematic!.t, cinematic!.duration);
+      const s = introProgress(cinematic!.t, INTRO_SECONDS);
       if (introAspect !== camera.aspect) {
         introAspect = camera.aspect;
         const overview = overviewPose(track, camera.aspect, camera.fov), landmark = scenery?.landmark;
@@ -541,19 +574,56 @@ export function createRace(
       introPos.getPoint(s, camera.position); introLook.getPoint(s, introTarget);
       camera.up.lerpVectors(worldUp, flightUp, s).normalize(); camera.lookAt(introTarget);
       if (scene.fog instanceof THREE.FogExp2) scene.fog.density = environment.fogDensity * (.12 + .88 * introProgress(s - .35, .55));
-    } else if (scene.fog instanceof THREE.FogExp2) scene.fog.density = environment.fogDensity;
+    } else if (scene.fog instanceof THREE.FogExp2) scene.fog.density = environment.fogDensity * (replaying ? .4 : 1);
     const far = introActive ? 9000 : 3200;
     if (camera.far !== far) { camera.far = far; camera.updateProjectionMatrix(); }
-    if (phase === 'finished' && !reducedMotion.matches) {
+    const showcase = introActive || cinematic?.kind !== 'intro' || cinematic.reduced || cinematic.t < INTRO_SECONDS ? null : showcaseAt(cinematic.plan, cinematic.t - INTRO_SECONDS, shotAt);
+    if (showcase) {
+      const info = cinematic!.infos[showcase.shot], rival = info.kind === 'rival' ? rivalVisuals.entries[cinematic!.plan.shots[showcase.shot].index]?.object : undefined, u = showcase.u;
+      if (rival) {
+        shotF.set(0, 0, -1).applyQuaternion(rival.quaternion); shotR.set(1, 0, 0).applyQuaternion(rival.quaternion); shotU.set(0, 1, 0).applyQuaternion(rival.quaternion);
+        const side = shotLook.copy(rival.position).sub(drone.position).dot(flightRight) < 0 ? -1 : 1, a = side * (1.1 - u * .1), radius = 7.5 - u * 1.2;
+        shotPos.copy(rival.position).addScaledVector(shotF, Math.cos(a) * radius).addScaledVector(shotR, Math.sin(a) * radius).addScaledVector(shotU, .7);
+        shotLook.copy(rival.position).addScaledVector(shotU, .2);
+      } else {
+        const a = .35 + u * .26, radius = 7 - u * .6;
+        shotPos.copy(drone.position).addScaledVector(flightForward, Math.cos(a) * radius).addScaledVector(flightRight, Math.sin(a) * radius).addScaledVector(flightUp, .3);
+        shotLook.copy(drone.position).addScaledVector(flightUp, .1);
+      }
+      camera.position.lerpVectors(shotPos, camera.position, showcase.blend); shotLook.lerp(lookAt, showcase.blend);
+      camera.up.copy(flightUp); camera.lookAt(shotLook);
+      const lens = THREE.MathUtils.lerp(fitFov(SHOWCASE_FOV), targetFov, showcase.blend);
+      if (Math.abs(camera.fov - lens) > .01) { camera.fov = lens; camera.updateProjectionMatrix(); }
+    }
+    if (replaying) {
+      const shot = replayPick.shot, p = drone.position;
+      if (shot === 0) {
+        replayBuffer.sample(.65, replayAnchor); replayQuat.set(replayAnchor.qx, replayAnchor.qy, replayAnchor.qz, replayAnchor.qw);
+        shotR.set(1, 0, 0).applyQuaternion(replayQuat); shotU.set(0, 1, 0).applyQuaternion(replayQuat);
+        camera.position.set(replayAnchor.x, replayAnchor.y, replayAnchor.z).addScaledVector(shotR, 6).addScaledVector(shotU, 1.2);
+        camera.up.copy(shotU);
+      } else if (shot === 1) {
+        camera.position.copy(p).addScaledVector(flightForward, -8).addScaledVector(flightUp, 1.6); camera.up.copy(flightUp).lerp(worldUp, .6).normalize();
+      } else {
+        const a = 2.4 + replayPick.u * .9;
+        camera.position.copy(p).addScaledVector(flightUp, 8.5).addScaledVector(flightForward, Math.cos(a) * 6).addScaledVector(flightRight, Math.sin(a) * 6); camera.up.copy(flightUp);
+      }
+      // Craft sits a little above centre so the hero text above and the cards below stay clear.
+      lookAt.copy(p).addScaledVector(camera.up, -camera.position.distanceTo(p) * .05); if (shot === 1) lookAt.addScaledVector(flightForward, 2);
+      camera.lookAt(lookAt);
+      const lens = fitFov(replayShotFov[shot]);
+      if (camera.fov !== lens) { camera.fov = lens; camera.updateProjectionMatrix(); }
+    } else if (phase === 'finished' && !reducedMotion.matches) {
       const swing = finishSwing(cinematic?.kind === 'finish' ? cinematic.t : SWING_SECONDS, false);
       camera.position.copy(drone.position).addScaledVector(flightForward, Math.cos(swing.azimuth) * swing.radius)
         .addScaledVector(flightRight, Math.sin(swing.azimuth) * swing.radius).addScaledVector(flightUp, swing.height);
       lookAt.copy(drone.position).addScaledVector(flightUp, .4); camera.up.copy(flightUp); camera.lookAt(lookAt);
     }
+    bloom.strength = replaying ? .3 : .65;
     views.update(flightForward, flightUp, bank, state.elapsed, state.boosting, reducedMotion.matches, state.routeId);
-    thrusters.setMode(awake || state.boostStage === 2 ? 'boost-stage2' : phase === 'running' && state.boosting ? 'boost' : phase === 'running' && input.throttle && state.speed > 1 ? 'accelerate' : 'idle');
-    thrusters.setBoostCharge(awake ? 1 : state.boostStageProgress);
-    thrusters.update(simulationDelta, reducedMotion.matches);
+    thrusters.setMode(replaying ? REPLAY_MODES[replayPose.mode] : awake || state.boostStage === 2 ? 'boost-stage2' : phase === 'running' && state.boosting ? 'boost' : phase === 'running' && input.throttle && state.speed > 1 ? 'accelerate' : 'idle');
+    thrusters.setBoostCharge(replaying ? replayPose.mode / 3 : awake ? 1 : state.boostStageProgress);
+    thrusters.update(replaying ? delta : simulationDelta, reducedMotion.matches);
     boostPulse.update(simulationDelta, reducedMotion.matches);
     boostWarp.update(simulationDelta, awake || state.boostStage === 2, entry, reducedMotion.matches);
     awakeningStrength = THREE.MathUtils.lerp(awakeningStrength, awake ? 1 : 0, 1 - Math.exp(-delta * 12));
@@ -566,7 +636,8 @@ export function createRace(
     if (hudElapsed >= 0.08) { hudElapsed = 0; notify(); }
     trackVisual.update(track.obstacleTime ?? state.elapsed, reducedMotion.matches, state.distance, state.altitude, state.speed, state.offset, state.routeId);
     raceGates.update(timeAttack.snapshot().nextCheckpoint);
-    speedLines.update(state.elapsed, state.speed, awake || state.boosting, reducedMotion.matches, awake || state.boostStage === 2);
+    if (replaying) speedLines.update(replayClock + replayT, replayPose.speed, replayPick.shot === 1 && replayPose.mode >= 2, reducedMotion.matches, replayPose.mode === 3);
+    else speedLines.update(state.elapsed, state.speed, awake || state.boosting, reducedMotion.matches, awake || state.boostStage === 2);
     views.prepareDriving();
     scenery?.setOverview(false); scenery?.update(drone.position); sky.update(camera.position);
     const weatherFrame = weather.update(camera.position, state.distance, delta * slow, phase === 'running', reducedMotion.matches);

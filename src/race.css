@@ -315,6 +315,19 @@ button:focus-visible { outline:2px solid #c9f9f2; outline-offset:3px; }
 .race-intro .intro-name { margin:0; font:650 clamp(44px,8vw,84px)/1 'Barlow Condensed',sans-serif; letter-spacing:.04em; color:#edfff9; overflow-wrap:anywhere; }
 .intro-meta { font:13px 'IBM Plex Mono',monospace; letter-spacing:2px; color:#d3e9ea; }
 .intro-skip { margin-top:10px !important; font:10px 'IBM Plex Mono',monospace; letter-spacing:2px; color:#b4c8d0; }
+.race-showcase { position:absolute; left:0; bottom:0; z-index:3; width:min(560px,100%); padding:72px 28px max(30px,env(safe-area-inset-bottom)); display:grid; justify-items:start; gap:4px; pointer-events:none; text-shadow:0 2px 14px #000,0 0 28px #000a; background:radial-gradient(ellipse at 0% 100%,#030b16e6,#030b16a6 45%,transparent 75%); animation:race-showcase-in .35s cubic-bezier(.2,.8,.2,1) both; }
+.race-showcase p { margin:0; }
+.race-showcase .sc-count { font:600 12px 'IBM Plex Mono',monospace; letter-spacing:3px; color:#9ff7e8; }
+.race-showcase .sc-name { display:flex; align-items:center; gap:12px; }
+.race-showcase .sc-name strong { font:650 clamp(40px,7vw,68px)/1 'Barlow Condensed',sans-serif; letter-spacing:.04em; color:#edfff9; }
+.race-showcase .sc-swatch { width:14px; height:14px; border-radius:50%; background:var(--swatch); box-shadow:0 0 12px var(--swatch); flex:none; }
+.race-showcase .sc-name em { align-self:center; padding:2px 8px; border:1px solid var(--accent,#27eaff); border-radius:3px; color:var(--accent,#27eaff); font:600 13px 'IBM Plex Mono',monospace; font-style:normal; letter-spacing:2px; text-shadow:none; }
+.race-showcase[data-kind='rival'] .sc-name em { display:none; }
+.race-showcase:not([data-kind='player']) .sc-swatch { display:block; }
+.race-showcase[data-kind='player'] .sc-swatch { display:none; }
+.race-showcase .sc-meta { font:13px 'IBM Plex Mono',monospace; letter-spacing:2px; color:#d3e9ea; }
+.race-showcase .sc-skip { margin-top:8px !important; font:10px 'IBM Plex Mono',monospace; letter-spacing:2px; color:#b4c8d0; }
+@keyframes race-showcase-in { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:none; } }
 @keyframes race-intro-in { from { opacity:0; transform:translate(-50%,16px); } to { opacity:1; transform:translate(-50%,0); } }
 .race-splash { position:absolute; inset:0; z-index:3; display:grid; place-content:center; justify-items:center; gap:8px; pointer-events:none; text-align:center; color:#d9fff5; text-shadow:0 4px 24px #000,0 0 30px #45d8b766; animation:race-splash-in .35s cubic-bezier(.2,.9,.2,1) both,race-splash-out .3s calc(var(--cine,1.6s) - .3s) forwards; }
 .race-splash strong { font:650 clamp(80px,16vw,160px)/.9 'Barlow Condensed',sans-serif; letter-spacing:.04em; }
@@ -328,9 +341,9 @@ button:focus-visible { outline:2px solid #c9f9f2; outline-offset:3px; }
 @keyframes race-splash-in { from { opacity:0; transform:scale(1.18); } to { opacity:1; transform:none; } }
 @keyframes race-splash-out { to { opacity:0; } }
 @keyframes race-gold-flash { from { opacity:1; } to { opacity:0; } }
-@media (max-height:500px) { .race-intro { padding:16px 16px 12px; } .race-intro .intro-name { font-size:36px; } .intro-skip { display:none; } .race-splash strong { font-size:72px; } }
+@media (max-height:500px) { .race-showcase { padding:16px 20px 12px; } .race-showcase .sc-name strong { font-size:34px; } .race-showcase .sc-skip { display:none; } .race-intro { padding:16px 16px 12px; } .race-intro .intro-name { font-size:36px; } .intro-skip { display:none; } .race-splash strong { font-size:72px; } }
 @media (prefers-reduced-motion:reduce) {
-  .race-intro { animation:none; }
+  .race-intro, .race-showcase { animation:none; }
   .race-splash { animation:race-splash-out .3s calc(var(--cine,1s) - .3s) forwards; }
   .race-splash[data-kind='best']::before { animation:none; opacity:.25; }
 }

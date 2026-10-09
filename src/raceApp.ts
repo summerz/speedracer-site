@@ -58,6 +58,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
       <div id="race-boost-flash" class="race-boost-flash" aria-hidden="true"></div>
       <div class="hazard-edges" aria-hidden="true"><i id="edge-left" class="hazard-edge" data-side="left" hidden></i><i id="edge-right" class="hazard-edge" data-side="right" hidden></i><b id="edge-arrow" class="hazard-arrow" hidden></b><i id="height-edge" class="hazard-edge" hidden></i></div>
       <section id="race-intro" class="race-intro" aria-label="코스 소개" hidden><p class="intro-eyebrow"></p><h2 class="intro-name"></h2><p class="intro-meta"></p><p class="intro-skip">건너뛰기 · 아무 키나 탭</p></section>
+      <section id="race-showcase" class="race-showcase" aria-label="출전 기체" hidden><p class="sc-count"></p><p class="sc-name"><i class="sc-swatch"></i><strong></strong><em>나</em></p><p class="sc-meta"></p><p class="sc-skip">건너뛰기 · 아무 키나 탭</p></section>
       <div id="race-splash" class="race-splash" role="status" hidden><strong></strong><span></span><em></em></div>
       <header class="race-header">
         <div class="race-telemetry" aria-label="주행 정보"><div class="telemetry-row"><span class="speed-readout" aria-label="현재 주행 속도"><strong id="drive-speed">000</strong><span class="speed-unit mono"><small>속도</small>km/h</span></span><span id="race-rank" class="rank-readout mono" hidden></span><span id="race-lap" class="lap-readout mono">LAP 1/3</span><time id="drive-time" class="mono">00:00.000</time><span id="race-ghost" class="ghost-delta mono" aria-label="고스트와의 시간 차이" hidden></span></div><div class="corner-guide"><span id="lap-deadline" hidden></span><strong id="corner-text">직선</strong><span class="corner-hint">급한 코너에서는 S로 감속</span></div></div>
@@ -185,7 +186,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
   let priorBest: RaceRecord | null = null; // Best total before this run is recorded; the snapshot's bestRecord updates at finish.
   const restartConfirm = get<HTMLDialogElement>('race-restart-confirm');
   let lastPhase = '';
-  let introPending = true; let cinematicKind = ''; let cinematicEndedAt = 0;
+  let introPending = true; let cinematicKind = ''; let shotKey = ''; let cinematicEndedAt = 0;
   let rewardInput: RewardInput | undefined; let rewardPending = false; let focusPending = false; let canFocus = false; let activeRaceId = '';
   let screenDisposed = false; let focusSerial = 0; let focusMessageUntil = 0;
   const saveReward = async () => {
@@ -577,6 +578,17 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
         splash.dataset.kind = result.kind; splash.style.setProperty('--cine', `${state.cinematic!.seconds}s`);
         splash.querySelector('strong')!.textContent = result.title; splash.querySelector('span')!.textContent = result.detail; splash.querySelector('em')!.textContent = result.badge;
         splash.querySelector('span')!.hidden = !result.detail; splash.querySelector('em')!.hidden = !result.badge;
+      }
+    }
+    const shot = state.cinematic?.shot, nextShotKey = shot ? `${shot.kind}${shot.index}` : '';
+    if (nextShotKey !== shotKey) {
+      shotKey = nextShotKey;
+      const card = get('race-showcase'); card.hidden = !shot; get('race-intro').hidden = cine !== 'intro' || !!shot;
+      if (shot) {
+        card.dataset.kind = shot.kind; card.style.setProperty('--swatch', shot.color ?? '#9ff7e8');
+        card.querySelector('.sc-count')!.textContent = shot.total > 1 ? `${shot.index + 1} / ${shot.total}` : '';
+        card.querySelector('.sc-name strong')!.textContent = shot.name; card.querySelector('.sc-meta')!.textContent = shot.detail ?? '';
+        (card.querySelector('.sc-meta') as HTMLElement).hidden = !shot.detail;
       }
     }
     const phaseChanged = state.phase !== lastPhase;
