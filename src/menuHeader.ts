@@ -8,16 +8,16 @@ export function menuHeader(current: 'hangar' | 'shop' | 'campaign' | 'sound-lab'
       SPEEDRACER<span class="wordmark-divider"></span><span class="wordmark-caption">DRONE RACING</span>
     </a>
     <div class="menu-header-tools">
-      <button class="menu-header-button menu-music" type="button" data-music-toggle aria-pressed="true">음악 켜짐</button>
+      <button class="menu-header-button menu-music" type="button" data-music-toggle aria-pressed="true" aria-keyshortcuts="M"><span data-music-label>음악 켜짐</span><kbd class="key-badge">M</kbd></button>
       <button class="menu-header-button" type="button" data-analytics-settings hidden>이용 분석</button>
       <div class="app-tools" data-app-tools></div>
     </div>
     <nav class="menu-navigation" aria-label="메인 메뉴">
       <div class="menu-header-tabs">
-        <button id="shop-back" class="menu-header-button" type="button" ${current === 'hangar' ? 'aria-current="page"' : ''}>격납고</button>
-        <a class="menu-header-button" href="#campaign" ${current === 'campaign' ? 'aria-current="page"' : ''}>캠페인</a>
-        <button id="open-shop" class="menu-header-button" type="button" ${current === 'shop' ? 'aria-current="page"' : ''}>상점</button>
-        ${import.meta.env.DEV ? `<a class="menu-header-button" href="#sound-lab" ${current === 'sound-lab' ? 'aria-current="page"' : ''}>사운드 관리</a>` : ''}
+        <button id="shop-back" class="menu-header-button" type="button" aria-keyshortcuts="1" ${current === 'hangar' ? 'aria-current="page"' : ''}>격납고 <kbd class="key-badge">1</kbd></button>
+        <a class="menu-header-button" href="#campaign" aria-keyshortcuts="2" ${current === 'campaign' ? 'aria-current="page"' : ''}>캠페인 <kbd class="key-badge">2</kbd></a>
+        <button id="open-shop" class="menu-header-button" type="button" aria-keyshortcuts="3" ${current === 'shop' ? 'aria-current="page"' : ''}>상점 <kbd class="key-badge">3</kbd></button>
+        ${import.meta.env.DEV ? `<a class="menu-header-button" href="#sound-lab" aria-keyshortcuts="4" ${current === 'sound-lab' ? 'aria-current="page"' : ''}>사운드 관리 <kbd class="key-badge">4</kbd></a>` : ''}
       </div>
       <strong class="menu-balance mono" id="${current}-balance" aria-label="보유 포인트">${balance.toLocaleString()} P</strong>
     </nav>

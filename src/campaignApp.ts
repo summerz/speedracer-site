@@ -17,6 +17,7 @@ type View = 'districts' | 'tracks' | 'detail';
 interface CardInfo { url: string; stats: string; landmark: string }
 const cardCache = new Map<string, CardInfo>();
 interface Snapshot { view: View; district: DistrictId; trackId: string }
+const CHALLENGE_KEY = { easy: 'E', normal: 'M', hard: 'D' } as const;
 const CHALLENGE_IDS = ['normal', 'easy', 'hard'] as const;
 const DEPTH: Record<View, number> = { districts: 0, tracks: 1, detail: 2 };
 const number2 = (n: number) => String(n).padStart(2, '0');
@@ -50,7 +51,7 @@ export function mountCampaign(root: HTMLDivElement, store: ProgressStore, contex
     <nav class="campaign-bar" aria-label="캠페인 탐색">
       <button id="campaign-back" class="campaign-back" type="button" aria-label="이전 단계로" hidden>←</button>
       <ol id="campaign-crumbs" class="campaign-crumbs"></ol>
-      <div class="campaign-modes" role="group" aria-label="캠페인 방식"><button type="button" data-mode="time-attack"><span>타임어택</span><span class="campaign-mode-count mono"></span></button><button type="button" data-mode="competition"><span>경쟁 레이스</span><span class="campaign-mode-count mono"></span></button></div>
+      <div class="campaign-modes" role="group" aria-label="캠페인 방식"><button type="button" data-mode="time-attack" aria-keyshortcuts="T"><span>타임어택</span><span class="campaign-mode-count mono"></span><kbd class="key-badge">T</kbd></button><button type="button" data-mode="competition" aria-keyshortcuts="R"><span>경쟁 레이스</span><span class="campaign-mode-count mono"></span><kbd class="key-badge">R</kbd></button></div>
       <a id="campaign-craft" class="campaign-craft" href="#" aria-label="격납고에서 출전 기체 변경"><img id="campaign-craft-image" width="480" height="240" alt=""><span class="campaign-craft-copy"><span class="campaign-craft-caption">출전 기체</span><strong id="campaign-craft-name"></strong><span id="campaign-craft-role"></span></span></a>
     </nav>
     <div class="campaign-body">
@@ -59,7 +60,7 @@ export function mountCampaign(root: HTMLDivElement, store: ProgressStore, contex
       <section id="view-detail" class="campaign-view view-detail" aria-label="선택한 트랙" hidden>
         <div class="detail-media"><div class="campaign-preview" id="campaign-preview" aria-label="트랙 3D 경로 미리보기"><p class="campaign-preview-legend">루프 · 코일 · 노면 회전 구간</p></div>
           <div class="campaign-title"><p class="eyebrow" id="course-district"></p><div class="campaign-title-row"><h2 id="course-name"></h2><div id="course-stars-summary" class="course-stars-summary"></div></div></div>
-          <div class="campaign-difficulty"><span>난이도</span><div class="course-challenges" role="group" aria-label="출전 난이도">${(['easy', 'normal', 'hard'] as const).map(id => `<button type="button" data-challenge="${id}"><span>${RACE_CHALLENGES[id].label}</span><span class="diff-stars"></span></button>`).join('')}</div></div></div>
+          <div class="campaign-difficulty"><span>난이도</span><div class="course-challenges" role="group" aria-label="출전 난이도">${(['easy', 'normal', 'hard'] as const).map(id => `<button type="button" data-challenge="${id}" aria-keyshortcuts="${CHALLENGE_KEY[id]}"><span>${RACE_CHALLENGES[id].label}</span><span class="diff-stars"></span><kbd class="key-badge">${CHALLENGE_KEY[id]}</kbd></button>`).join('')}</div></div></div>
         <div class="detail-info"><div class="detail-scroll"><div id="course-metrics" class="course-specs"></div><section id="course-condition" class="course-condition" aria-label="통과 조건과 통과 기록 비교"></section><section id="course-ladder" class="course-ladder" aria-label="별 등급 기준"></section><section id="course-routes" class="course-routes" aria-label="갈림길별 경험" hidden></section><div id="course-tags" class="course-tags"></div><section id="course-record" class="course-record" aria-label="최단 완주 기록"></section></div>
           <footer class="campaign-detail-actions">${loadoutMarkup()}<div class="action-main"><p id="course-access" role="status" tabindex="-1"></p><button id="course-start" class="primary-action" type="button" data-autofocus>도전하기 ↗</button></div><p id="campaign-warning" class="progress-warning" role="status"></p></footer></div>
       </section>
