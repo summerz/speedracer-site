@@ -17,7 +17,7 @@ button[aria-pressed='true'] { background:#253c39; color:#c8f1e0; border-color:#4
 button:focus-visible { outline:2px solid #b4e9d4; outline-offset:3px; }
 button:active { transform:translateY(1px); }
 #play { background:#b4e9d4; color:#102722; font-weight:600; }
-.toggles { display:flex; gap:4px; }
+.toggles { display:flex; flex-wrap:wrap; gap:4px; }
 .stage { position:relative; height:640px; margin-top:18px; }
 .stage canvas { position:absolute; inset:0; width:100%; height:100%; }
 .labels { position:absolute; inset:0; pointer-events:none; display:grid; grid-template-columns:repeat(5,1fr); grid-template-rows:repeat(2,1fr); }

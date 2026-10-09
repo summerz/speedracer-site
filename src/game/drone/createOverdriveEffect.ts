@@ -45,6 +45,7 @@ export function createOverdriveEffect(drone: THREE.Group, color: THREE.ColorRepr
     tube([new THREE.Vector3(0, .04, -length * .28), new THREE.Vector3(side * width * .72, .04, sweep + .2),
       new THREE.Vector3(side * width * .65, .04, length * .48)], .012, white, hinge, false);
     animations.push(s => { hinge.rotation.z = side * (.95 - s * .72); hinge.scale.setScalar(.3 + s * .7); });
+    return hinge;
   };
   const halo = (radius: number, y: number, z: number, tilt = 0) => {
     const ring = mesh(new THREE.TorusGeometry(radius, .025, 8, 80), light);
@@ -75,8 +76,13 @@ export function createOverdriveEffect(drone: THREE.Group, color: THREE.ColorRepr
       break;
     default:
       for (const side of [-1, 1]) {
-        panel(side, .78, .75, .55, 1.6, .5);
-        panel(side, .72, 1.6, .3, .7, .3);
+        // Nacelles extend to ±1.47. Deploy beyond them so the outline changes without bloom.
+        const wing = panel(side, 1.55, .25, .85, 2.1, .48);
+        wing.position.y = .46;
+        animations.push(s => { wing.position.x = side * (1.05 + .5 * s); });
+        tube([new THREE.Vector3(side * 1.14, .36, .5), new THREE.Vector3(side * 1.55, .46, .25)], .055, armor);
+        const fin = panel(side, 1.32, 1.45, .55, .85, .25);
+        fin.position.y = .7;
       }
   }
   // Bounds stay in craft space, even when the effect is attached to a moving craft.

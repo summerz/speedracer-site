@@ -11,7 +11,7 @@ import { createOverdriveEffect } from '../game/drone/createOverdriveEffect';
 import { DRONE_CATALOG } from '../game/drone/droneCatalog';
 
 const features: Record<string, string> = {
-  vanguard: '후방 안정익 전개 · 이중 에너지 핀',
+  vanguard: '엔진 바깥으로 날개 전개 · 솟아오른 후방 핀',
   needle: '긴 가변 날개 전개 · 백색 코어',
   hammerhead: '전방 장갑 확장 · 네 갈래 에너지 핀',
   catamaran: '양쪽 선체에 에너지 레일 · 바깥 날개 전개',
@@ -26,10 +26,10 @@ function startPreview() {
     <nav class="toolbar" aria-label="미리보기 설정"><div class="choices" id="crafts">
     <button data-variant="all" aria-pressed="true">전체 비교</button>
     ${DRONE_CATALOG.map(c => `<button data-variant="${c.configuration.modelVariant}" aria-pressed="false">${c.name}</button>`).join('')}</div>
-    <div class="toggles"><button id="rear" aria-pressed="false">후면 보기</button>
+    <div class="toggles"><button id="bloom" aria-pressed="true" title="기본·각성에 격납고와 같은 bloom 설정 적용">Bloom 켜짐</button><button id="rear" aria-pressed="false">후면 보기</button>
     <button id="pin" aria-pressed="true">각성 상태 고정</button><button id="play">5초 변신 재생</button></div></nav>
     <div class="stage" aria-label="기본 기체와 각성 기체의 3D 비교"><div class="labels"></div></div>
-    <footer><span>외형 미리보기 · 아이템 / 자율 주행 연결 전</span><span id="status" role="status">각성 상태 고정</span></footer>`;
+    <footer><span>외형 미리보기 · 아이템 / 자율 주행 연결 전 · 두 기체에 동일한 bloom 적용</span><span id="status" role="status">각성 상태 고정</span></footer>`;
   const stage = main.querySelector<HTMLElement>('.stage')!;
   const labels = main.querySelector<HTMLElement>('.labels')!;
   const status = main.querySelector<HTMLElement>('#status')!;
@@ -43,7 +43,7 @@ function startPreview() {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.2;
+  renderer.toneMappingExposure = 1.15;
   stage.prepend(renderer.domElement);
   scene.add(new THREE.HemisphereLight(0xd7f2ff, 0x293a44, 2.4));
   const key = new THREE.DirectionalLight(0xe5f4ff, 4.5);
@@ -53,7 +53,8 @@ function startPreview() {
   const target = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 });
   const composer = new EffectComposer(renderer, target);
   const renderPass = new RenderPass(scene, camera);
-  const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), .45, .25, 1.1);
+  // Match the hangar's close-up bloom, equally for baseline and awakened craft.
+  const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), .85, .32, .9);
   const output = new OutputPass();
   composer.addPass(renderPass); composer.addPass(bloom); composer.addPass(output);
 
@@ -109,6 +110,12 @@ function startPreview() {
   rearButton.addEventListener('click', () => {
     rear = !rear; rearButton.setAttribute('aria-pressed', String(rear));
     rearButton.textContent = rear ? '정면 보기' : '후면 보기'; layout();
+  });
+  main.querySelector<HTMLButtonElement>('#bloom')!.addEventListener('click', event => {
+    bloom.enabled = !bloom.enabled;
+    const button = event.currentTarget as HTMLButtonElement;
+    button.setAttribute('aria-pressed', String(bloom.enabled));
+    button.textContent = bloom.enabled ? 'Bloom 켜짐' : 'Bloom 꺼짐';
   });
   pin.addEventListener('click', () => {
     pinned = !pinned; elapsed = null; pin.setAttribute('aria-pressed', String(pinned));
