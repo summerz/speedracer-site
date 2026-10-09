@@ -11,6 +11,41 @@ import { aiDrivingInput } from '../output/test/game/driving/createRaceSession.js
 import { DRONE_CATALOG } from '../output/test/game/drone/droneCatalog.js';
 
 const definitions = TRACK_CATALOG.filter(d => d.branches?.length);
+test('Coil Foundry keeps both complete fork surfaces above ground without folded pavement', () => {
+  const definition = TRACK_CATALOG.find(d => d.id === 'coil-foundry');
+  for (const challenge of ['easy', 'normal', 'hard']) {
+    const track = createCatalogTrack(definition, challenge), fork = track.branches[0];
+    for (const route of fork.routes) {
+      let previous;
+      for (let d = fork.start + fork.junctionLength; d < fork.end - fork.junctionLength; d += .25) {
+        const frame = track.sample(d, undefined, route.id), boundary = roadBoundary(track, d, frame, route.id);
+        for (const [side, edge] of boundary.edges.entries()) {
+          assert.ok(edge.y >= definition.branches[0].groundClearance, `${challenge} ${route.id}: buried pavement at ${d}`);
+          if (previous) assert.ok(edge.clone().sub(previous[side]).dot(frame.tangent) > 0, `${route.id}: folded pavement at ${d}`);
+        }
+        previous = boundary.edges;
+      }
+    }
+  }
+});
+test('Coil Foundry accepts a short steering choice and carries either route through the merge at cruise and boost speeds', () => {
+  const authored = createCatalogTrack(TRACK_CATALOG.find(d => d.id === 'coil-foundry'), 'easy');
+  // Isolate junction steering from the separate altitude/hazard decisions.
+  const track = { ...authored, heightObstacles: [], corridorObstacles: [], mineFields: [], arcRails: [], boostPads: [], boostRings: [] };
+  const fork = track.branches[0], entrance = fork.start + fork.junctionLength;
+  for (const speed of [85, 150]) for (const [side, steer] of [[0, -1], [1, 1]]) {
+    const model = createDrivingModel(track), state = model.state;
+    Object.assign(state, { distance: entrance - 40, speed, offset: 0, heading: 0 });
+    for (let tick = 0; tick < 60 * 30 && state.distance < fork.end; tick++) {
+      model.step(1 / 60, { ...NEUTRAL_INPUT, throttle: true, boost: speed > 100,
+        steer: state.distance < entrance && entrance - state.distance <= state.speed * .2 ? steer : 0 });
+      if (state.distance >= entrance && state.distance < fork.end) assert.equal(state.routeId, fork.routes[side].id);
+    }
+    assert.ok(state.distance >= fork.end, 'reaches the merge');
+    assert.equal(state.collisions, 0);
+    assert.equal(state.offTrackExits, 0);
+  }
+});
 for (const kind of ['horizontal', 'vertical']) for (const intertwined of [false, true]) {
   test(`${kind} ${intertwined ? 'coil' : 'ordinary'} route begins and ends with a symmetric Y before its own curves`, () => {
     const track = createCatalogTrack(TRACK_CATALOG[0], 'easy');

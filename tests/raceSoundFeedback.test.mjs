@@ -42,6 +42,21 @@ test('real battery drain/refill produces exactly one cue of each kind at 30/60/1
   }
 });
 
+test('a full activation chimes once when 50% remains in reserve', () => {
+  for (const fps of [30, 60, 120]) {
+    const model = createDrivingModel({ ...track, heightObstacles: [] });
+    model.state.charge = 1.5;
+    const feedback = createRaceSoundFeedback(track), cues = [];
+    feedback.update('running', model.state);
+    for (let i = 0; i < fps * 5.5; i++) {
+      model.step(1 / fps, { ...NEUTRAL_INPUT, boost: true });
+      cues.push(...feedback.update('running', model.state).cues);
+    }
+    assert.ok(Math.abs(model.state.charge - .5) < 1e-8);
+    assert.deepEqual(cues, ['boost-complete']);
+  }
+});
+
 test('warning follows speed-dependent range, current/target height, lap wrap, and race phase', () => {
   const feedback = createRaceSoundFeedback(track);
   assert.equal(feedback.update('running', state()).warning, null);

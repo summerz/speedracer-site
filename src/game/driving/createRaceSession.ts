@@ -88,7 +88,8 @@ export function aiDrivingInput(track: Track, configuration: DroneConfiguration, 
   const boost = bend < (profile?.boostCurvature ?? .003) && !state.boostNeedsRelease &&
     (state.boosting ? state.charge > (profile?.boostEndCharge ?? .03) : state.charge > (profile?.boostStartCharge ?? .5));
   const desiredSpeed = (boost ? p.boostStage2Speed : p.topSpeed) * pace * speedScale;
-  const cornerLimit = profile?.cornerLimit ?? .74;
+  // Keep some yaw available for lane corrections, even with a full boost reserve.
+  const cornerLimit = Math.min(profile?.cornerLimit ?? .74, steeringYawRate(desiredSpeed, p) * .85);
   let goalSpeed = Math.min(desiredSpeed, cornerLimit / Math.max(.001, bend));
   // A fast craft needs more than 60m to brake for a hairpin. Work backwards from
   // each bend using braking distance rather than slowing immediately for far bends.
@@ -175,8 +176,10 @@ export function aiDrivingInput(track: Track, configuration: DroneConfiguration, 
   // Pull toward the lane, but never ask for a sideways slope beyond what the stabilizer can hold (heading gain 14 x MINE_CHAIN_SLOPE),
   // or the craft overshoots the lane and, for a weakly damped one, the road edge.
   const lateralPull = following ? Math.max(-14 * MINE_CHAIN_SLOPE, Math.min(14 * MINE_CHAIN_SLOPE, (lane - state.offset) * .5)) : (lane - state.offset) * .14;
+  // Dampen lane changes after a pickup: a fully boosted craft otherwise swings
+  // past its preferred lane and reaches the opposite road edge.
   return { throttle: true, brake: state.speed > goalSpeed + 1, boost,
-    steer: (curvature * forkApproachDrift(track, state.distance) * state.speed - (state.heading - lineSlope) * (following ? 14 : enteringCorridor ? 8 : 2.8) + lateralPull) / Math.max(.1, steeringYawRate(state.speed, p)), lift };
+    steer: (curvature * forkApproachDrift(track, state.distance) * state.speed - (state.heading - lineSlope) * (following ? 14 : enteringCorridor ? 8 : 4.2) + lateralPull) / Math.max(.1, steeringYawRate(state.speed, p)), lift };
 }
 
 /** One clock, countdown and pause lifecycle for both modes; completed pilots become ghosts. */
@@ -262,6 +265,7 @@ export function createRaceSession(track: Track, configuration: DroneConfiguratio
     restart() { track.randomizeObstacles?.(random); player.restart(); rivals.forEach(p => p.controller.restart()); grid(); },
     pause() { player.pause(); rivals.forEach(p => p.controller.pause()); },
     recover() { player.recover(); },
+    useAwakening() { return player.useAwakening(); },
     useFocus() {
       if (itemCooldown > 1e-8 || !player.useFocus()) return false;
       itemCooldown = 3;
@@ -314,7 +318,8 @@ export function createRaceSession(track: Track, configuration: DroneConfiguratio
           if (!active[a] || !active[b] || participants[a].controller.phase !== 'running' || participants[b].controller.phase !== 'running') continue;
           const key = `${a}:${b}`;
           const sa = participants[a].controller.model.state, sb = participants[b].controller.model.state;
-          if (clock < (contacts.get(key) ?? 0) || !craftContact(before[a], sa, before[b], sb, track.length)) continue;
+          if (sa.awakeningRemaining > 0 || sb.awakeningRemaining > 0 || before[a].awakeningRemaining > 0 || before[b].awakeningRemaining > 0
+            || clock < (contacts.get(key) ?? 0) || !craftContact(before[a], sa, before[b], sb, track.length)) continue;
           // Separate branches can share progress/altitude while being metres apart in world space.
           if (sa.routeId !== sb.routeId || sa.routeId || sb.routeId) {
             const fa = track.sample(sa.distance, undefined, sa.routeId), fb = track.sample(sb.distance, undefined, sb.routeId);

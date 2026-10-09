@@ -47,7 +47,7 @@ export function createTimeAttack(track: Track, performance: DronePerformance, re
         lapElapsed: model.state.elapsed - p.lapTimes.reduce((sum, time) => sum + time, 0),
         offTrackExits: model.state.offTrackExits, penaltyPoints: model.state.penaltyPoints,
         bestRecord: records.read(), result, raceId, assisted: focusSlots > 0, focusRemaining, focusUsed,
-        focusSlots, canFocus: phase === 'running' && focusUsed < focusSlots && focusCooldown === 0 };
+        focusSlots, canFocus: phase === 'running' && model.state.awakeningRemaining === 0 && focusUsed < focusSlots && focusCooldown === 0 };
     },
     start,
     restart() { reset(); phase = 'countdown'; },
@@ -55,8 +55,12 @@ export function createTimeAttack(track: Track, performance: DronePerformance, re
       if (phase === 'running' || phase === 'countdown') { resumePhase = phase; phase = 'paused'; model.interruptBoost(); }
     },
     recover() { if (phase === 'running' || phase === 'paused' && resumePhase === 'running') model.recover(); },
+    useAwakening() {
+      if (phase !== 'running' || !model.useAwakening()) return false;
+      focusRemaining = 0; return true;
+    },
     useFocus() {
-      if (phase !== 'running' || focusUsed >= focusSlots || focusCooldown > 0) return false;
+      if (phase !== 'running' || model.state.awakeningRemaining > 0 || focusUsed >= focusSlots || focusCooldown > 0) return false;
       focusUsed++; focusRemaining = 2; focusCooldown = 3; return true;
     },
     step(delta: number, input: DrivingInput, frozen = false) {
@@ -94,7 +98,7 @@ export function createTimeAttack(track: Track, performance: DronePerformance, re
             progress.cross({ ...segment, to: distance, timeTo: deadline });
             clean.cross(distance, model.state);
             model.state.distance = distance; model.state.elapsed = deadline;
-            model.state.speed = 0; model.interruptBoost(); phase = 'finished'; disqualified = true;
+            model.endAwakening(); model.state.speed = 0; model.interruptBoost(); phase = 'finished'; disqualified = true;
             return true;
           }
         }
@@ -105,7 +109,7 @@ export function createTimeAttack(track: Track, performance: DronePerformance, re
         // Interpolate the final gate within the physics step; no extra frame is charged.
         model.state.distance = track.length * totalLaps;
         model.state.elapsed = finish;
-        model.state.speed = 0; model.interruptBoost(); phase = 'finished';
+        model.endAwakening(); model.state.speed = 0; model.interruptBoost(); phase = 'finished';
         const laps = progress.snapshot().lapTimes;
         result = records.save(finish, laps);
         return true;

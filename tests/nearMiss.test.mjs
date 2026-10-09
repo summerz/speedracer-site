@@ -24,11 +24,16 @@ test('a corridor pass within 1.2 m of the band edge is a near miss worth +.08 ch
   assert.equal(edge.nearMisses, 0, 'a hit is never a near miss'); assert.equal(edge.collisions, 1);
 });
 
-test('near-miss charge is capped at full', () => {
-  const model = createDrivingModel(straight({ corridorObstacles: [corridor(100, -5)] }));
-  Object.assign(model.state, { distance: 72, speed: 155, offset: -3.5 });
-  drive(model, 120);
-  assert.equal(model.state.nearMisses, 1); assert.equal(model.state.charge, 1);
+test('near-miss charge banks reserves and is capped at 150%', () => {
+  for (const charge of [1, 1.48, 1.5]) {
+    const model = createDrivingModel(straight({ corridorObstacles: [corridor(100, -5)] }));
+    const centred = createDrivingModel(straight({ corridorObstacles: [corridor(100, -5)] }));
+    Object.assign(model.state, { distance: 72, speed: 155, offset: -3.5, charge });
+    Object.assign(centred.state, { distance: 72, speed: 155, offset: -5, charge });
+    drive(model, 120); drive(centred, 120);
+    assert.equal(model.state.nearMisses, 1);
+    assert.ok(Math.abs(model.state.charge - Math.min(1.5, centred.state.charge + NEAR_MISS_CHARGE)) < 1e-9);
+  }
 });
 
 test('a late altitude call counts as a near miss; an early one does not', () => {

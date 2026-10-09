@@ -66,8 +66,8 @@ export const TRACK_CATALOG: readonly TrackDefinition[] = Object.freeze(recipes.m
   const experience: BranchRecipe['experience'] = ({ residential: 'city', industrial: 'reactor', stadium: 'arena', skyline: 'sky', research: 'prism', orbital: 'orbit', harbor: 'sky', desert: 'reactor' } as const)[r[1]];
   const branches: readonly BranchRecipe[] = branchCourses.includes(i) ? Object.freeze([Object.freeze({ id: `${id}-fork`,
     kind: i % 4 === 1 ? 'vertical' as const : 'horizontal' as const, experience, direction: i % 2 ? -1 as const : 1 as const,
-    intertwined: [6, 13, 17, 23].includes(i) })]) : [];
-  return Object.freeze({ id, name: r[0], revision: (r[4] ? (r[4].stunts.some(s => s.direction === -1) ? 3 : 2) : 1) + (branches.length ? 3 : 0), order: i + 1, district: r[1], rating: r[2], branches,
+    intertwined: [6, 13, 17, 23].includes(i), ...(i === 6 ? { groundClearance: 12 } : {}) })]) : [];
+  return Object.freeze({ id, name: r[0], revision: (r[4] ? (r[4].stunts.some(s => s.direction === -1) ? 3 : 2) : 1) + (branches.length ? 3 : 0) + (i === 6 ? 1 : 0), order: i + 1, district: r[1], rating: r[2], branches,
     predecessor: i ? recipes[i - 1][0].toLowerCase().replaceAll(' ', '-') : null,
     laps: 3, lapLimit: lapLimits[i], halfWidth: r[2] <= 3 ? 14 : 13,
     altitudeLevels: levels, obstacleLevels: Object.freeze(pattern), layout: r[4] ? Object.freeze({ ...r[4], stunts: Object.freeze(r[4].stunts.map(s => Object.freeze(s))) }) : null, features: r[3] + (branches.length ? ` · ${branches[0].intertwined ? '입체 교차 분기' : branches[0].kind === 'horizontal' ? '좌우 갈림길' : '상하 갈림길'}` : '') });
@@ -85,7 +85,8 @@ export function validateTrackCatalog(catalog: readonly TrackDefinition[]) {
     for (const b of t.branches ?? []) {
       if (!b.id || branchIds.has(b.id) || !['horizontal','vertical'].includes(b.kind)
         || !['city','reactor','arena','sky','prism','orbit'].includes(b.experience)
-        || (b.direction !== undefined && b.direction !== 1 && b.direction !== -1)) throw new Error('Invalid course branch');
+        || (b.direction !== undefined && b.direction !== 1 && b.direction !== -1)
+        || (b.groundClearance !== undefined && (!Number.isFinite(b.groundClearance) || b.groundClearance < 0))) throw new Error('Invalid course branch');
       branchIds.add(b.id);
     }
     if (!/^[a-z][a-z0-9-]*$/.test(t.id) || !t.name || !Number.isInteger(t.revision) || t.revision < 1 || !Number.isInteger(t.laps) || t.laps < 1 || t.laps > 10 || !Number.isInteger(t.rating) || t.rating < 1 || t.rating > 6 || !Number.isFinite(t.halfWidth) || t.halfWidth <= 4 || !Number.isFinite(t.lapLimit) || t.lapLimit <= 0 || ![2,3,4].includes(t.altitudeLevels) || t.obstacleLevels.some(n => !Number.isInteger(n) || n < 0 || n >= t.altitudeLevels)) throw new Error('Invalid track definition');

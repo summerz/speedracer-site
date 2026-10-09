@@ -81,6 +81,49 @@ test('the same named driver actually completes the mobile race more slowly', () 
   assert.ok(times[1] > times[0] * 1.02, `${times}`);
 });
 
+test('all racer styles run more slowly on both platforms while retaining safe corner and boost decisions', () => {
+  // Freeze the previous balance as a comparison, then exercise ordinary race physics.
+  const previousProfile = (pilot, platform) => {
+    const skill = (pilot.rating - 1) / 5, touch = platform === 'touch';
+    const style = {
+      straight: { pace: 1, corner: -.02, charge: .48, end: .03 },
+      corner: { pace: .96, corner: .07, charge: .55, end: .03 },
+      burst: { pace: .98, corner: 0, charge: .34, end: .03 },
+      steady: { pace: .93, corner: .02, charge: .72, end: .15 },
+    }[pilot.style];
+    return {
+      pace: (.82 + skill * .18) * style.pace * (touch ? .95 : 1),
+      cornerLimit: (.5 + skill * .2 + style.corner + (pilot.rating >= 5 ? touch ? .06 : .12 : 0)) * (touch ? .93 : 1),
+      boostStartCharge: style.charge + (1 - skill) * .12 + (touch ? .05 : 0),
+      boostEndCharge: style.end,
+      boostCurvature: pilot.style === 'straight' ? .0025 : .003,
+    };
+  };
+  for (const platform of ['desktop', 'touch']) for (const pilot of AI_RACERS) {
+    const previous = previousProfile(pilot, platform), current = aiDrivingProfile(pilot, platform);
+    const craft = DRONE_CATALOG.find(p => p.configuration.modelVariant === pilot.modelVariant).configuration;
+    const run = profile => {
+      const racer = createTimeAttack(straight, craft.performance,
+        createRaceRecords({ trackId: 'balance-comparison', configurationId: pilot.id }), 0, { laps: 3 });
+      racer.start();
+      for (let tick = 0; tick < 9000 && racer.phase !== 'finished'; tick++)
+        racer.step(1 / 60, aiDrivingInput(straight, craft, racer.model.state, 1, [], profile));
+      assert.equal(racer.phase, 'finished');
+      return racer.snapshot().finishTime;
+    };
+    const before = run(previous), after = run(current);
+    assert.ok(after > before, `${pilot.id}/${platform}: ${before}s -> ${after}s`);
+    const state = { ...session().model.state, speed: 100, charge: previous.boostStartCharge + .01 };
+    assert.equal(aiDrivingInput(straight, craft, state, 1, [], previous).boost, true);
+    assert.equal(aiDrivingInput(straight, craft, state, 1, [], current).boost, false);
+    const corner = { ...straight, sample: () => ({ curvature: .02 }) };
+    const agileCraft = { ...craft, performance: { ...craft.performance, maxYawRate: 10 } };
+    state.speed = previous.cornerLimit / .02;
+    assert.equal(aiDrivingInput(corner, agileCraft, state, 1, [], previous).brake, false);
+    assert.equal(aiDrivingInput(corner, agileCraft, state, 1, [], current).brake, true);
+  }
+});
+
 test('each player faces seven opponents covering all four other models', () => {
   for (const player of DRONE_CATALOG) {
     const seen = new Set();

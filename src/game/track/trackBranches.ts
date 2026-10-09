@@ -7,6 +7,8 @@ export interface BranchRecipe {
   readonly experience: 'city' | 'reactor' | 'arena' | 'sky' | 'prism' | 'orbit';
   readonly intertwined?: boolean;
   readonly direction?: 1 | -1;
+  /** Minimum ground clearance below the pavement in a low-lying coil. */
+  readonly groundClearance?: number;
 }
 export interface BranchRoute {
   readonly id: string; readonly name: string; readonly description: string;
@@ -193,6 +195,18 @@ export function withTrackBranches(track: Track, recipes: readonly BranchRecipe[]
     // A dedicated, symmetric Y comes before any route-specific experience.
     const mouthFraction = Math.min(100 / (span - junctionLength * 2), recipe.intertwined ? .18 : .25);
     const bodySpan = (span - junctionLength * 2) * (1 - mouthFraction * 2);
+    // The ellipse descends 52 m below its axis. Account for the base road's
+    // height and bank so its lower turn (including the pavement) clears ground.
+    let coilRise = 28;
+    if (recipe.intertwined && recipe.groundClearance !== undefined) for (let d = start; d <= end; d += .5) {
+      const u = (d - start - junctionLength) / (span - junctionLength * 2);
+      const body = (u - mouthFraction) / (1 - mouthFraction * 2);
+      if (body < .15 || body > .85) continue;
+      const base = baseSample(d);
+      const phase = smooth((body - .15) / .7) * Math.PI * 2;
+      for (const sign of [-1, 1]) coilRise = Math.max(coilRise,
+        (track.halfWidth + recipe.groundClearance - base.position.y - sign * 52 * Math.cos(phase) * base.right.y) / base.up.y - sign * 52 * Math.sin(phase));
+    }
     let technicalLength = 0;
     const geometry: { cumulative: number[]; entryArc: number; innerLength: number }[] = [];
     const makeRoute = (side: 0 | 1): BranchRoute => {
@@ -220,7 +234,7 @@ export function withTrackBranches(track: Track, recipes: readonly BranchRecipe[]
             envelope = smooth(body / .15) * smooth((1 - body) / .15);
             const phase = smooth((body - .15) / .7) * Math.PI * 2;
             sideways = sign * 52 * Math.cos(phase);
-            rise = 28 + sign * 52 * Math.sin(phase);
+            rise = coilRise + sign * 52 * Math.sin(phase);
           }
           // A vertical-only split hides one deck behind the other from the driver's view.
           // All choices first form a sideways Y on one deck, then rise/coil/roll independently.
