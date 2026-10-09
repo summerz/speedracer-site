@@ -8,6 +8,10 @@ button { font: inherit; cursor: pointer; }
 button:disabled { opacity: 0.35; cursor: not-allowed; }
 button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 5px; }
 [hidden] { display: none !important; }
+/* Keyboard-shortcut badge on buttons; inherits the active colour when pressed/current. */
+.key-badge { flex: none; padding: 0 4px; border: 1px solid #ffffff26; border-radius: 3px; font: 10px/1.5 'IBM Plex Mono', monospace; color: #718690; }
+[aria-pressed='true'] > .key-badge, [aria-current='page'] > .key-badge { color: var(--accent); border-color: #56dacf59; }
+@media (hover: none) and (pointer: coarse) { .key-badge { display: none; } }
 .mono { font-family: 'IBM Plex Mono', monospace; }
 .masthead { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; min-height: calc(100px + env(safe-area-inset-top)); gap: 16px; padding: calc(16px + env(safe-area-inset-top)) max(4.5%, env(safe-area-inset-right)) 16px max(4.5%, env(safe-area-inset-left)); border-bottom: 1px solid #ffffff0d; z-index: 2; }
 .wordmark { display: flex; align-items: center; gap: 11px; color: #e9f2f4; text-decoration: none; font-size: 18px; font-weight: 750; letter-spacing: 1.8px; }

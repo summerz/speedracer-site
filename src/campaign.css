@@ -355,3 +355,5 @@
 }
 @media (max-width:480px) { .course-routes > div { grid-template-columns:1fr; gap:10px; } .campaign-modes button { flex-wrap:wrap; } }
 @media (max-width:360px) { .campaign-craft-copy { display:none; } }
+/* M picks difficulty on the track detail view, so the music button's badge would lie. */
+body:has(#view-detail:not([hidden])) [data-music-toggle] .key-badge { display:none; }

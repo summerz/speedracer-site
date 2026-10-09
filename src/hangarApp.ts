@@ -67,9 +67,9 @@ export function mountHangar(root: HTMLDivElement, selected: DroneCatalogEntry, o
           <div class="thrust-test" role="group" aria-labelledby="thrust-heading">
             <div class="thrust-heading"><span id="thrust-heading">추진 테스트</span><span id="thrust-status" role="status" aria-live="polite">대기</span></div>
             <div class="thrust-controls" role="group" aria-label="추진 상태">
-              <button type="button" data-thrust="idle" aria-pressed="true" aria-keyshortcuts="Q"><kbd>Q</kbd>대기</button>
-              <button type="button" data-thrust="accelerate" aria-pressed="false" aria-keyshortcuts="W"><kbd>W</kbd>가속</button>
-              <button type="button" data-thrust="boost" aria-pressed="false" aria-keyshortcuts="E"><kbd>E</kbd>부스트</button>
+              <button type="button" data-thrust="idle" aria-pressed="true" aria-keyshortcuts="Q"><kbd class="key-badge">Q</kbd>대기</button>
+              <button type="button" data-thrust="accelerate" aria-pressed="false" aria-keyshortcuts="W"><kbd class="key-badge">W</kbd>가속</button>
+              <button type="button" data-thrust="boost" aria-pressed="false" aria-keyshortcuts="E"><kbd class="key-badge">E</kbd>부스트</button>
             </div>
           </div>
           <div class="free-drive"><a class="free-drive-link" href="#drive">시험 주행 · NEON CIRCUIT <span aria-hidden="true">↗</span></a><span class="free-drive-note">포인트 획득 · 캠페인 기록 없음</span></div>

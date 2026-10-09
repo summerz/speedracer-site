@@ -65,8 +65,6 @@
 .thrust-controls button { display: flex; flex: 1; align-items: center; justify-content: center; gap: 7px; min-height: 40px; padding: 8px 5px; border: 1px solid #ffffff1a; border-radius: 3px; background: #ffffff03; color: #a5b6bf; font-size: 11px; transition: background 160ms, border-color 160ms; }
 .thrust-controls button:hover { background: #ffffff09; }
 .thrust-controls button[aria-pressed='true'] { color: #d6fffa; border-color: #56dacf80; background: #56dacf13; }
-.thrust-controls kbd { font: 10px 'IBM Plex Mono', monospace; color: #718690; }
-.thrust-controls button[aria-pressed='true'] kbd { color: var(--accent); }
 
 /* P: portrait phone. Hero on top (~40dvh), everything scrolls together under the fixed header. */
 @media (max-width: 760px) and (orientation: portrait) {

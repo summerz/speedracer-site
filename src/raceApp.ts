@@ -48,9 +48,9 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
       <header class="race-header">
         <div class="race-telemetry" aria-label="주행 정보"><div class="telemetry-row"><span class="speed-readout" aria-label="현재 주행 속도"><strong id="drive-speed">000</strong><span class="speed-unit mono"><small>속도</small>km/h</span></span><span id="race-rank" class="rank-readout mono" hidden></span><span id="race-lap" class="lap-readout mono">LAP 1/3</span><time id="drive-time" class="mono">00:00.000</time><span id="race-ghost" class="ghost-delta mono" aria-label="고스트와의 시간 차이" hidden></span></div><div class="corner-guide"><span id="lap-deadline" hidden></span><strong id="corner-text">직선</strong><span class="corner-hint">급한 코너에서는 S로 감속</span></div></div>
       </header>
-      <button type="button" id="race-pause" class="race-pause" aria-label="일시정지 메뉴" aria-keyshortcuts="Escape" aria-controls="drive-overlay" aria-expanded="false"><span aria-hidden="true">Ⅱ</span></button>
+      <button type="button" id="race-pause" class="race-pause" aria-label="일시정지 메뉴" aria-keyshortcuts="Escape" aria-controls="drive-overlay" aria-expanded="false"><span aria-hidden="true">Ⅱ</span><kbd class="key-badge">Esc</kbd></button>
       <div class="driving-overlay"><div id="race-announcement" class="race-announcement" role="status" aria-live="polite" hidden><strong></strong><span></span><em id="race-clean" hidden>클린 +${CLEAN_HALF_LAP_POINTS}P</em></div><p id="race-callout" class="race-callout" role="status" hidden></p><p id="race-nearmiss" class="race-nearmiss" aria-hidden="true" hidden>NEAR MISS</p><p id="race-streak" class="race-streak" aria-hidden="true" hidden></p><p id="race-notice" class="race-notice" role="status" aria-live="polite"></p><div id="race-countdown" class="race-countdown" role="status" aria-live="assertive" hidden><span>READY</span><strong>3</strong></div>
-      <div class="race-items"><button id="race-focus" type="button" class="race-focus" aria-keyshortcuts="V" hidden>집중 모드</button>${RIVAL_ITEMS.map(item => `<button type="button" id="race-${item.id}" class="race-focus" data-use-item="${item.id}" hidden>${item.name}</button>`).join('')}</div><p id="focus-feedback" class="focus-feedback" role="status" aria-live="polite"></p><footer class="drive-hud" aria-label="고도와 부스트 계기판">
+      <div class="race-items"><button id="race-focus" type="button" class="race-focus" aria-keyshortcuts="V" hidden>집중 모드<kbd class="key-badge">V</kbd></button>${RIVAL_ITEMS.map(item => `<button type="button" id="race-${item.id}" class="race-focus" data-use-item="${item.id}" hidden>${item.name}</button>`).join('')}</div><p id="focus-feedback" class="focus-feedback" role="status" aria-live="polite"></p><footer class="drive-hud" aria-label="고도와 부스트 계기판">
         <aside class="height-guide" aria-label="고도 안내: 선택 단계, 민트색 통과 가능, 빨강 통과 불가, 주황 전환 중"><div id="height-level" class="height-bars"></div><strong id="height-instruction"></strong></aside>
         <div class="boost-readout"><div class="hud-pair"><span class="hud-label">BOOST</span><span id="boost-value" class="mono">100%</span></div><div id="boost-meter" class="boost-meter" role="progressbar" aria-label="부스트 잔량" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"><span></span></div><div id="boost-stage-meter" class="boost-stage-meter" role="progressbar" aria-label="부스트 2단계 축적" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span></span></div><span id="boost-status">Space 유지 · 3초 후 2단계</span></div>
       <p id="race-fork" class="fork-guide" hidden></p></footer></div>
@@ -70,20 +70,20 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
             <button type="button" id="race-hangar" class="race-exit">캠페인으로</button>
             <button id="result-shop" type="button" class="race-exit" hidden>상점으로 ↗</button>
           </nav>
-          <div class="menu-preview"><span>시점 전환</span><div class="race-actions"><button type="button" id="race-view">콕핏 보기 <kbd>C</kbd></button><button type="button" id="race-track">트랙 PIP 보기 <kbd>X</kbd></button></div></div>
+          <div class="menu-preview"><span>시점 전환</span><div class="race-actions"><button type="button" id="race-view" aria-keyshortcuts="C">콕핏 보기 <kbd class="key-badge">C</kbd></button><button type="button" id="race-track" aria-keyshortcuts="X">트랙 PIP 보기 <kbd class="key-badge">X</kbd></button></div></div>
           <nav class="race-actions menu-actions" aria-label="주행 메뉴">
-            <button type="button" id="race-restart" hidden>처음부터 다시 <kbd>R</kbd></button>
-            <button type="button" id="race-settings" aria-keyshortcuts="S">설정 · 조작 안내 <kbd>S</kbd></button>
+            <button type="button" id="race-restart" aria-keyshortcuts="R" hidden>처음부터 다시 <kbd class="key-badge">R</kbd></button>
+            <button type="button" id="race-settings" aria-keyshortcuts="S">설정 · 조작 안내 <kbd class="key-badge">S</kbd></button>
           </nav>
           <div class="app-tools" data-app-tools></div>
         </div>
       </section>
       <nav id="view-preview" class="view-preview" aria-label="정지 상태에서 시점 미리보기" hidden>
-        <p>시점 미리보기 <span>· 주행 정지</span></p><div><button type="button" id="preview-view">콕핏 보기 <kbd>C</kbd></button><button type="button" id="preview-track">트랙 PIP 보기 <kbd>X</kbd></button><button type="button" id="preview-back">메뉴로</button></div>
+        <p>시점 미리보기 <span>· 주행 정지</span></p><div><button type="button" id="preview-view" aria-keyshortcuts="C">콕핏 보기 <kbd class="key-badge">C</kbd></button><button type="button" id="preview-track" aria-keyshortcuts="X">트랙 PIP 보기 <kbd class="key-badge">X</kbd></button><button type="button" id="preview-back" aria-keyshortcuts="Escape">메뉴로 <kbd class="key-badge">Esc</kbd></button></div>
       </nav>
       <dialog id="race-preferences" class="race-preferences" aria-labelledby="preferences-title">
         <header><h2 id="preferences-title">설정</h2><button type="button" id="preferences-close" aria-label="설정 닫기">닫기</button></header>
-        <div class="preference-options"><button type="button" id="race-bloom" aria-pressed="true"><span>네온 발광 <small>Bloom</small></span></button><button type="button" id="race-sound" aria-pressed="true"><span>주행 효과음</span></button><button type="button" id="race-music" aria-pressed="true"><span>배경 음악 <small>로비 1곡 · 경주 8곡</small></span></button><button type="button" id="race-haptics" aria-pressed="true"><span>진동</span></button></div>
+        <div class="preference-options"><button type="button" id="race-bloom" aria-pressed="true"><span>네온 발광 <small>Bloom</small></span></button><button type="button" id="race-sound" aria-pressed="true"><span>주행 효과음</span></button><button type="button" id="race-music" aria-pressed="true" aria-keyshortcuts="M"><span>배경 음악 <small>로비 1곡 · 경주 8곡</small></span><kbd class="key-badge">M</kbd></button><button type="button" id="race-haptics" aria-pressed="true"><span>진동</span></button></div>
         <div class="render-options"><label for="race-quality">렌더링 품질</label><select id="race-quality">${Object.entries(RENDER_QUALITIES).map(([id, option]) => `<option value="${id}" ${id === 'balanced' ? 'selected' : ''}>${option.label}</option>`).join('')}</select></div>
         <div class="preference-options"><button type="button" id="race-haze" aria-pressed="false"><span>배기 아지랑이 <small>추적 시점</small></span></button></div>
         <p class="quality-hint">아지랑이는 배기 주변에만 적용합니다. 성능이 낮으면 끄거나 ‘성능 우선’을 선택하세요.</p>
@@ -184,7 +184,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
     overlay.hidden = racing || previewing || lost || !!cinematicKind;
     get('view-preview').hidden = racing || !previewing || lost;
     screen.dataset.preview = String(previewing);
-    pauseButton.innerHTML = `<span aria-hidden="true">${previewing ? '×' : lastPhase === 'paused' ? '▶' : 'Ⅱ'}</span>`;
+    pauseButton.innerHTML = `<span aria-hidden="true">${previewing ? '×' : lastPhase === 'paused' ? '▶' : 'Ⅱ'}</span><kbd class="key-badge">Esc</kbd>`;
     pauseButton.setAttribute('aria-label', previewing ? '메뉴로 돌아가기' : lastPhase === 'paused' ? '주행 계속하기' : '일시정지 메뉴');
     pauseButton.setAttribute('aria-expanded', String(lastPhase === 'paused' && !previewing));
     pauseButton.disabled = (lastPhase === 'ready' || lastPhase === 'finished') && !previewing;
@@ -218,8 +218,8 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
     lastViewKey = viewKey;
     const cameraAction = state.view === 'cockpit' ? '기체 보기' : '콕핏 보기';
     const trackAction = state.trackDisplay === 'hidden' ? '트랙 PIP 보기' : state.trackDisplay === 'pip' ? '트랙을 크게 보기' : '주행 화면만 보기';
-    for (const id of ['race-view', 'preview-view']) get(id).innerHTML = `${cameraAction} <kbd>C</kbd>`;
-    for (const id of ['race-track', 'preview-track']) get(id).innerHTML = `${trackAction} <kbd>X</kbd>`;
+    for (const id of ['race-view', 'preview-view']) get(id).innerHTML = `${cameraAction} <kbd class="key-badge">C</kbd>`;
+    for (const id of ['race-track', 'preview-track']) get(id).innerHTML = `${trackAction} <kbd class="key-badge">X</kbd>`;
     get('pause-summary').textContent = `${RACE_CHALLENGES[challenge].label} · ${formatTime(state.elapsed)}`;
     const attack = state.timeAttack;
     const competition = state.competition;
@@ -247,7 +247,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
     activeRaceId = attack.raceId; canFocus = attack.canFocus; itemStates = attack.items;
     const focus = get<HTMLButtonElement>('race-focus');
     focus.hidden = !focusSlots || state.phase !== 'running'; focus.disabled = !canFocus || focusPending;
-    focus.textContent = attack.focusRemaining > 0 ? `집중 ${attack.focusRemaining.toFixed(1)}s` : `집중 ${focusSlots - attack.focusUsed} · V`;
+    focus.innerHTML = `${attack.focusRemaining > 0 ? `집중 ${attack.focusRemaining.toFixed(1)}s` : `집중 ${focusSlots - attack.focusUsed}`}<kbd class="key-badge">V</kbd>`;
     for (const item of RIVAL_ITEMS) {
       const status = attack.items.find(entry => entry.id === item.id)!;
       const button = get<HTMLButtonElement>(`race-${item.id}`);

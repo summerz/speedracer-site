@@ -21,7 +21,12 @@ export function mountApp(root: HTMLDivElement): () => void {
   soundtrack.start();
   const activateAudio = () => { if (!(import.meta.env.DEV && location.hash.split('?')[0] === '#sound-lab')) soundtrack.activate(); };
   const visibility = () => document.hidden ? soundtrack.suspend() : activateAudio();
-  const toggleMusic = () => { soundtrack.setEnabled(!soundtrack.enabled); refreshMusicButton(); };
+  const toggleMusic = () => {
+    // The race keeps its own music toggle state; go through its button so both stay in sync.
+    const raceMusic = root.querySelector<HTMLButtonElement>('#race-music');
+    if (raceMusic) { if (!raceMusic.disabled) raceMusic.click(); return; }
+    soundtrack.setEnabled(!soundtrack.enabled); refreshMusicButton();
+  };
   const musicToggle = (event: Event) => {
     if (!(event.target instanceof Element) || !event.target.closest('[data-music-toggle]')) return;
     toggleMusic();
@@ -40,7 +45,7 @@ export function mountApp(root: HTMLDivElement): () => void {
   };
   const refreshMusicButton = () => {
     for (const button of root.querySelectorAll<HTMLButtonElement>('[data-music-toggle]')) {
-      button.setAttribute('aria-pressed', String(soundtrack.enabled)); button.textContent = soundtrack.enabled ? '음악 켜짐' : '음악 꺼짐';
+      button.setAttribute('aria-pressed', String(soundtrack.enabled)); button.querySelector('[data-music-label]')!.textContent = soundtrack.enabled ? '음악 켜짐' : '음악 꺼짐';
     }
   };
   document.addEventListener('pointerdown', activateAudio);

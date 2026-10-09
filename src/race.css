@@ -2,7 +2,7 @@
 .drive-screen,.drive-screen * { user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; }
 .race-scene { position:absolute; inset:0; }
 .race-scene canvas { display:block; width:100%; height:100%; }
-.drive-screen kbd { font:10px 'IBM Plex Mono',monospace; color:#9dbac6; }
+.drive-keys kbd { font:10px 'IBM Plex Mono',monospace; color:#9dbac6; }
 .race-header { position:absolute; top:0; left:0; right:0; z-index:4; display:flex; justify-content:space-between; align-items:flex-start; padding:max(16px,env(safe-area-inset-top)) max(20px,env(safe-area-inset-right)) 20px max(20px,env(safe-area-inset-left)); pointer-events:none; background:linear-gradient(#080f19bb,transparent); }
 .race-telemetry { display:grid; gap:5px; font-variant-numeric:tabular-nums; text-shadow:0 2px 6px #000; }
 .telemetry-row { display:flex; align-items:center; gap:24px; }
@@ -21,6 +21,8 @@
 .corner-guide strong { font-weight:500; }
 .corner-hint { color:#9ab2bc; font-size:10px; }
 .race-pause { position:absolute; z-index:4; top:max(16px,env(safe-area-inset-top)); right:max(20px,env(safe-area-inset-right)); width:56px; height:56px; border:1px solid #73b7bb80; border-radius:50%; background:#071724df; color:#d9faf2; font-size:25px; pointer-events:auto; touch-action:manipulation; }
+.race-pause .key-badge { position:absolute; top:calc(100% + 5px); left:50%; transform:translateX(-50%); background:#071724df; }
+.race-focus .key-badge { margin-left:6px; }
 .race-pause:hover { background:#1b414b; }
 .race-pause:disabled { opacity:.4; }
 .race-pause.on-pip { width:44px; height:44px; font-size:21px; background:#102c38; }
@@ -166,7 +168,7 @@ button:focus-visible { outline:2px solid #c9f9f2; outline-offset:3px; }
 .has-touch-controls .race-pause { width:44px; height:44px; font-size:21px; }
 .has-touch-controls .race-pause.on-pip { background:#102c38; }
 .has-touch-controls .race-pip-frame { padding-right:52px; }
-.has-touch-controls .race-actions kbd,.has-touch-controls .view-preview kbd { display:none; }
+.has-touch-controls .key-badge { display:none; }
 .has-touch-controls .drive-keys { display:none; }
 .has-touch-controls .touch-help { display:block; }
 .has-touch-controls .drive-hud { bottom:max(177px,calc(env(safe-area-inset-bottom) + 157px)); width:min(290px,calc(100% - 216px)); }
