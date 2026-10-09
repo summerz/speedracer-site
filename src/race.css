@@ -78,7 +78,9 @@
 .hud-pair { display:flex; justify-content:space-between; gap:12px; align-items:baseline; }
 .hud-pair .mono { font-size:11px; color:var(--accent); }
 .boost-meter { position:relative; height:5px; margin:8px 0 4px; background:#28414c; overflow:hidden; }
-.boost-meter::after { content:""; position:absolute; left:66.6667%; top:0; bottom:0; width:1px; background:#071016; }
+.boost-meter::before,.boost-meter::after { content:""; position:absolute; z-index:1; top:0; bottom:0; width:2px; background:#071016; pointer-events:none; }
+.boost-meter::before { left:calc(33.3333% - 1px); }
+.boost-meter::after { left:calc(66.6667% - 1px); }
 .boost-meter>span, .boost-stage-meter>span { display:block; height:100%; width:100%; transform-origin:left; background:var(--accent); }
 .boost-meter.is-boosting>span { background:#ffb163; }
 .boost-stage-meter { height:2px; background:#28414c; margin-bottom:7px; overflow:hidden; }
