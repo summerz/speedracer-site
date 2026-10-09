@@ -1,6 +1,7 @@
 import { RACE_CHALLENGES, challengeStars, challengeStarPenalty, type RaceChallengeId } from './game/track/raceChallenge';
 import { NIGHT_ENVIRONMENTS, RAIN_INTENSITIES, selectRaceEnvironment, selectRainIntensity } from './game/environment/raceEnvironment';
 import { hazardEdgeAlert } from './game/driving/hazardEdgeAlert';
+import { raceResultData } from './game/driving/raceResultData';
 import { AI_OPPONENT_COUNT } from './game/driving/aiRoster';
 import { BOOST_CAPACITY } from './game/driving/createDrivingModel';
 import { AWAKENING_CAPACITY, AWAKENING_SECONDS } from './game/driving/awakening';
@@ -180,8 +181,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
   let campaignOutcome: CampaignOutcome | undefined;
   let standingsKey = '';
   // Single seam for result statistics; undefined falls back to the local computations below.
-  // TODO(codex raceResultData): return raceResultData(attack) once that module is on this branch.
-  const readResultData = (_attack: RaceSnapshot['timeAttack']): ResultData | undefined => undefined;
+  const readResultData = (attack: RaceSnapshot['timeAttack']): ResultData | undefined => raceResultData(attack);
   let priorBest: RaceRecord | null = null; // Best total before this run is recorded; the snapshot's bestRecord updates at finish.
   const restartConfirm = get<HTMLDialogElement>('race-restart-confirm');
   let lastPhase = '';
