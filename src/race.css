@@ -71,17 +71,18 @@
 .hazard-edges { position:absolute; inset:0; z-index:1; pointer-events:none; overflow:hidden; --c:#ff8a3c; }
 .hazard-edge,.hazard-arrow { --c:#ff8a3c; --o:.4; }
 .hazard-edge[data-tone='rail'],.hazard-arrow[data-tone='rail'] { --c:#b6ff3c; }
-.hazard-edge { position:absolute; top:0; bottom:0; width:clamp(84px,22vw,280px); opacity:var(--o); }
+.hazard-edge { position:absolute; top:0; bottom:0; width:max(84px,20vw); opacity:var(--o); }
 .hazard-edge[hidden],.hazard-arrow[hidden] { display:none; }
-.hazard-edge[data-side='left'] { left:0; background:linear-gradient(90deg,var(--c) 0 5px,color-mix(in srgb,var(--c) 75%,transparent) 5px,transparent); }
-.hazard-edge[data-side='right'] { right:0; background:linear-gradient(270deg,var(--c) 0 5px,color-mix(in srgb,var(--c) 75%,transparent) 5px,transparent); }
-.hazard-edge[data-level='warn'] { --o:.45; animation:edge-pulse .3s ease-in-out 3; }
+.hazard-edge[data-side='left'] { left:0; background:linear-gradient(90deg,var(--c) 0 6px,color-mix(in srgb,var(--c) 85%,transparent) 6px,color-mix(in srgb,var(--c) 55%,transparent) 50%,transparent); }
+.hazard-edge[data-side='right'] { right:0; background:linear-gradient(270deg,var(--c) 0 6px,color-mix(in srgb,var(--c) 85%,transparent) 6px,color-mix(in srgb,var(--c) 55%,transparent) 50%,transparent); }
+.hazard-edge[data-level='warn'] { --o:.7; animation:edge-pulse .3s ease-in-out 3,edge-breathe .9s ease-in-out .9s infinite alternate; }
 .hazard-edge[data-level='danger'] { --o:.95; animation:edge-blink .25s steps(2,jump-none) infinite alternate; }
-.hazard-edge[data-level='calm'] { --o:.2; }
+.hazard-edge[data-level='calm'] { --o:.28; }
 .hazard-arrow { position:absolute; top:50%; transform:translateY(-50%); font-size:clamp(20px,3.2vw,34px); letter-spacing:-.15em; color:var(--c); text-shadow:0 0 10px var(--c),0 2px 6px #000; animation:edge-arrow 1s ease-in-out infinite alternate; }
 .hazard-arrow[data-side='left'] { left:clamp(14px,3vw,40px); }
 .hazard-arrow[data-side='right'] { right:clamp(14px,3vw,40px); }
 @keyframes edge-pulse { 0%,100% { opacity:.45; } 50% { opacity:.95; } }
+@keyframes edge-breathe { from { opacity:.55; } to { opacity:.9; } }
 @keyframes edge-blink { from { opacity:.95; } to { opacity:.3; } }
 @keyframes edge-arrow { from { opacity:.55; } to { opacity:1; } }
 @media (prefers-reduced-motion:reduce) { .hazard-edge,.hazard-arrow { animation:none !important; } .hazard-edge[data-level='danger'] { --o:.8; } }
