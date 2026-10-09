@@ -450,7 +450,7 @@ export function createRace(
       if (move) say(move.gained ? 'gain' : 'loss', `P${move.from} → P${move.to}`);
     }
     if (model.state.nearMisses > oldNearMisses) { raceAudio.play('boost-full'); boostPulse.trigger(); notify(); }
-    if (model.state.coresCollected > oldCores) { raceAudio.play('boost-full'); say('gain', '각성 코어 +1', 'core'); }
+    if (model.state.coresCollected > oldCores) { raceAudio.play('boost-full'); say('pickup', '각성 코어 획득'); }
     if (oldAwakening > 0 && model.state.awakeningRemaining === 0 && phase === 'running') { raceAudio.play('boost-complete'); notify(); }
     rivalVisuals.update(delta * slow, reducedMotion.matches);
     if (mode === 'time-attack' && timeAttack.phase === 'running') ghostRecorder.sample(model.state);
@@ -466,8 +466,8 @@ export function createRace(
     if (cues.length) notify();
     if (heightChanged) raceAudio.play('height');
     if (model.state.collisions > oldCollisions) raceAudio.play(model.state.notice === 'height-collision' || model.state.notice === 'corridor-collision' ? 'electric-impact' : 'impact');
-    if (model.state.boostRings > oldRings) { raceAudio.play('boost-full'); trackVisual.hitRing(model.state.distance, model.state.routeId); }
-    if (model.state.boostPads > oldPads) { raceAudio.play('boost-full'); trackVisual.hitPad(model.state.distance, model.state.routeId); }
+    if (model.state.boostRings > oldRings) { raceAudio.play('boost-full'); trackVisual.hitRing(model.state.distance, model.state.routeId); say('pickup', '부스트 링 획득'); }
+    if (model.state.boostPads > oldPads) { raceAudio.play('boost-full'); trackVisual.hitPad(model.state.distance, model.state.routeId); say('pickup', '부스트 패드 획득'); }
     if (model.state.offTrackExits > oldExits) raceAudio.play('off-track');
     if (model.state.recoveries > oldRecoveries) raceAudio.play('recovery');
     if (phase !== oldPhase) {

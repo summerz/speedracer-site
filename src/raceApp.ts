@@ -323,19 +323,20 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
     if (state.phase !== 'running') boostFlashAnimation?.cancel();
     // Callouts, near miss and clean streak: opacity only under reduced motion; no shatter then.
     const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const pop = (el: HTMLElement, ms: number, from: string, to: string) => {
+    const pop = (el: HTMLElement, ms: number, from: string, to: string, fadeOnly = false) => {
       el.getAnimations().forEach(a => a.cancel()); el.hidden = false;
-      const move = (y: string, scale: number) => still ? '' : `translate(-50%,${y}) scale(${scale})`;
+      const move = (y: string, scale: number) => still || fadeOnly ? 'translateX(-50%)' : `translate(-50%,${y}) scale(${scale})`;
       el.animate([{ opacity: 0, transform: move(from, .85) }, { opacity: 1, transform: move(from, 1.05), offset: .12 }, { opacity: 1, transform: move(to, 1), offset: .75 }, { opacity: 0, transform: move(to, 1) }],
         { duration: ms }).onfinish = () => { el.hidden = true; };
     };
     if (state.callout && state.callout.id !== lastCallout) {
       lastCallout = state.callout.id; const el = get('race-callout');
-      if (state.callout.icon) el.innerHTML = state.callout.icon === 'core' ? CORE_ICON : AWAKENING_ICON;
+      if (state.callout.icon) el.innerHTML = AWAKENING_ICON;
       else el.textContent = state.callout.text;
       el.setAttribute('aria-label', state.callout.text);
       el.dataset.icon = state.callout.icon ?? '';
-      el.dataset.kind = state.callout.kind; pop(el, 1400, '6px', '0px');
+      const pickup = state.callout.kind === 'pickup';
+      el.dataset.kind = state.callout.kind; pop(el, pickup ? 1200 : 1400, '6px', '0px', pickup);
     }
     if (state.nearMisses > lastNearMisses && state.phase === 'running') pop(get('race-nearmiss'), 700, '8px', '-10px');
     lastNearMisses = state.nearMisses;
