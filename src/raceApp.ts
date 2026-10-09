@@ -1,5 +1,6 @@
 import { RACE_CHALLENGES, challengeStars, challengeStarPenalty, type RaceChallengeId } from './game/track/raceChallenge';
 import { NIGHT_ENVIRONMENTS, RAIN_INTENSITIES, selectRaceEnvironment, selectRainIntensity } from './game/environment/raceEnvironment';
+import { hazardEdgeAlert } from './game/driving/hazardEdgeAlert';
 import { AI_OPPONENT_COUNT } from './game/driving/aiRoster';
 import { RIVAL_ITEMS } from './game/progression/catalog';
 import type { RivalItemId } from './game/progression/catalog';
@@ -44,6 +45,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
       <div id="race-scene" class="race-scene"></div>
       <div id="race-impact" class="race-impact" aria-hidden="true"></div>
       <div id="race-boost-flash" class="race-boost-flash" aria-hidden="true"></div>
+      <div class="hazard-edges" aria-hidden="true"><i id="edge-left" class="hazard-edge" data-side="left" hidden></i><i id="edge-right" class="hazard-edge" data-side="right" hidden></i><b id="edge-arrow" class="hazard-arrow" hidden></b></div>
       <section id="race-intro" class="race-intro" aria-label="코스 소개" hidden><p class="intro-eyebrow"></p><h2 class="intro-name"></h2><p class="intro-meta"></p><p class="intro-skip">건너뛰기 · 아무 키나 탭</p></section>
       <div id="race-splash" class="race-splash" role="status" hidden><strong></strong><span></span><em></em></div>
       <header class="race-header">
@@ -431,6 +433,15 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
       heightGuide.classList.toggle('height-alert', !corridor.safe);
       heightGuide.classList.toggle('height-urgent', !corridor.safe && corridor.distance < Math.max(35, state.speed * 1.5));
     }
+    const edges = state.phase === 'running' && !state.cinematic ? hazardEdgeAlert({ corridor: state.corridor, arcRail: state.arcRail, speed: state.speed }) : { left: null, right: null, arrow: null };
+    for (const side of ['left', 'right'] as const) {
+      const el = get(`edge-${side}`), edge = edges[side];
+      el.hidden = !edge;
+      if (edge) { el.dataset.tone = edge.tone; el.dataset.level = edge.level; }
+    }
+    const arrow = get('edge-arrow'), arrowTone = edges.arrow && edges[edges.arrow === 'left' ? 'right' : 'left'];
+    arrow.hidden = !edges.arrow;
+    if (edges.arrow) { arrow.dataset.side = edges.arrow; arrow.dataset.tone = arrowTone?.tone ?? 'corridor'; arrow.textContent = edges.arrow === 'left' ? '◀◀' : '▶▶'; }
     const forkGuide = get('race-fork');
     forkGuide.hidden = !state.fork || state.phase !== 'running';
     if (state.fork) {
