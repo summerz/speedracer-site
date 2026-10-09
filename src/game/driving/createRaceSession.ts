@@ -265,6 +265,7 @@ export function createRaceSession(track: Track, configuration: DroneConfiguratio
     restart() { track.randomizeObstacles?.(random); player.restart(); rivals.forEach(p => p.controller.restart()); grid(); },
     pause() { player.pause(); rivals.forEach(p => p.controller.pause()); },
     recover() { player.recover(); },
+    useAwakening() { return player.useAwakening(); },
     useFocus() {
       if (itemCooldown > 1e-8 || !player.useFocus()) return false;
       itemCooldown = 3;
@@ -317,7 +318,8 @@ export function createRaceSession(track: Track, configuration: DroneConfiguratio
           if (!active[a] || !active[b] || participants[a].controller.phase !== 'running' || participants[b].controller.phase !== 'running') continue;
           const key = `${a}:${b}`;
           const sa = participants[a].controller.model.state, sb = participants[b].controller.model.state;
-          if (clock < (contacts.get(key) ?? 0) || !craftContact(before[a], sa, before[b], sb, track.length)) continue;
+          if (sa.awakeningRemaining > 0 || sb.awakeningRemaining > 0 || before[a].awakeningRemaining > 0 || before[b].awakeningRemaining > 0
+            || clock < (contacts.get(key) ?? 0) || !craftContact(before[a], sa, before[b], sb, track.length)) continue;
           // Separate branches can share progress/altitude while being metres apart in world space.
           if (sa.routeId !== sb.routeId || sa.routeId || sb.routeId) {
             const fa = track.sample(sa.distance, undefined, sa.routeId), fb = track.sample(sb.distance, undefined, sb.routeId);
