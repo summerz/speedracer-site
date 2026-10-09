@@ -298,7 +298,8 @@ test('a boost pad refills charge and adds speed once per lap, only for a craft i
   };
   const hit = speedAfter(6.4);
   assert.equal(hit.state.boostPads, 1);
-  assert.ok(Math.abs(hit.state.charge - hit.before.charge - .35) < .01 && hit.state.speed - hit.before.speed > 17, `${hit.before.charge}->${hit.state.charge}`);
+  assert.ok(Math.abs(hit.state.charge - hit.before.charge - .5) < .01);
+  assert.ok(hit.state.speed - hit.before.speed > 17);
   assert.equal(speedAfter(0).state.boostPads, 0);
   assert.equal(speedAfter(6.4 + 2.76).state.boostPads, 0);
   const model = createDrivingModel(track);

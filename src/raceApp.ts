@@ -2,6 +2,7 @@ import { RACE_CHALLENGES, challengeStars, challengeStarPenalty, type RaceChallen
 import { NIGHT_ENVIRONMENTS, RAIN_INTENSITIES, selectRaceEnvironment, selectRainIntensity } from './game/environment/raceEnvironment';
 import { hazardEdgeAlert } from './game/driving/hazardEdgeAlert';
 import { AI_OPPONENT_COUNT } from './game/driving/aiRoster';
+import { BOOST_CAPACITY } from './game/driving/createDrivingModel';
 import { RIVAL_ITEMS } from './game/progression/catalog';
 import type { RivalItemId } from './game/progression/catalog';
 import { sfxPreference } from './game/audio/sfxPreference';
@@ -45,7 +46,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
       <div id="race-scene" class="race-scene"></div>
       <div id="race-impact" class="race-impact" aria-hidden="true"></div>
       <div id="race-boost-flash" class="race-boost-flash" aria-hidden="true"></div>
-      <div class="hazard-edges" aria-hidden="true"><i id="edge-left" class="hazard-edge" data-side="left" hidden></i><i id="edge-right" class="hazard-edge" data-side="right" hidden></i><b id="edge-arrow" class="hazard-arrow" hidden></b></div>
+      <div class="hazard-edges" aria-hidden="true"><i id="edge-left" class="hazard-edge" data-side="left" hidden></i><i id="edge-right" class="hazard-edge" data-side="right" hidden></i><b id="edge-arrow" class="hazard-arrow" hidden></b><i id="height-edge" class="hazard-edge" hidden></i></div>
       <section id="race-intro" class="race-intro" aria-label="코스 소개" hidden><p class="intro-eyebrow"></p><h2 class="intro-name"></h2><p class="intro-meta"></p><p class="intro-skip">건너뛰기 · 아무 키나 탭</p></section>
       <div id="race-splash" class="race-splash" role="status" hidden><strong></strong><span></span><em></em></div>
       <header class="race-header">
@@ -55,11 +56,19 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
       <div class="driving-overlay"><div id="race-announcement" class="race-announcement" role="status" aria-live="polite" hidden><strong></strong><span></span><em id="race-clean" hidden>클린 +${CLEAN_HALF_LAP_POINTS}P</em></div><p id="race-callout" class="race-callout" role="status" hidden></p><p id="race-nearmiss" class="race-nearmiss" aria-hidden="true" hidden>NEAR MISS</p><p id="race-streak" class="race-streak" aria-hidden="true" hidden></p><p id="race-notice" class="race-notice" role="status" aria-live="polite"></p><div id="race-countdown" class="race-countdown" role="status" aria-live="assertive" hidden><span>READY</span><strong>3</strong></div>
       <div class="race-items"><button id="race-focus" type="button" class="race-focus" aria-keyshortcuts="V" hidden>집중 모드<kbd class="key-badge">V</kbd></button>${RIVAL_ITEMS.map(item => `<button type="button" id="race-${item.id}" class="race-focus" data-use-item="${item.id}" hidden>${item.name}</button>`).join('')}</div><p id="focus-feedback" class="focus-feedback" role="status" aria-live="polite"></p><footer class="drive-hud" aria-label="고도와 부스트 계기판">
         <aside class="height-guide" aria-label="고도 안내: 선택 단계, 민트색 통과 가능, 빨강 통과 불가, 주황 전환 중"><div id="height-level" class="height-bars"></div><strong id="height-instruction"></strong></aside>
-        <div class="boost-readout"><div class="hud-pair"><span class="hud-label">BOOST</span><span id="boost-value" class="mono">100%</span></div><div id="boost-meter" class="boost-meter" role="progressbar" aria-label="부스트 잔량" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"><span></span></div><div id="boost-stage-meter" class="boost-stage-meter" role="progressbar" aria-label="부스트 2단계 축적" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span></span></div><span id="boost-status">Space 유지 · 3초 후 2단계</span></div>
+        <div class="boost-readout"><div class="hud-pair"><span class="hud-label">BOOST</span><span id="boost-value" class="mono">100%</span></div><div id="boost-meter" class="boost-meter" role="progressbar" aria-label="부스트 잔량 (최대 150%)" aria-valuemin="0" aria-valuemax="150" aria-valuenow="100"><span></span></div><div id="boost-stage-meter" class="boost-stage-meter" role="progressbar" aria-label="부스트 2단계 축적" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span></span></div><span id="boost-status">Space 유지 · 3초 후 2단계</span></div>
       <p id="race-fork" class="fork-guide" hidden></p></footer></div>
       <section id="drive-overlay" class="drive-overlay" aria-labelledby="drive-overlay-title">
         <div class="drive-dialog">
-          <p id="race-mode-title" class="eyebrow">NEON CIRCUIT · TIME ATTACK</p><h1 id="race-course-name" class="race-course-name"></h1><h2 id="drive-overlay-title">레이스 준비</h2><p id="drive-overlay-copy"></p>
+          <p id="race-mode-title" class="eyebrow">NEON CIRCUIT · TIME ATTACK</p><h1 id="race-course-name" class="race-course-name"></h1><h2 id="drive-overlay-title">레이스 준비</h2>
+          <nav class="race-flow-actions" aria-label="경기 진행">
+            <button id="campaign-next" type="button" class="primary-action" hidden>다음 트랙 ↗</button>
+            <button type="button" id="drive-start" class="primary-action">레이스 시작 <span aria-hidden="true">↗</span></button>
+            <button type="button" id="race-hangar" class="race-exit">캠페인으로</button>
+            <button id="result-shop" type="button" class="race-exit" hidden>상점으로 ↗</button>
+            <button type="button" id="race-restart" class="race-exit" aria-keyshortcuts="R" hidden>처음부터 다시 <kbd class="key-badge">R</kbd></button>
+          </nav>
+          <p id="drive-overlay-copy"></p>
           <p id="pause-summary" class="pause-summary" hidden></p>
           <section id="race-result" class="race-result" aria-label="경기 결과" hidden><p id="result-status" class="result-status"></p><time id="result-total" class="result-total"></time><div id="result-reward" class="reward-summary" role="status" aria-live="polite"></div><p id="campaign-result" role="status"></p><button id="reward-retry" type="button" hidden>보상 저장 다시 시도</button><p id="result-penalties"></p><ol id="result-laps" class="result-laps"></ol><p id="result-best"></p><div id="competition-results" hidden><p id="standings-status"></p><ol id="race-standings" class="race-standings" aria-label="참가자 순위"></ol></div><p id="record-warning" class="record-warning" hidden>기록을 저장하지 못했습니다. 이번 화면에서 확인할 수 있습니다.</p></section>
           <fieldset id="race-mode-picker" class="difficulty-picker mode-picker"><legend>경기 방식</legend><div><label><input type="radio" name="race-mode" value="time-attack" checked /><span>타임어택</span></label><label><input type="radio" name="race-mode" value="competition" /><span>경쟁 레이스 · ${AI_OPPONENT_COUNT + 1}대</span></label></div></fieldset>
@@ -67,15 +76,8 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
           <section id="ai-roster" class="ai-roster" aria-label="이번 경기 상대 선수" hidden><p class="eyebrow">이번 경기 상대</p><ol id="ai-roster-list"></ol></section>
           <p id="ready-best" class="ready-best"></p><p class="shop-hint" id="race-loadout"></p>
           ${import.meta.env.DEV ? '<div id="dev-weather" class="race-actions dev-weather"><button id="dev-rain-toggle" type="button" aria-pressed="true"><span>비 테스트 <small>개발 환경</small></span><strong id="dev-rain-state">켜짐</strong></button></div>' : ''}
-          <nav class="race-flow-actions" aria-label="경기 진행">
-            <button id="campaign-next" type="button" class="primary-action" hidden>다음 트랙 ↗</button>
-            <button type="button" id="drive-start" class="primary-action">레이스 시작 <span aria-hidden="true">↗</span></button>
-            <button type="button" id="race-hangar" class="race-exit">캠페인으로</button>
-            <button id="result-shop" type="button" class="race-exit" hidden>상점으로 ↗</button>
-          </nav>
           <div class="menu-preview"><span>시점 전환</span><div class="race-actions"><button type="button" id="race-view" aria-keyshortcuts="C">콕핏 보기 <kbd class="key-badge">C</kbd></button><button type="button" id="race-track" aria-keyshortcuts="X">트랙 PIP 보기 <kbd class="key-badge">X</kbd></button></div></div>
           <nav class="race-actions menu-actions" aria-label="주행 메뉴">
-            <button type="button" id="race-restart" aria-keyshortcuts="R" hidden>처음부터 다시 <kbd class="key-badge">R</kbd></button>
             <button type="button" id="race-settings" aria-keyshortcuts="S">설정 · 조작 안내 <kbd class="key-badge">S</kbd></button>
           </nav>
           <div class="app-tools" data-app-tools></div>
@@ -106,6 +108,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
     </main>`;
   const get = <T extends HTMLElement = HTMLElement>(id: string) => root.querySelector<T>(`#${id}`)!;
   const overlay = get('drive-overlay');
+  const menuDialog = overlay.querySelector<HTMLElement>('.drive-dialog')!;
   const startButton = get<HTMLButtonElement>('drive-start');
   const pauseButton = get<HTMLButtonElement>('race-pause');
   const bloomButton = get<HTMLButtonElement>('race-bloom');
@@ -344,7 +347,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
     speed.parentElement!.dataset.boostStage = String(state.boostStage);
     const percentage = Math.round(state.charge * 100);
     charge.textContent = `${percentage}%`; meter.setAttribute('aria-valuenow', String(percentage));
-    meterFill.style.transform = `scaleX(${state.charge})`;
+    meterFill.style.transform = `scaleX(${state.charge / BOOST_CAPACITY})`;
     meter.classList.toggle('is-boosting', state.boosting);
     const stagePercent = Math.round(state.boostStageProgress * 100);
     stageFill.style.transform = `scaleX(${state.boostStageProgress})`;
@@ -387,6 +390,8 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
     }
     heightGuide.classList.toggle('height-changed', performance.now() < highlightUntil);
     const obstacle = state.heightObstacle;
+    let heightEdge: 'top' | 'bottom' | null = null;
+    let heightUrgent = false;
     [...heightBars.children].forEach((line, index) => {
       line.classList.toggle('is-active', index === currentLevel);
       line.classList.toggle('is-safe', Boolean(obstacle && altitudeCanPass(levels[index], obstacle)));
@@ -398,6 +403,9 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
       const steps = nearest ? nearest.index - state.altitudeLevel : 0;
       const safe = altitudeCanPass(state.altitude, obstacle);
       const approaching = obstacle.distance < Math.max(60, state.speed * 3);
+      heightUrgent = !safe && obstacle.distance < Math.max(35, state.speed * 1.5);
+      // Light the dangerous side, matching the lateral obstacle warning.
+      if (nearest && approaching && !safe) heightEdge = nearest.height > state.altitude ? 'bottom' : 'top';
       const control = coarsePointer.matches ? '버튼' : '키';
       const action = nearest ? steps === 0 ? '고도 전환 중'
         : coarsePointer.matches && state.boosting ? `${steps > 0 ? '↑ 위로' : '↓ 아래로'} 밀기`
@@ -406,7 +414,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
       heightGuide.classList.toggle('height-ready', safe);
       heightGuide.dataset.readiness = !settled ? 'switching' : safe ? 'ready' : 'blocked';
       heightGuide.classList.toggle('height-alert', approaching && !safe);
-      heightGuide.classList.toggle('height-urgent', !safe && obstacle.distance < Math.max(35, state.speed * 1.5));
+      heightGuide.classList.toggle('height-urgent', heightUrgent);
       heightGuide.dataset.kind = obstacle.kind;
     } else {
       heightGuide.dataset.readiness = settled ? 'neutral' : 'switching';
@@ -442,6 +450,14 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
     const arrow = get('edge-arrow'), arrowTone = edges.arrow && edges[edges.arrow === 'left' ? 'right' : 'left'];
     arrow.hidden = !edges.arrow;
     if (edges.arrow) { arrow.dataset.side = edges.arrow; arrow.dataset.tone = arrowTone?.tone ?? 'corridor'; arrow.textContent = edges.arrow === 'left' ? '◀◀' : '▶▶'; }
+    const altitudeEdge = get('height-edge');
+    const showHeightEdge = !!heightEdge && state.phase === 'running' && !state.cinematic;
+    altitudeEdge.hidden = !showHeightEdge;
+    if (heightEdge && showHeightEdge) {
+      altitudeEdge.dataset.tone = heightEdge === 'bottom' ? 'ascend' : 'descend';
+      altitudeEdge.dataset.side = heightEdge;
+      altitudeEdge.dataset.level = heightUrgent ? 'danger' : 'warn';
+    }
     const forkGuide = get('race-fork');
     forkGuide.hidden = !state.fork || state.phase !== 'running';
     if (state.fork) {
@@ -495,6 +511,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
       get('race-hangar').textContent = state.phase === 'paused' ? '포기하고 캠페인으로' : '캠페인으로';
     }
     paintMenu();
+    if (phaseChanged || cinematicEnded) menuDialog.scrollTop = 0;
     // Focus only after paintMenu reveals the overlay; a hidden button cannot take focus.
     if ((phaseChanged || cinematicEnded) && !cinematicKind && (state.phase === 'paused' || state.phase === 'finished' || (state.phase === 'ready' && !coarsePointer.matches))) {
       const next = get<HTMLButtonElement>('campaign-next');

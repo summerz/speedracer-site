@@ -88,7 +88,8 @@ export function aiDrivingInput(track: Track, configuration: DroneConfiguration, 
   const boost = bend < (profile?.boostCurvature ?? .003) && !state.boostNeedsRelease &&
     (state.boosting ? state.charge > (profile?.boostEndCharge ?? .03) : state.charge > (profile?.boostStartCharge ?? .5));
   const desiredSpeed = (boost ? p.boostStage2Speed : p.topSpeed) * pace * speedScale;
-  const cornerLimit = profile?.cornerLimit ?? .74;
+  // Keep some yaw available for lane corrections, even with a full boost reserve.
+  const cornerLimit = Math.min(profile?.cornerLimit ?? .74, steeringYawRate(desiredSpeed, p) * .85);
   let goalSpeed = Math.min(desiredSpeed, cornerLimit / Math.max(.001, bend));
   // A fast craft needs more than 60m to brake for a hairpin. Work backwards from
   // each bend using braking distance rather than slowing immediately for far bends.
@@ -175,8 +176,10 @@ export function aiDrivingInput(track: Track, configuration: DroneConfiguration, 
   // Pull toward the lane, but never ask for a sideways slope beyond what the stabilizer can hold (heading gain 14 x MINE_CHAIN_SLOPE),
   // or the craft overshoots the lane and, for a weakly damped one, the road edge.
   const lateralPull = following ? Math.max(-14 * MINE_CHAIN_SLOPE, Math.min(14 * MINE_CHAIN_SLOPE, (lane - state.offset) * .5)) : (lane - state.offset) * .14;
+  // Dampen lane changes after a pickup: a fully boosted craft otherwise swings
+  // past its preferred lane and reaches the opposite road edge.
   return { throttle: true, brake: state.speed > goalSpeed + 1, boost,
-    steer: (curvature * forkApproachDrift(track, state.distance) * state.speed - (state.heading - lineSlope) * (following ? 14 : enteringCorridor ? 8 : 2.8) + lateralPull) / Math.max(.1, steeringYawRate(state.speed, p)), lift };
+    steer: (curvature * forkApproachDrift(track, state.distance) * state.speed - (state.heading - lineSlope) * (following ? 14 : enteringCorridor ? 8 : 4.2) + lateralPull) / Math.max(.1, steeringYawRate(state.speed, p)), lift };
 }
 
 /** One clock, countdown and pause lifecycle for both modes; completed pilots become ghosts. */

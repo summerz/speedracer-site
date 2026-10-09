@@ -9,6 +9,27 @@ const advance = (model, seconds, controls = boost, fps = 60) => {
   for (let i = 0; i < Math.round(seconds * fps); i++) model.step(1 / fps, controls);
 };
 
+test('rings add a full battery and pads add half, capped at 150%, including during continuous boost', () => {
+  for (const kind of ['pad', 'ring']) for (const charge of [0, .2, .95, 1, 1.5]) for (const boosting of [false, true]) {
+    const pickups = kind === 'pad'
+      ? { boostPads: [{ distance: 300, center: 0, width: 5.5 }] }
+      : { boostRings: [{ distance: 300, offset: 0, radius: 3.5 }] };
+    const model = createDrivingModel({ ...track, ...pickups });
+    const withoutPickup = createDrivingModel(track);
+    Object.assign(model.state, { distance: 299.8, speed: 80, charge });
+    Object.assign(withoutPickup.state, { distance: 299.8, speed: 80, charge });
+    withoutPickup.step(1 / 120, boosting ? boost : NEUTRAL_INPUT);
+    model.step(1 / 120, boosting ? boost : NEUTRAL_INPUT);
+    assert.equal(model.state[kind === 'pad' ? 'boostPads' : 'boostRings'], 1);
+    assert.equal(model.state.charge, Math.min(1.5, withoutPickup.state.charge + (kind === 'ring' ? 1 : .5)),
+      `${kind}, charge ${charge}, boosting ${boosting}`);
+    if (boosting && charge > 0) {
+      assert.equal(model.state.boostStage, 1);
+      assert.equal(model.state.boosting, true);
+    }
+  }
+});
+
 test('continuous boost enters stage 2 at three seconds with consistent 30/60/120 Hz timing', () => {
   const states = [30, 60, 120].map((fps) => {
     const model = createDrivingModel(track);
@@ -26,6 +47,36 @@ test('continuous boost enters stage 2 at three seconds with consistent 30/60/120
   for (const state of states.slice(1)) {
     for (const key of ['boostElapsed', 'speed', 'charge', 'distance']) assert.ok(Math.abs(state[key] - states[0][key]) < 1e-8, key);
   }
+});
+
+test('150% storage spends at most 100% per press and preserves 50% for a second activation', () => {
+  for (const fps of [30, 60, 120]) {
+    const model = createDrivingModel(track);
+    model.state.charge = 1.5;
+    advance(model, 5, boost, fps);
+    assert.ok(Math.abs(model.state.charge - .5) < 1e-8);
+    assert.equal(model.state.boosting, false);
+    assert.equal(model.state.boostNeedsRelease, true);
+    advance(model, .5, boost, fps);
+    assert.ok(Math.abs(model.state.charge - .5) < 1e-8, 'holding cannot consume the reserve');
+    advance(model, 1 / fps, NEUTRAL_INPUT, fps);
+    assert.equal(model.state.boostNeedsRelease, false);
+    advance(model, .5, boost, fps);
+    assert.equal(model.state.boostStage, 1);
+    assert.ok(Math.abs(model.state.charge - .4) < 1e-8);
+    model.reset();
+    model.state.charge = 1.5;
+    advance(model, 2, NEUTRAL_INPUT, fps);
+    assert.equal(model.state.charge, 1.5, 'idle recovery must preserve reserves');
+  }
+});
+
+test('collecting a pickup while boosting does not extend the 100% allowance for that press', () => {
+  const model = createDrivingModel({ ...track, boostRings: [{ distance: 300, offset: 0, radius: 3.5 }] });
+  advance(model, 5);
+  assert.equal(model.state.boostRings, 1);
+  assert.equal(model.state.boostNeedsRelease, true);
+  assert.ok(model.state.charge > .5 && model.state.charge <= 1.5);
 });
 
 test('releasing or braking discards continuous accumulation without refilling the battery', () => {

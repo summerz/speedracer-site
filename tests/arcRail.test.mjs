@@ -127,7 +127,7 @@ test('a craft on the safe half takes no rail hit; the danger half costs exactly 
   assert.equal(model2.state.collisions, 0, 'a rail on another route is ignored');
 });
 
-test('a boost ring triggers once per lap, only for a craft centre within radius - .8, adding .3 charge and the pad speed bump', () => {
+test('a boost ring triggers once per lap, only for a craft centre within radius - .8, adding 100 percentage points of boost and the pad speed bump', () => {
   const ring = { distance: 700, offset: 5, radius: 3.5 }, track = straight({ arcRails: [], boostRings: [ring] });
   const cross = (model, offset, from) => {
     Object.assign(model.state, { distance: from, offset, speed: 40, charge: .3 }); const before = model.state.boostRings;
@@ -143,7 +143,8 @@ test('a boost ring triggers once per lap, only for a craft centre within radius 
   Object.assign(fresh.state, { distance: 690, offset: 5, speed: 40, charge: .3 });
   while (fresh.state.distance < 720) { before = { speed: fresh.state.speed, charge: fresh.state.charge, rings: fresh.state.boostRings }; fresh.step(1 / 120, NEUTRAL_INPUT); if (fresh.state.boostRings > before.rings) break; }
   assert.equal(fresh.state.boostPads, 0);
-  assert.ok(Math.abs(fresh.state.charge - before.charge - .3) < .01 && fresh.state.speed - before.speed > 17);
+  assert.ok(Math.abs(fresh.state.charge - before.charge - 1) < .01);
+  assert.ok(fresh.state.speed - before.speed > 17);
   for (const level of track.altitudeProfile.levels.keys()) {
     const m = createDrivingModel(track), altitude = track.altitudeProfile.levels[level];
     Object.assign(m.state, { altitude, targetAltitude: altitude, altitudeLevel: level }); assert.equal(cross(m, 5, 680), 1, `level ${level}`);

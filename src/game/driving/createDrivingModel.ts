@@ -57,6 +57,8 @@ export const DRIVING_TUNING = {
 
 /** Metres of clearance, or seconds since the altitude became safe, under which a pass counts as a near miss. */
 export const NEAR_MISS_MARGIN = 1.2, NEAR_MISS_LATE_SECONDS = .4, NEAR_MISS_CHARGE = .08;
+/** Pickups can bank an extra half battery; each button press spends at most one. */
+export const BOOST_CAPACITY = 1.5, BOOST_ACTIVATION_LIMIT = 1;
 
 export const NEUTRAL_INPUT: DrivingInput = { throttle: false, brake: false, steer: 0, lift: 0, boost: false };
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
@@ -81,6 +83,7 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
   const frame = track.sample(0);
   const aheadFrame = createTrackFrame();
   let rechargeDelay = 0;
+  let boostSpent = 0;
   let impactCooldown = 0;
   let noticeRemaining = 0;
   let heightSwitchSpeed = 0;
@@ -124,7 +127,7 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
   };
   const passedField = (near = false, counted = true) => {
     state.cleanStreak++; state.bestStreak = Math.max(state.bestStreak, state.cleanStreak);
-    if (near) { state.nearMisses++; state.charge = Math.min(1, state.charge + NEAR_MISS_CHARGE); }
+    if (near) { state.nearMisses++; state.charge = Math.min(BOOST_CAPACITY, state.charge + NEAR_MISS_CHARGE); }
     if (!counted) return;
     state.obstaclesPassed++;
     if (!state.notice || state.notice === 'obstacle-pass') { state.notice = 'obstacle-pass'; noticeRemaining = .8; }
@@ -145,7 +148,7 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
     reset() {
       Object.assign(state, initial);
       fieldPassages.clear(); completedPassages.clear(); margins.clear(); lateCalls.clear(); safeSince.clear(); accelerationRecovery = 0;
-      rechargeDelay = 0; impactCooldown = 0; noticeRemaining = 0; heightSwitchSpeed = 0;
+      rechargeDelay = 0; boostSpent = 0; impactCooldown = 0; noticeRemaining = 0; heightSwitchSpeed = 0;
       offTrackEpisode = false;
     },
     recover,
@@ -163,7 +166,8 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
           heightSwitchSpeed = spacing / transitionSeconds;
           // A small load surcharge per successful altitude selection, only during boost.
           if (input.boost && !input.brake && !state.boostNeedsRelease && state.charge > 0) {
-            state.charge = Math.max(0, state.charge - tuning.boostDrain * .04);
+            const load = Math.min(state.charge, tuning.boostDrain * .04, BOOST_ACTIVATION_LIMIT - boostSpent);
+            state.charge -= load; boostSpent += load;
             if (state.charge === 0) { state.boostNeedsRelease = true; interruptBoost(); }
           }
         }
@@ -179,19 +183,26 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
         accelerationRecovery = Math.max(0, accelerationRecovery - dt);
         noticeRemaining = Math.max(0, noticeRemaining - dt);
         if (noticeRemaining === 0) state.notice = null;
-        if (!input.boost && state.charge >= 0.15) state.boostNeedsRelease = false;
+        if (!input.boost) {
+          boostSpent = 0;
+          if (state.charge >= 0.15) state.boostNeedsRelease = false;
+        }
         state.boosting = input.boost && !input.brake && !state.boostNeedsRelease && state.charge > 0;
         if (state.boosting) {
           state.boostElapsed += dt;
           state.boostStageProgress = Math.min(1, state.boostElapsed / boostStage2Seconds);
           state.boostStage = state.boostElapsed + 1e-8 >= boostStage2Seconds ? 2 : 1;
-          state.charge = Math.max(0, state.charge - tuning.boostDrain * (1 + Math.abs(clamp(input.steer, -1, 1)) * .06) * dt);
+          const spent = Math.min(state.charge, BOOST_ACTIVATION_LIMIT - boostSpent,
+            tuning.boostDrain * (1 + Math.abs(clamp(input.steer, -1, 1)) * .06) * dt);
+          state.charge -= spent; boostSpent += spent;
           rechargeDelay = 0.8;
           if (state.charge <= 1e-8) { state.charge = 0; state.boostNeedsRelease = true; interruptBoost(); }
+          else if (boostSpent >= BOOST_ACTIVATION_LIMIT - 1e-8) { state.boostNeedsRelease = true; interruptBoost(); }
         } else {
           interruptBoost();
           rechargeDelay = Math.max(0, rechargeDelay - dt);
-          if (rechargeDelay === 0) state.charge = Math.min(1, state.charge + tuning.boostRecovery * dt);
+          // Passive recovery fills the ordinary battery without discarding pickup reserves.
+          if (rechargeDelay === 0 && state.charge < 1) state.charge = Math.min(1, state.charge + tuning.boostRecovery * dt);
         }
         const oldSpeed = state.speed;
         const fork = forkAt(track, state.distance);
@@ -352,7 +363,7 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
           const crossing = offsetFrom + (state.offset - offsetFrom) * clamp((at - oldDistance) / (state.distance - oldDistance), 0, 1);
           if (Math.abs(crossing - pad.center) > pad.width / 2) continue;
           fieldPassages.set(key, lap);
-          state.charge = Math.min(1, state.charge + .35);
+          state.charge = Math.min(BOOST_CAPACITY, state.charge + .5);
           state.speed = Math.max(state.speed, Math.min(tuning.boostSpeed * speedScale, state.speed + 18));
           state.boostPads++;
         }
@@ -365,7 +376,7 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
           const crossing = offsetFrom + (state.offset - offsetFrom) * clamp((at - oldDistance) / (state.distance - oldDistance), 0, 1);
           if (Math.abs(crossing - ring.offset) > RING_REACH) continue;
           fieldPassages.set(key, lap);
-          state.charge = Math.min(1, state.charge + .3);
+          state.charge = Math.min(BOOST_CAPACITY, state.charge + 1);
           state.speed = Math.max(state.speed, Math.min(tuning.boostSpeed * speedScale, state.speed + 18));
           state.boostRings++;
         }

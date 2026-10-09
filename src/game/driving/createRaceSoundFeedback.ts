@@ -10,16 +10,20 @@ export type BoostSoundCue = 'boost-full' | 'boost-complete';
 export function createRaceSoundFeedback(track: Track, warningSeconds = 1.5) {
   let charge = 1;
   let fullUse = false;
+  let needsRelease = false;
   let collisions = 0, exits = 0;
   return {
-    reset() { charge = 1; fullUse = false; collisions = 0; exits = 0; },
+    reset() { charge = 1; fullUse = false; needsRelease = false; collisions = 0; exits = 0; },
     update(phase: RacePhase, state: DrivingState) {
       const cues: BoostSoundCue[] = [];
       if (phase !== 'running') return { cues, warning: null as AltitudeWarning };
       if (charge >= .999999 && state.charge < charge && state.boosting) fullUse = true;
       if (state.collisions > collisions || state.offTrackExits > exits) fullUse = false;
       collisions = state.collisions; exits = state.offTrackExits;
-      if (charge > 0 && state.charge === 0 && fullUse) { cues.push('boost-complete'); fullUse = false; }
+      if (fullUse && ((charge > 0 && state.charge === 0) || (state.boostNeedsRelease && !needsRelease))) {
+        cues.push('boost-complete'); fullUse = false;
+      }
+      needsRelease = Boolean(state.boostNeedsRelease);
       if (state.charge > 0 && !state.boosting) fullUse = false;
       if (charge < .999999 && state.charge >= .999999) cues.push('boost-full');
       charge = state.charge;
