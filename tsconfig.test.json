@@ -8,6 +8,7 @@
   },
   "include": [
     "src/platform/analytics.ts",
+    "src/platform/automaticQuality.ts",
     "src/platform/gamepadInput.ts",
     "src/game/environment/createNightSky.ts",
     "src/game/environment/createRaceWeather.ts",
