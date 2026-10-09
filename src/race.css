@@ -155,12 +155,6 @@
 .driving-overlay.is-inset .race-countdown { top:18%; }
 .driving-overlay.is-inset .race-countdown span { font-size:7px; letter-spacing:1px; }
 .driving-overlay.is-inset .race-countdown strong { font-size:42px; }
-.race-result .result-status { font:11px 'IBM Plex Mono',monospace; color:var(--accent); margin-top:16px; }
-.result-total { display:block; font:600 48px/1.1 'Barlow Condensed',sans-serif; font-variant-numeric:tabular-nums; color:#e0fff7; margin-bottom:18px; }
-.result-laps { list-style:none; padding:0; margin:0 0 16px; border-top:1px solid #58717d50; }
-.result-laps li { display:flex; justify-content:space-between; gap:12px; padding:10px 0; border-bottom:1px solid #58717d50; font:12px 'IBM Plex Mono',monospace; }
-.result-laps li span { color:#9bb8c5; }
-.race-result .record-warning { color:#ffd0a3; font-size:11px; }
 .dev-weather { grid-template-columns:1fr; margin:10px 0; }
 .dev-weather button { display:flex; align-items:center; justify-content:space-between; gap:16px; text-align:left; }
 .dev-weather button small { margin-left:8px; color:#91a9b7; font-size:10px; }
@@ -276,12 +270,6 @@ button:focus-visible { outline:2px solid #c9f9f2; outline-offset:3px; }
 
 .mode-picker>div { grid-template-columns:repeat(2,1fr); }
 .rank-readout { color:var(--accent); font-size:15px; font-weight:600; white-space:nowrap; }
-.race-standings { list-style:none; margin:0 0 14px; padding:0; font-variant-numeric:tabular-nums; }
-.race-standings li { display:grid; grid-template-columns:18px 1fr auto; gap:8px; align-items:center; padding:9px 0; border-bottom:1px solid #58717d40; font-size:11px; color:#adc1cc; }
-.race-standings li.is-player { color:var(--accent); }
-.standing-name { display:flex; align-items:center; gap:6px; }
-.standing-name i { width:6px; height:6px; flex:none; }
-.standing-name small { display:block; color:#9bb4c1; font-size:10px; margin-top:3px; }
 .ai-roster { margin:14px 0; padding:10px 12px; background:#0c202b; border:1px solid #58717d50; }
 .ai-roster ol { margin:6px 0 0; padding:0; list-style:none; }
 .ai-roster li { display:grid; grid-template-columns:5px 1fr auto; align-items:center; gap:9px; padding:7px 0; }
@@ -290,7 +278,6 @@ button:focus-visible { outline:2px solid #c9f9f2; outline-offset:3px; }
 .ai-roster strong { display:block; color:#d7e9ec; font:600 13px 'Barlow Condensed',sans-serif; letter-spacing:.6px; }
 .ai-roster small { display:block; color:#9bb4c1; font-size:10px; margin-top:2px; }
 .ai-rating { color:#a6c6d0; font:10px 'IBM Plex Mono',monospace; }
-#competition-results #standings-status { color:var(--accent); font:10px 'IBM Plex Mono',monospace; margin:12px 0 4px; }
 @media(max-width:600px) { .telemetry-row { gap:12px; }.rank-readout { font-size:13px; } }
 .race-map-legend { position:absolute; left:7px; bottom:7px; color:#d0e8eb; }
 
@@ -321,19 +308,6 @@ button:focus-visible { outline:2px solid #c9f9f2; outline-offset:3px; }
 .fork-guide { margin:10px -45px 0; text-align:center; color:#bcefe7; font:11px/1.4 'IBM Plex Mono',monospace; }
 .fork-guide[data-selected='false'] { color:#fff0b4; }
 .driving-overlay.is-inset .fork-guide { margin:4px -16px 0; font-size:8px; }
-.race-result .reward-summary { padding:14px 0; margin:14px 0; border-block:1px solid #58717d50; }
-.reward-total { display:flex; align-items:baseline; justify-content:space-between; gap:12px; flex-wrap:wrap; }
-.reward-total > span { font-size:12px; color:#adc6ce; }
-.race-result .reward-total strong { color:#baffeb; font-size:clamp(28px,5vw,40px); line-height:1.1; font-variant-numeric:tabular-nums; }
-.reward-total small { font-size:16px; }
-.race-result .reward-balance { margin:6px 0; font-size:11px; color:#a5bbc4; text-align:right; }
-.race-result .reward-placement { display:inline-block; margin:4px 0 8px; padding:6px 10px; border:1px solid #e9c96b66; border-radius:4px; background:#e9c96b0b; color:#ffe29a; font-size:13px; }
-.reward-breakdown { font-size:11px; color:#b5c9d1; }
-.reward-breakdown summary { cursor:pointer; min-height:32px; padding-block:8px; }
-.reward-breakdown summary:focus-visible { outline:2px solid #80ffe0; outline-offset:2px; }
-.reward-breakdown dl { margin:4px 0 0; }
-.reward-breakdown dl > div { display:flex; justify-content:space-between; gap:12px; padding-block:3px; }
-.reward-breakdown dd { margin:0; font-variant-numeric:tabular-nums; }
 /* Intro title card and finish splash; both leave the pause menu hidden until they end. */
 .race-intro { position:absolute; left:50%; bottom:0; z-index:3; transform:translateX(-50%); width:min(760px,calc(100% - 32px)); padding:64px 16px max(30px,env(safe-area-inset-bottom)); display:grid; justify-items:center; gap:6px; text-align:center; pointer-events:none; text-shadow:0 2px 14px #000,0 0 28px #000a; background:radial-gradient(ellipse at 50% 85%,#030b16e6,#030b16a6 45%,transparent 72%); animation:race-intro-in .8s cubic-bezier(.2,.8,.2,1) both; }
 .race-intro p { margin:0; }
@@ -378,3 +352,102 @@ button:focus-visible { outline:2px solid #c9f9f2; outline-offset:3px; }
 .race-announcement[data-kind='final-lap'] { top:max(150px,19%); }
 @media (max-width:600px) { .race-streak { font-size:15px; top:34%; } }
 @media (max-height:500px) { .race-callout { top:56px; font-size:20px; } .race-callout[data-kind='perfect'] { font-size:24px; } .race-announcement[data-kind='final-lap'] { top:84px; } .race-announcement[data-kind='final-lap'] strong { font-size:28px; } .race-announcement[data-kind='final-lap'] span { display:none; } .race-streak { font-size:14px; top:30%; } .race-nearmiss { top:60%; font-size:18px; } }
+
+/* Full-screen race result: applies only while the race is finished; start and pause keep the left dialog. */
+.drive-screen[data-phase='finished'] :is(.drive-hud,.race-items,.hazard-edges,.race-pause,.race-header,.race-countdown,.race-announcement,.race-callout,.race-nearmiss,.race-streak,.race-notice,.focus-feedback) { display:none !important; }
+.drive-screen[data-phase='finished'] .drive-overlay { --gain:#4ff0a6; --loss:#ff7a6b; --gold:#ffd66b; padding:max(40px,env(safe-area-inset-top)) max(56px,env(safe-area-inset-right)) max(32px,env(safe-area-inset-bottom)) max(56px,env(safe-area-inset-left)); overflow-y:auto; pointer-events:auto;
+  background:radial-gradient(120% 70% at 50% 50%,transparent 35%,#050a10bb 100%),linear-gradient(180deg,#050a10cc 0%,#050a1055 30%,transparent 42%,transparent 58%,#050a10f2 76%); }
+.drive-screen[data-phase='finished'] .drive-dialog { align-self:stretch; display:grid; width:100%; max-height:none; min-height:100%; padding:0; overflow:visible; background:none; border:0;
+  grid-template:auto auto 1fr auto auto / 1.25fr 1fr 1fr; gap:18px 14px; }
+.drive-screen[data-phase='finished'] .drive-dialog > :not(.result-title):not(.race-flow-actions):not(.race-result) { display:none; }
+.drive-screen[data-phase='finished'] .race-result { display:contents; }
+.drive-screen[data-phase='finished'] .result-title { grid-area:1/1/2/3; }
+.drive-screen[data-phase='finished'] .drive-dialog .result-title .eyebrow { font:500 11px 'IBM Plex Mono',monospace; letter-spacing:1.8px; color:var(--accent); }
+.drive-screen[data-phase='finished'] .drive-dialog .race-course-name { margin:6px 0 0; font:600 44px/1 'Barlow Condensed',sans-serif; letter-spacing:.5px; color:#e9f2f4; }
+.drive-screen[data-phase='finished'] .result-verdict { grid-area:1/2/2/4; justify-self:end; text-align:right; }
+.result-stars { font-size:30px; line-height:1.1; letter-spacing:4px; color:var(--gold,#ffd66b); text-shadow:0 0 18px #ffd66b88; }
+.result-stars .off { color:#ffffff30; text-shadow:none; }
+.drive-screen[data-phase='finished'] .drive-dialog #campaign-result { margin:6px 0 0; font-size:13px; line-height:1.5; color:#cfe6e2; }
+.drive-screen[data-phase='finished'] .drive-dialog #campaign-result:empty { display:none; }
+.drive-screen[data-phase='finished'] .result-hero { grid-area:2/1/3/-1; text-align:center; margin-top:-46px; }
+.drive-screen[data-phase='finished'] .drive-dialog .result-hero .result-status { display:inline-block; margin:0; padding:5px 12px; border-radius:3px; font:500 12px/1.4 'IBM Plex Mono',monospace; letter-spacing:2.5px; color:#08131a; background:var(--accent); box-shadow:0 0 24px #56dacf66; }
+.result-status[data-kind='best'] { background:var(--gold,#ffd66b) !important; box-shadow:0 0 24px #ffd66b66 !important; }
+.result-status[data-kind='limit'] { background:#ff9a6b !important; box-shadow:0 0 24px #ff7a6b66 !important; }
+.drive-screen[data-phase='finished'] .result-total { display:block; margin:10px 0 0; font:700 108px/.95 'Barlow Condensed',sans-serif; font-variant-numeric:tabular-nums; letter-spacing:1px; color:#e9f2f4; text-shadow:0 0 40px #56dacf55; }
+.result-total small { margin-left:6px; font-size:.42em; color:#9fc1c6; }
+.drive-screen[data-phase='finished'] .drive-dialog .result-sub { margin:4px 0 0; font:500 14px/1.5 'IBM Plex Mono',monospace; color:#b8d2d4; }
+.result-sub .gain,.result-laps .gain { color:var(--gain,#4ff0a6); } .result-sub .loss,.result-laps .loss { color:var(--loss,#ff7a6b); }
+.result-card { align-self:stretch; min-width:0; overflow:auto; padding:16px 18px; background:#0b1720cc; border:1px solid #58717d40; border-radius:8px; backdrop-filter:blur(10px); }
+.drive-screen[data-phase='finished'] .card-laps { grid-area:4/1; } .drive-screen[data-phase='finished'] .card-stats { grid-area:4/2; } .drive-screen[data-phase='finished'] .card-reward { grid-area:4/3; }
+.result-card h3 { display:flex; justify-content:space-between; gap:8px; margin:0 0 12px; font:500 10px 'IBM Plex Mono',monospace; letter-spacing:1.8px; color:var(--muted); }
+.result-card h3 span+span { color:#6f8590; letter-spacing:.5px; }
+.result-card h3 span+span:empty { display:none; }
+.result-laps { display:grid; gap:7px; list-style:none; margin:0; padding:0; }
+.result-laps li { display:grid; grid-template-columns:52px 1fr auto 62px; align-items:center; gap:10px; font:500 13px 'IBM Plex Mono',monospace; }
+.result-laps .k { color:var(--muted); font-size:11px; }
+.result-laps .d { text-align:right; font-size:12px; }
+.result-laps .is-fastest .v { color:#fff; } .result-laps .is-fastest .k::after { content:' ★'; color:var(--gold,#ffd66b); }
+.result-laps .sectors { display:flex; gap:3px; height:8px; }
+.result-laps .sectors i { flex:1; border-radius:2px; background:#ffffff18; }
+.result-laps .sectors i.g { background:var(--gain,#4ff0a6); box-shadow:0 0 8px #4ff0a666; } .result-laps .sectors i.r { background:var(--loss,#ff7a6b); }
+.drive-screen[data-phase='finished'] .drive-dialog #result-best { margin:10px 0 0; font-size:11px; line-height:1.5; color:#7f959e; }
+.drive-screen[data-phase='finished'] .drive-dialog #result-best:empty { display:none; }
+.drive-screen[data-phase='finished'] #competition-results #standings-status { display:none; }
+.race-standings { display:grid; gap:4px; list-style:none; margin:0; padding:0; font-variant-numeric:tabular-nums; }
+.race-standings li { display:grid; grid-template-columns:26px 1fr auto; gap:8px; align-items:center; padding:3px 6px; border-radius:4px; font:500 13px 'IBM Plex Mono',monospace; color:#c9dadf; }
+.race-standings li time { color:#9db3ba; font-size:12px; }
+.race-standings li.is-player { background:#56dacf22; outline:1px solid #56dacf66; color:#fff; }
+.race-standings li.is-cutoff { margin-bottom:3px; padding-bottom:6px; border-bottom:1px dashed #ffd66b88; border-radius:0; }
+.standing-name { display:flex; align-items:center; gap:8px; min-width:0; }
+.standing-name i { width:10px; height:10px; flex:none; border-radius:2px; }
+.standing-name small { display:none; }
+.result-stats { display:grid; grid-template-columns:1fr 1fr; gap:10px 14px; }
+.result-stats b { display:block; font:600 30px/1 'Barlow Condensed',sans-serif; font-variant-numeric:tabular-nums; }
+.result-stats span { font-size:11px; color:var(--muted); }
+.result-stats .warn b { color:var(--loss,#ff7a6b); } .result-stats .good b { color:var(--gain,#4ff0a6); }
+.card-reward .reward-summary { margin:0; padding:0; border:0; }
+.reward-total { display:flex; justify-content:space-between; align-items:baseline; gap:12px; flex-wrap:wrap; }
+.reward-total strong { font:600 40px/1 'Barlow Condensed',sans-serif; color:#baffeb; font-variant-numeric:tabular-nums; }
+.reward-total small { font-size:16px; }
+.reward-total span { font-size:11px; color:#a5bbc4; }
+.card-reward .reward-placement { display:inline-block; margin:8px 0 0; padding:4px 10px; border:1px solid #e9c96b66; border-radius:4px; background:#e9c96b0b; color:#ffe29a; font-size:12px; }
+.reward-breakdown { display:grid; gap:5px; margin:12px 0 0; font-size:12px; color:#b9cdd2; }
+.reward-breakdown > div { display:flex; justify-content:space-between; gap:12px; }
+.reward-breakdown dd { margin:0; font:12px 'IBM Plex Mono',monospace; font-variant-numeric:tabular-nums; }
+.reward-breakdown .neg { color:var(--loss,#ff7a6b); } .reward-breakdown .neg dd { color:var(--loss,#ff7a6b); }
+.drive-screen[data-phase='finished'] .drive-dialog #result-penalties { margin:10px 0 0; font:11px/1.5 'IBM Plex Mono',monospace; color:#ff9d90; }
+.drive-screen[data-phase='finished'] .drive-dialog .record-warning { margin:8px 0 0; font-size:11px; color:#ffd0a3; }
+.card-reward #reward-retry { margin-top:10px; }
+.drive-screen[data-phase='finished'] #drive-overlay .race-flow-actions { grid-area:5/1/6/-1; display:flex; flex-wrap:wrap; justify-content:center; gap:10px; margin:0; }
+.drive-screen[data-phase='finished'] #drive-overlay .race-flow-actions :is(#campaign-next,#drive-start,#race-hangar,#result-shop,#race-restart) { width:auto; min-height:0; margin:0; padding:13px 22px; display:flex; align-items:center; justify-content:center; gap:10px; font:600 15px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; color:#e9f2f4; background:#0b1720cc; border:1px solid #58717d80; border-radius:6px; }
+.drive-screen[data-phase='finished'] #drive-overlay .race-flow-actions :is(#campaign-next,#drive-start,#race-hangar,#result-shop,#race-restart):hover { background:#17303c; border-color:#7bafb880; }
+.drive-screen[data-phase='finished'] #drive-overlay .race-flow-actions #campaign-next,
+.drive-screen[data-phase='finished'] #drive-overlay .race-flow-actions:not(:has(#campaign-next:not([hidden]))) #drive-start { padding:13px 34px; color:#06231f; background:var(--accent); border-color:var(--accent); box-shadow:0 0 28px #56dacf55; }
+@keyframes result-in { from { opacity:0; transform:translateY(8px); } }
+.drive-screen[data-phase='finished'] :is(.result-hero,.result-card,.result-verdict) { animation:result-in .45s ease-out both; }
+@media (prefers-reduced-motion:reduce) { .drive-screen[data-phase='finished'] :is(.result-hero,.result-card,.result-verdict) { animation:none; } }
+@media (max-height:700px) and (min-width:601px) { .drive-screen[data-phase='finished'] .result-total { font-size:76px; } .drive-screen[data-phase='finished'] .result-hero { margin-top:-24px; } }
+@media (max-width:600px) {
+  .drive-screen[data-phase='finished'] .drive-overlay { padding:20px 16px calc(200px + env(safe-area-inset-bottom));
+    background:linear-gradient(180deg,#050a10cc 0%,#050a1066 22%,#050a1066 30%,#050a10e6 55%,#050a10f2 100%); }
+  .drive-screen[data-phase='finished'] .drive-dialog { display:flex; flex-direction:column; gap:14px; }
+  .drive-screen[data-phase='finished'] .result-title { order:1; } .drive-screen[data-phase='finished'] .result-verdict { order:2; justify-self:auto; text-align:left; }
+  .drive-screen[data-phase='finished'] .result-hero { order:3; margin:0 0 22vh; text-align:left; }
+  .drive-screen[data-phase='finished'] .card-laps { order:4; } .drive-screen[data-phase='finished'] .card-stats { order:5; } .drive-screen[data-phase='finished'] .card-reward { order:6; }
+  .drive-screen[data-phase='finished'] .drive-dialog .race-course-name { font-size:34px; }
+  .drive-screen[data-phase='finished'] .result-total { font-size:66px; }
+  .drive-screen[data-phase='finished'] #drive-overlay .race-flow-actions { position:fixed; left:0; right:0; bottom:0; z-index:5; padding:12px 16px calc(12px + env(safe-area-inset-bottom)); background:linear-gradient(180deg,transparent,#050a10 35%); }
+  .drive-screen[data-phase='finished'] #drive-overlay .race-flow-actions :is(#campaign-next,#drive-start,#race-hangar,#result-shop,#race-restart) { flex:1 1 40%; padding:12px; }
+  .drive-screen[data-phase='finished'] #drive-overlay .race-flow-actions #campaign-next,
+  .drive-screen[data-phase='finished'] #drive-overlay .race-flow-actions:not(:has(#campaign-next:not([hidden]))) #drive-start { flex-basis:100%; }
+}
+
+.result-zone { display:none; }
+.drive-screen[data-phase='finished'] .result-zone { display:inline; }
+.drive-screen[data-phase='finished'] .drive-dialog #result-penalties { display:none; }
+#campaign-result .pass { color:#4ff0a6; font-weight:600; }
+#campaign-result small { display:block; margin-top:3px; font-size:11px; color:#8c9ba4; }
+.drive-screen[data-phase='finished'] .drive-dialog .result-title .eyebrow { display:block; }
+@media (max-width:600px) { .result-card { flex:none; overflow:visible; } }
+@media (max-width:600px) { .drive-screen[data-phase='finished'] .drive-overlay { padding-bottom:0; } .drive-screen[data-phase='finished'] .drive-dialog { padding-bottom:calc(200px + env(safe-area-inset-bottom)); } }
+@media (max-width:600px) { .drive-screen[data-phase='finished'] .drive-dialog { align-self:flex-start; height:auto; } }
