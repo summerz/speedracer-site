@@ -135,6 +135,7 @@
 .course-stars-summary .course-stars { font-size:22px; }
 .campaign-difficulty { display:grid; gap:6px; }
 .campaign-difficulty > span { color:#99adb9; font-size:11px; }
+.campaign-difficulty .key-badge { margin-left:4px; }
 .course-challenges { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:4px; padding:3px; background:#0b1c28; border:1px solid #58717d70; border-radius:7px; }
 .course-challenges button { appearance:none; display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:2px 8px; min-height:40px; padding:4px 8px; color:#99adb9; background:none; border:0; border-radius:5px; cursor:pointer; font:inherit; font-size:13px; }
 .course-challenges .diff-stars { font-size:12px; letter-spacing:1px; }
@@ -355,5 +356,3 @@
 }
 @media (max-width:480px) { .course-routes > div { grid-template-columns:1fr; gap:10px; } .campaign-modes button { flex-wrap:wrap; } }
 @media (max-width:360px) { .campaign-craft-copy { display:none; } }
-/* M picks difficulty on the track detail view, so the music button's badge would lie. */
-body:has(#view-detail:not([hidden])) [data-music-toggle] .key-badge { display:none; }

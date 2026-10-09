@@ -106,7 +106,7 @@ export function createBoostRings(track: Track, rails: readonly ArcRail[], random
 /** Craft over the electrified half? The craft's whole width counts. */
 export const arcRailHit = (offset: number, side: -1 | 1) => offset * side > -CRAFT_HALF_WIDTH;
 
-/** HUD cue for the next rail segment on this route (200 m or 3 s ahead, whichever is larger; 0 inside one), unless a nearer hazard (`hazardDistance`) exists. */
+/** HUD cue for the next rail segment on this route (200 m or 4.5 s ahead, whichever is larger; 0 inside one), unless a nearer hazard (`hazardDistance`) exists. */
 export function arcRailGuide(track: Track, distance: number, offset: number, speed: number, routeId?: string | null, hazardDistance: number | null = null) {
   let best: { distance: number; side: -1 | 1; safe: boolean } | null = null;
   for (const rail of track.arcRails ?? []) {
@@ -114,7 +114,7 @@ export function arcRailGuide(track: Track, distance: number, offset: number, spe
     for (const segment of rail.segments) {
       const start = rail.distance + segment.at;
       let gap = start - distance; gap += Math.ceil((-gap - segment.length) / track.length) * track.length;
-      if (gap <= Math.max(200, speed * 3) && (!best || Math.max(0, gap) < best.distance))
+      if (gap <= Math.max(200, speed * 4.5) && (!best || Math.max(0, gap) < best.distance))
         best = { distance: Math.max(0, gap), side: segment.side, safe: !arcRailHit(offset, segment.side) };
     }
   }

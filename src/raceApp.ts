@@ -1,8 +1,10 @@
 import { RACE_CHALLENGES, challengeStars, challengeStarPenalty, type RaceChallengeId } from './game/track/raceChallenge';
 import { NIGHT_ENVIRONMENTS, RAIN_INTENSITIES, selectRaceEnvironment, selectRainIntensity } from './game/environment/raceEnvironment';
+import { hazardEdgeAlert } from './game/driving/hazardEdgeAlert';
 import { AI_OPPONENT_COUNT } from './game/driving/aiRoster';
 import { RIVAL_ITEMS } from './game/progression/catalog';
 import type { RivalItemId } from './game/progression/catalog';
+import { sfxPreference } from './game/audio/sfxPreference';
 import { soundtrack } from './game/audio/soundtrack';
 import { OFF_TRACK_PENALTY_POINTS, COLLISION_PENALTY_POINTS, OBSTACLE_COLLISION_PENALTY_POINTS, CLEAN_HALF_LAP_POINTS } from './game/driving/raceScoring';
 import { RENDER_QUALITIES } from './platform/renderQuality';
@@ -43,6 +45,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
       <div id="race-scene" class="race-scene"></div>
       <div id="race-impact" class="race-impact" aria-hidden="true"></div>
       <div id="race-boost-flash" class="race-boost-flash" aria-hidden="true"></div>
+      <div class="hazard-edges" aria-hidden="true"><i id="edge-left" class="hazard-edge" data-side="left" hidden></i><i id="edge-right" class="hazard-edge" data-side="right" hidden></i><b id="edge-arrow" class="hazard-arrow" hidden></b></div>
       <section id="race-intro" class="race-intro" aria-label="코스 소개" hidden><p class="intro-eyebrow"></p><h2 class="intro-name"></h2><p class="intro-meta"></p><p class="intro-skip">건너뛰기 · 아무 키나 탭</p></section>
       <div id="race-splash" class="race-splash" role="status" hidden><strong></strong><span></span><em></em></div>
       <header class="race-header">
@@ -83,7 +86,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
       </nav>
       <dialog id="race-preferences" class="race-preferences" aria-labelledby="preferences-title">
         <header><h2 id="preferences-title">설정</h2><button type="button" id="preferences-close" aria-label="설정 닫기">닫기</button></header>
-        <div class="preference-options"><button type="button" id="race-bloom" aria-pressed="true"><span>네온 발광 <small>Bloom</small></span></button><button type="button" id="race-sound" aria-pressed="true"><span>주행 효과음</span></button><button type="button" id="race-music" aria-pressed="true" aria-keyshortcuts="M"><span>배경 음악 <small>로비 1곡 · 경주 8곡</small></span><kbd class="key-badge">M</kbd></button><button type="button" id="race-haptics" aria-pressed="true"><span>진동</span></button></div>
+        <div class="preference-options"><button type="button" id="race-bloom" aria-pressed="true"><span>네온 발광 <small>Bloom</small></span></button><button type="button" id="race-sound" aria-pressed="true" aria-keyshortcuts="N"><span>주행 효과음 <kbd class="key-badge">N</kbd></span></button><button type="button" id="race-music" aria-pressed="true" aria-keyshortcuts="M"><span>배경 음악 <kbd class="key-badge">M</kbd> <small>로비 1곡 · 경주 8곡</small></span></button><button type="button" id="race-haptics" aria-pressed="true"><span>진동</span></button></div>
         <div class="render-options"><label for="race-quality">렌더링 품질</label><select id="race-quality">${Object.entries(RENDER_QUALITIES).map(([id, option]) => `<option value="${id}" ${id === 'balanced' ? 'selected' : ''}>${option.label}</option>`).join('')}</select></div>
         <div class="preference-options"><button type="button" id="race-haze" aria-pressed="false"><span>배기 아지랑이 <small>추적 시점</small></span></button></div>
         <p class="quality-hint">아지랑이는 배기 주변에만 적용합니다. 성능이 낮으면 끄거나 ‘성능 우선’을 선택하세요.</p>
@@ -111,6 +114,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
   const soundButton = get<HTMLButtonElement>('race-sound');
   const musicButton = get<HTMLButtonElement>('race-music');
   musicButton.setAttribute('aria-pressed', String(soundtrack.enabled));
+  soundButton.setAttribute('aria-pressed', String(sfxPreference.enabled));
   const hapticsButton = get<HTMLButtonElement>('race-haptics');
   const coarsePointer = window.matchMedia('(any-pointer: coarse)');
   const refreshHaptics = () => {
@@ -429,6 +433,15 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
       heightGuide.classList.toggle('height-alert', !corridor.safe);
       heightGuide.classList.toggle('height-urgent', !corridor.safe && corridor.distance < Math.max(35, state.speed * 1.5));
     }
+    const edges = state.phase === 'running' && !state.cinematic ? hazardEdgeAlert({ corridor: state.corridor, arcRail: state.arcRail, speed: state.speed }) : { left: null, right: null, arrow: null };
+    for (const side of ['left', 'right'] as const) {
+      const el = get(`edge-${side}`), edge = edges[side];
+      el.hidden = !edge;
+      if (edge) { el.dataset.tone = edge.tone; el.dataset.level = edge.level; }
+    }
+    const arrow = get('edge-arrow'), arrowTone = edges.arrow && edges[edges.arrow === 'left' ? 'right' : 'left'];
+    arrow.hidden = !edges.arrow;
+    if (edges.arrow) { arrow.dataset.side = edges.arrow; arrow.dataset.tone = arrowTone?.tone ?? 'corridor'; arrow.textContent = edges.arrow === 'left' ? '◀◀' : '▶▶'; }
     const forkGuide = get('race-fork');
     forkGuide.hidden = !state.fork || state.phase !== 'running';
     if (state.fork) {
@@ -646,7 +659,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
   }, listen);
   soundButton.addEventListener('click', () => {
     const enabled = soundButton.getAttribute('aria-pressed') !== 'true';
-    soundButton.setAttribute('aria-pressed', String(enabled)); race?.setSoundEnabled(enabled);
+    soundButton.setAttribute('aria-pressed', String(enabled)); sfxPreference.set(enabled); race?.setSoundEnabled(enabled);
   }, listen);
   musicButton.addEventListener('click', () => {
     const enabled = musicButton.getAttribute('aria-pressed') !== 'true';
