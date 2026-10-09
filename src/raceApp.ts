@@ -3,7 +3,7 @@ import { NIGHT_ENVIRONMENTS, RAIN_INTENSITIES, selectRaceEnvironment, selectRain
 import { hazardEdgeAlert } from './game/driving/hazardEdgeAlert';
 import { AI_OPPONENT_COUNT } from './game/driving/aiRoster';
 import { BOOST_CAPACITY } from './game/driving/createDrivingModel';
-import { AWAKENING_CAPACITY } from './game/driving/awakening';
+import { AWAKENING_CAPACITY, AWAKENING_SECONDS } from './game/driving/awakening';
 import { RIVAL_ITEMS } from './game/progression/catalog';
 import type { RivalItemId } from './game/progression/catalog';
 import { sfxPreference } from './game/audio/sfxPreference';
@@ -39,6 +39,10 @@ const formatTime = (seconds: number) => {
   return `${Math.floor(ms / 60000).toString().padStart(2, '0')}:${Math.floor(ms / 1000 % 60).toString().padStart(2, '0')}.${(ms % 1000).toString().padStart(3, '0')}`;
 };
 
+const CORE_ICON = '<svg viewBox="0 0 32 36" aria-hidden="true"><path class="cube-top" d="M16 2 30 10 16 18 2 10Z"/><path class="cube-left" d="M2 10 16 18 16 34 2 26Z"/><path class="cube-right" d="M16 18 30 10 30 26 16 34Z"/></svg>';
+const AWAKENING_ICON = '<svg viewBox="0 0 36 36" aria-hidden="true"><path d="m18 5 5 13-5 13-5-13Z" fill="currentColor"/><path d="m12 15-9-6 3 11 5 4m13-9 9-6-3 11-5 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>';
+const BOOST_ICON = '<svg viewBox="0 0 16 20" aria-hidden="true"><path d="M9 1 2 11h5l-1 8 8-11H9Z" fill="currentColor"/></svg>';
+
 export function mountRace(root: HTMLDivElement, onExit: () => void, configuration: DroneConfiguration = DEFAULT_DRONE_CONFIGURATION, store?: ProgressStore, onShop?: () => void, campaign?: { track: TrackDefinition; mode: RaceMode; challenge: RaceChallengeId }): () => void {
   let focusSlots = store ? Math.min(store.snapshot().focusSlots, store.snapshot().focus) : 0;
   document.title = 'Speedracer — 타임어택';
@@ -57,9 +61,10 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
       <div class="driving-overlay"><div id="race-announcement" class="race-announcement" role="status" aria-live="polite" hidden><strong></strong><span></span><em id="race-clean" hidden>클린 +${CLEAN_HALF_LAP_POINTS}P</em></div><p id="race-callout" class="race-callout" role="status" hidden></p><p id="race-nearmiss" class="race-nearmiss" aria-hidden="true" hidden>NEAR MISS</p><p id="race-streak" class="race-streak" aria-hidden="true" hidden></p><p id="race-notice" class="race-notice" role="status" aria-live="polite"></p><div id="race-countdown" class="race-countdown" role="status" aria-live="assertive" hidden><span>READY</span><strong>3</strong></div>
       <div class="race-items"><button id="race-focus" type="button" class="race-focus" aria-keyshortcuts="V" hidden>집중 모드<kbd class="key-badge">V</kbd></button>${RIVAL_ITEMS.map(item => `<button type="button" id="race-${item.id}" class="race-focus" data-use-item="${item.id}" hidden>${item.name}</button>`).join('')}</div><p id="focus-feedback" class="focus-feedback" role="status" aria-live="polite"></p><footer class="drive-hud" aria-label="고도와 부스트 계기판">
         <aside class="height-guide" aria-label="고도 안내: 선택 단계, 민트색 통과 가능, 빨강 통과 불가, 주황 전환 중"><div id="height-level" class="height-bars"></div><strong id="height-instruction"></strong></aside>
-        <div class="awakening-control"><div class="awakening-heading"><strong id="awakening-label">각성</strong><kbd class="key-badge">W</kbd></div><div id="race-awakening" class="awakening-cores" role="group" aria-label="각성 코어 보관함">${Array.from({ length: AWAKENING_CAPACITY }, () => `<button type="button" data-awakening-core aria-keyshortcuts="W" disabled hidden><svg viewBox="0 0 32 36" aria-hidden="true"><path class="cube-top" d="M16 2 30 10 16 18 2 10Z"/><path class="cube-left" d="M2 10 16 18 16 34 2 26Z"/><path class="cube-right" d="M16 18 30 10 30 26 16 34Z"/></svg></button>`).join('')}<span id="awakening-empty" class="awakening-empty" aria-hidden="true">코어 없음</span></div><span id="awakening-status" role="status" aria-live="polite">황금 코어를 획득하세요</span></div>
-        <div class="boost-readout"><div class="hud-pair"><span class="hud-label">BOOST</span><span id="boost-value" class="mono">100%</span></div><div id="boost-meter" class="boost-meter" role="progressbar" aria-label="부스트 잔량 (50%씩 3칸, 최대 150%)" aria-valuemin="0" aria-valuemax="150" aria-valuenow="100"><span></span></div><div id="boost-stage-meter" class="boost-stage-meter" role="progressbar" aria-label="부스트 2단계 축적" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span></span></div><span id="boost-status">Space 유지 · 3초 후 2단계</span></div>
-      <p id="race-fork" class="fork-guide" hidden></p></footer></div>
+        <div class="drive-controls">
+        <div class="awakening-control" hidden><button id="race-awakening" class="awakening-cores" type="button" aria-label="각성 사용" aria-keyshortcuts="W" disabled><span data-awakening-active hidden>${AWAKENING_ICON}</span>${Array.from({ length: AWAKENING_CAPACITY }, () => `<span data-awakening-core hidden>${CORE_ICON}</span>`).join('')}<span class="awakening-duration" aria-hidden="true" hidden><i></i></span></button><kbd class="key-badge">W</kbd></div>
+        <div class="boost-readout"><div class="hud-pair"><span class="boost-icon" role="img" aria-label="부스트">${BOOST_ICON}</span><span id="boost-value" class="mono">100%</span></div><div id="boost-meter" class="boost-meter" role="progressbar" aria-label="부스트 잔량 (50%씩 3칸, 최대 150%)" aria-valuemin="0" aria-valuemax="150" aria-valuenow="100"><span></span></div><div id="boost-stage-meter" class="boost-stage-meter" role="progressbar" aria-label="부스트 2단계 축적" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span></span></div><span id="boost-status">Space 유지 · 3초 후 2단계</span></div>
+        </div><p id="race-fork" class="fork-guide" hidden></p></footer></div>
       <section id="drive-overlay" class="drive-overlay" aria-labelledby="drive-overlay-title">
         <div class="drive-dialog">
           <p id="race-mode-title" class="eyebrow">NEON CIRCUIT · TIME ATTACK</p><h1 id="race-course-name" class="race-course-name"></h1><h2 id="drive-overlay-title">레이스 준비</h2>
@@ -99,7 +104,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
           <div class="drive-keys"><span>자동 가속 · <kbd>S</kbd> 감속</span><span><kbd>A</kbd> <kbd>D</kbd> 좌우 조향</span><span><kbd>↓</kbd> <kbd>↑</kbd> 고도 한 단계 전환</span><span><kbd>Space</kbd> 길게 눌러 부스트</span><span><kbd>W</kbd> 코어 각성</span><span><kbd>C</kbd> 기체·콕핏 전환</span><span><kbd>X</kbd> 트랙 PIP·자리 교환·닫기</span><span><kbd>V</kbd> 아이템 사용</span><span><kbd>Esc</kbd> 일시정지·계속하기</span><span>대기·일시정지 중 <kbd>S</kbd> 설정</span></div>
           <p class="touch-help">자동으로 가속합니다. 왼쪽 조이스틱은 좌우 조향, 아래로 당기면 감속합니다. 대각선으로 두 조작을 함께 할 수 있습니다.<br />오른쪽 BOOST를 누른 채 위로 길게 밀수록 높게, 아래로 밀수록 낮게 고도를 선택합니다. 여러 단계도 한 번에 바꿀 수 있습니다. 손을 떼면 선택한 고도는 유지하고 부스트만 해제합니다. ↑/↓만 누르면 부스트 없이 고도를 바꿉니다. ${(configuration.performance.boostStage2Threshold / configuration.performance.boostDrain).toFixed(1)}초 연속 부스트 시 2단계에 진입합니다.<br />시점은 일시정지 메뉴의 시점 전환에서 바꿀 수 있습니다.</p>
           <p>중간·어려움: 주황 방전 구역은 모든 고도에서 위험합니다. 민트색 화살표를 따라 왼쪽·가운데·오른쪽 통로로 이동하세요. 자홍색 전기 지뢰밭은 모든 고도에서 위험하니, 기둥 사이 빈틈으로 통과하세요.</p>
-          <p>황금색 정육면체 각성 코어는 랩마다 하나씩 나오고 최대 3개까지 보관합니다. 부스트 위의 코어를 터치하거나 W로 한 개를 사용하면 5초간 기체가 변신해 자동 주행합니다. 2단 부스트 최고속도보다 5% 빠르고 충돌 감속이 없습니다. 부스트 잔량은 그대로 보관합니다.</p>
+          <p>황금색 정육면체 각성 코어는 랩마다 하나씩 나오고 최대 3개까지 보관합니다. 부스트 옆의 코어를 터치하거나 W로 한 개를 사용하면 5초간 기체가 변신해 자동 주행합니다. 날개 아이콘과 줄어드는 막대가 남은 각성 시간을 표시합니다. 2단 부스트 최고속도보다 5% 빠르고 충돌 감속이 없습니다. 부스트 잔량은 그대로 보관합니다.</p>
           <p>부스트는 50%씩 세 칸으로 표시하며, 자연 충전과 아이템으로 최대 150%까지 모을 수 있습니다. 한 번에 최대 두 칸(100%)을 사용하고, 남은 잔량은 버튼이나 Space를 놓았다가 다시 누르면 사용할 수 있습니다.</p>
         </details>
       </dialog>
@@ -145,6 +150,12 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
   const screen = root.querySelector<HTMLElement>('.drive-screen')!;
   const heightInstruction = get('height-instruction');
   const heightGuide = root.querySelector<HTMLElement>('.height-guide')!;
+  const awakeningControl = root.querySelector<HTMLElement>('.awakening-control')!;
+  const awakeningButton = get('race-awakening') as HTMLButtonElement;
+  const awakeningCubes = awakeningButton.querySelectorAll<HTMLElement>('[data-awakening-core]');
+  const awakeningActive = awakeningButton.querySelector<HTMLElement>('[data-awakening-active]')!;
+  const awakeningDuration = awakeningButton.querySelector<HTMLElement>('.awakening-duration')!;
+  const awakeningDurationFill = awakeningDuration.querySelector('i')!;
   let selectedDifficulty: DifficultyId = campaign ? trackPreset(campaign.track).id : 'beginner';
   const challenge = campaign?.challenge ?? 'normal';
   let selectedMode: RaceMode = campaign?.mode ?? 'time-attack';
@@ -320,7 +331,11 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
     };
     if (state.callout && state.callout.id !== lastCallout) {
       lastCallout = state.callout.id; const el = get('race-callout');
-      el.textContent = state.callout.text; el.dataset.kind = state.callout.kind; pop(el, 1400, '6px', '0px');
+      if (state.callout.icon) el.innerHTML = state.callout.icon === 'core' ? CORE_ICON : AWAKENING_ICON;
+      else el.textContent = state.callout.text;
+      el.setAttribute('aria-label', state.callout.text);
+      el.dataset.icon = state.callout.icon ?? '';
+      el.dataset.kind = state.callout.kind; pop(el, 1400, '6px', '0px');
     }
     if (state.nearMisses > lastNearMisses && state.phase === 'running') pop(get('race-nearmiss'), 700, '8px', '-10px');
     lastNearMisses = state.nearMisses;
@@ -349,20 +364,14 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
     }
     speed.textContent = Math.round(state.speed * 3.6).toString().padStart(3, '0');
     const awakening = state.awakeningRemaining > 0;
-    const awakeningInventory = get('race-awakening');
-    awakeningInventory.classList.toggle('is-active', awakening);
-    awakeningInventory.setAttribute('aria-label', `각성 코어 ${state.awakeningCores} / ${AWAKENING_CAPACITY}개`);
-    awakeningInventory.querySelectorAll<HTMLButtonElement>('[data-awakening-core]').forEach((button, index) => {
-      button.hidden = index >= state.awakeningCores;
-      button.disabled = state.phase !== 'running' || awakening;
-      button.setAttribute('aria-label', `각성 사용 · 보유 ${state.awakeningCores} / ${AWAKENING_CAPACITY}개`);
-    });
-    get('awakening-empty').hidden = state.awakeningCores > 0;
-    get('awakening-empty').textContent = awakening ? '자동 주행 중' : '코어 없음';
-    get('awakening-label').textContent = awakening ? `각성 ${state.awakeningRemaining.toFixed(1)}s` : '각성';
-    const coreControl = coarsePointer.matches ? '코어 터치' : 'W 또는 코어 클릭';
-    const awakeningStatus = awakening ? '자동 주행 · 충돌 보호' : state.awakeningCores === AWAKENING_CAPACITY ? `${AWAKENING_CAPACITY}개 보관 · ${coreControl}` : state.awakeningCores > 0 ? `${coreControl} · 5초 자동 주행` : '황금 코어를 획득하세요';
-    if (get('awakening-status').textContent !== awakeningStatus) get('awakening-status').textContent = awakeningStatus;
+    awakeningControl.hidden = !awakening && state.awakeningCores === 0;
+    awakeningButton.classList.toggle('is-active', awakening);
+    awakeningButton.disabled = state.phase !== 'running' || awakening || state.awakeningCores === 0;
+    awakeningButton.setAttribute('aria-label', awakening ? `각성 자동 주행 중 · 남은 코어 ${state.awakeningCores}개` : `각성 사용 · 보유 ${state.awakeningCores} / ${AWAKENING_CAPACITY}개`);
+    awakeningCubes.forEach((cube, index) => { cube.hidden = index >= state.awakeningCores; });
+    awakeningActive.hidden = !awakening;
+    awakeningDuration.hidden = !awakening;
+    awakeningDurationFill.style.transform = `scaleX(${state.awakeningRemaining / AWAKENING_SECONDS})`;
     screen.classList.toggle('is-awakened', awakening);
     speed.parentElement!.dataset.boostStage = String(state.boostStage);
     const percentage = Math.round(state.charge * 100);
@@ -462,7 +471,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
       heightGuide.classList.toggle('height-urgent', !corridor.safe && corridor.distance < Math.max(35, state.speed * 1.5));
     }
     if (awakening) {
-      heightInstruction.textContent = '각성 자동 주행';
+      heightInstruction.textContent = '';
       heightGuide.classList.remove('height-alert', 'height-urgent');
       heightGuide.dataset.readiness = 'ready';
     }
@@ -677,10 +686,9 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
   overlay.addEventListener('click', event => { if (performance.now() - cinematicEndedAt < 400) { event.preventDefault(); event.stopImmediatePropagation(); } }, { ...listen, capture: true });
   startButton.addEventListener('click', () => { startButton.blur(); if (lastPhase === 'finished') prepareRace(); race?.start(); }, listen);
   pauseButton.addEventListener('click', () => { pauseButton.blur(); if (previewing) leavePreview(); else race?.togglePause(); }, listen);
-  get('race-awakening').addEventListener('click', (event) => {
-    const button = (event.target as Element).closest<HTMLButtonElement>('[data-awakening-core]');
-    if (!button || button.disabled) return;
-    button.blur();
+  awakeningButton.addEventListener('click', () => {
+    if (awakeningButton.disabled) return;
+    awakeningButton.blur();
     race?.useAwakening();
   }, listen);
   const requestRestart = () => {

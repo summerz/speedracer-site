@@ -229,7 +229,7 @@ export function createRace(
   let callout: Callout | null = null;
   const overtakes = createOvertakeCallouts();
   const armStart = () => { untilGo = 3; pressAt = null; launched = false; boostHeld = false; overtakes.reset(); };
-  const say = (kind: Callout['kind'], text: string) => { callout = { id: (callout?.id ?? 0) + 1, kind, text }; notify(); };
+  const say = (kind: Callout['kind'], text: string, icon?: Callout['icon']) => { callout = { id: (callout?.id ?? 0) + 1, kind, text, icon }; notify(); };
   const swallowed = new Set<string>();
   const introPos = new THREE.CatmullRomCurve3([new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()]);
   const introLook = new THREE.CatmullRomCurve3([new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()]);
@@ -310,7 +310,7 @@ export function createRace(
   const useAwakening = () => {
     if (lost || disposed || !timeAttack.useAwakening()) return false;
     clearInput(); raceAudio.activate(); boostPulse.trigger();
-    say('perfect', '코어 각성'); notify(); return true;
+    say('perfect', '코어 각성', 'awakening'); notify(); return true;
   };
   const toggleCockpit = () => {
     if (lost || disposed) return;
@@ -450,7 +450,7 @@ export function createRace(
       if (move) say(move.gained ? 'gain' : 'loss', `P${move.from} → P${move.to}`);
     }
     if (model.state.nearMisses > oldNearMisses) { raceAudio.play('boost-full'); boostPulse.trigger(); notify(); }
-    if (model.state.coresCollected > oldCores) { raceAudio.play('boost-full'); say('gain', '각성 코어 +1'); }
+    if (model.state.coresCollected > oldCores) { raceAudio.play('boost-full'); say('gain', '각성 코어 +1', 'core'); }
     if (oldAwakening > 0 && model.state.awakeningRemaining === 0 && phase === 'running') { raceAudio.play('boost-complete'); notify(); }
     rivalVisuals.update(delta * slow, reducedMotion.matches);
     if (mode === 'time-attack' && timeAttack.phase === 'running') ghostRecorder.sample(model.state);
