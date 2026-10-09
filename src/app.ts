@@ -8,6 +8,7 @@ import { campaignStatus } from './game/progression/campaign';
 import { mountMenuNavigation } from './platform/menuNavigation';
 import { gameAnalytics } from './platform/gameAnalytics';
 import { mountAnalyticsPreferences } from './platform/analyticsPreferences';
+import { menuShortcut } from './platform/menuShortcuts';
 
 export function mountApp(root: HTMLDivElement): () => void {
   const disposeNavigation = mountMenuNavigation(root);
@@ -20,9 +21,22 @@ export function mountApp(root: HTMLDivElement): () => void {
   soundtrack.start();
   const activateAudio = () => { if (!(import.meta.env.DEV && location.hash.split('?')[0] === '#sound-lab')) soundtrack.activate(); };
   const visibility = () => document.hidden ? soundtrack.suspend() : activateAudio();
+  const toggleMusic = () => { soundtrack.setEnabled(!soundtrack.enabled); refreshMusicButton(); };
   const musicToggle = (event: Event) => {
     if (!(event.target instanceof Element) || !event.target.closest('[data-music-toggle]')) return;
-    soundtrack.setEnabled(!soundtrack.enabled); refreshMusicButton();
+    toggleMusic();
+  };
+  const shortcut = (event: KeyboardEvent) => {
+    if (event.ctrlKey || event.metaKey || event.altKey || event.repeat || event.defaultPrevented) return;
+    if ((event.target instanceof Element && event.target.closest('input, select, textarea, [contenteditable]:not([contenteditable="false"])')) || document.querySelector('dialog[open]')) return;
+    const name = location.hash.slice(1).split('?')[0];
+    const group = root.querySelector<HTMLElement>('.course-challenges');
+    const action = menuShortcut(event.code, { screen: ['campaign', 'shop', 'sound-lab', 'drive'].includes(name) ? name : 'hangar', dev: import.meta.env.DEV, difficultyVisible: !!group && !group.closest('[hidden]') && group.getClientRects().length > 0 });
+    if (!action) return;
+    event.preventDefault();
+    if (action.kind === 'music') toggleMusic();
+    else if (action.kind === 'go') location.hash = action.hash;
+    else root.querySelector<HTMLElement>(action.kind === 'mode' ? `[data-mode="${action.mode}"]` : `[data-challenge="${action.challenge}"]`)?.click();
   };
   const refreshMusicButton = () => {
     for (const button of root.querySelectorAll<HTMLButtonElement>('[data-music-toggle]')) {
@@ -33,6 +47,7 @@ export function mountApp(root: HTMLDivElement): () => void {
   document.addEventListener('keydown', activateAudio);
   document.addEventListener('visibilitychange', visibility);
   root.addEventListener('click', musicToggle);
+  document.addEventListener('keydown', shortcut);
   let disposeScreen = () => {}; let renderId = 0; let disposed = false;
   const developmentGrant = import.meta.env.DEV
     ? Promise.all([
@@ -86,7 +101,7 @@ export function mountApp(root: HTMLDivElement): () => void {
     disposed = true; renderId++;
     window.removeEventListener('hashchange', onHash);
     document.removeEventListener('pointerdown', activateAudio); document.removeEventListener('keydown', activateAudio);
-    document.removeEventListener('visibilitychange', visibility); root.removeEventListener('click', musicToggle);
+    document.removeEventListener('visibilitychange', visibility); root.removeEventListener('click', musicToggle); document.removeEventListener('keydown', shortcut);
     disposeNavigation(); disposeAnalyticsPreferences(); disposeScreen(); store.close(); soundtrack.dispose(); root.replaceChildren();
   };
 }

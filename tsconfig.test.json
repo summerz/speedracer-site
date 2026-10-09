@@ -22,6 +22,7 @@
     "src/game/track/createRaceGates.ts",
     "src/game/driving/createRaceViews.ts",
     "src/game/driving/raceCinematic.ts",
+    "src/platform/menuShortcuts.ts",
     "src/game/driving/raceCallouts.ts",
     "src/game/driving/raceGhost.ts",
     "src/game/driving/createBoostHaptics.ts",

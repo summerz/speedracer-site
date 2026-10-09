@@ -67,9 +67,9 @@ export function mountHangar(root: HTMLDivElement, selected: DroneCatalogEntry, o
           <div class="thrust-test" role="group" aria-labelledby="thrust-heading">
             <div class="thrust-heading"><span id="thrust-heading">추진 테스트</span><span id="thrust-status" role="status" aria-live="polite">대기</span></div>
             <div class="thrust-controls" role="group" aria-label="추진 상태">
-              <button type="button" data-thrust="idle" aria-pressed="true" aria-keyshortcuts="1"><kbd>1</kbd>대기</button>
-              <button type="button" data-thrust="accelerate" aria-pressed="false" aria-keyshortcuts="2"><kbd>2</kbd>가속</button>
-              <button type="button" data-thrust="boost" aria-pressed="false" aria-keyshortcuts="3"><kbd>3</kbd>부스트</button>
+              <button type="button" data-thrust="idle" aria-pressed="true" aria-keyshortcuts="Q"><kbd>Q</kbd>대기</button>
+              <button type="button" data-thrust="accelerate" aria-pressed="false" aria-keyshortcuts="W"><kbd>W</kbd>가속</button>
+              <button type="button" data-thrust="boost" aria-pressed="false" aria-keyshortcuts="E"><kbd>E</kbd>부스트</button>
             </div>
           </div>
           <div class="free-drive"><a class="free-drive-link" href="#drive">시험 주행 · NEON CIRCUIT <span aria-hidden="true">↗</span></a><span class="free-drive-note">포인트 획득 · 캠페인 기록 없음</span></div>
@@ -150,7 +150,7 @@ export function mountHangar(root: HTMLDivElement, selected: DroneCatalogEntry, o
       if (event.repeat || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
       const target = event.target;
       if (target instanceof HTMLElement && target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])')) return;
-      const mode = ({ '1': 'idle', '2': 'accelerate', '3': 'boost' } as const)[event.key as '1' | '2' | '3'];
+      const mode = ({ KeyQ: 'idle', KeyW: 'accelerate', KeyE: 'boost' } as const)[event.code as 'KeyQ' | 'KeyW' | 'KeyE'];
       if (!mode || !ready) return;
       event.preventDefault();
       setThrustMode(mode);

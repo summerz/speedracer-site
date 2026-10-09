@@ -10,6 +10,18 @@ export default defineConfig({
   define: { 'import.meta.env.VITE_APP_VERSION': JSON.stringify(version) },
   plugins: [{
     name: 'speedracer-app-shell',
+    // ponytail: a prod worker once registered on this origin serves the stale prod shell over dev; replace it with a self-unregistering one.
+    configureServer(server) {
+      server.middlewares.use('/sw.js', (_req, res) => {
+        res.setHeader('Content-Type', 'text/javascript'); res.setHeader('Cache-Control', 'no-store');
+        res.end(`self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', e => e.waitUntil((async () => {
+  for (const k of await caches.keys()) await caches.delete(k);
+  await self.registration.unregister();
+  for (const c of await self.clients.matchAll({ type: 'window' })) c.navigate(c.url);
+})()));`);
+      });
+    },
     transformIndexHtml(html) { return html.replaceAll('__APP_VERSION__', version); },
     closeBundle() {
       const walk = (dir, prefix = '') => readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
