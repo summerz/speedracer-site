@@ -1,3 +1,4 @@
+import type { JumpRecipe } from './trackJump.js';
 import type { CourseLayout, CourseShape } from './trackAuthoring.js';
 import type { BranchRecipe } from './trackBranches.js';
 
@@ -18,6 +19,7 @@ export interface TrackDefinition {
   readonly laps: number; readonly lapLimit: number; readonly halfWidth: number; readonly altitudeLevels: 2 | 3 | 4;
   readonly obstacleLevels: readonly number[]; readonly layout: CourseLayout | null; readonly features: string;
   readonly branches?: readonly BranchRecipe[];
+  readonly jumps?: readonly JumpRecipe[];
 }
 const stunt = (kind: 'loop' | 'helix' | 'roll', start: number, span: number, radius = 70, turns = 1, direction: 1 | -1 = 1): CourseLayout['stunts'][number] => ({ kind, start, span, radius, turns, direction });
 const footprint = (shape: CourseShape, radiusX: number, radiusZ: number, elevation: number, waves = 1, bank = 0, stunts: CourseLayout['stunts'] = [], rotation = 0): CourseLayout => ({ shape, radiusX, radiusZ, elevation, waves, bank, stunts, rotation });
@@ -67,10 +69,11 @@ export const TRACK_CATALOG: readonly TrackDefinition[] = Object.freeze(recipes.m
   const branches: readonly BranchRecipe[] = branchCourses.includes(i) ? Object.freeze([Object.freeze({ id: `${id}-fork`,
     kind: i % 4 === 1 ? 'vertical' as const : 'horizontal' as const, experience, direction: i % 2 ? -1 as const : 1 as const,
     intertwined: [6, 13, 17, 23].includes(i), ...(i === 6 ? { groundClearance: 12 } : {}) })]) : [];
-  return Object.freeze({ id, name: r[0], revision: (r[4] ? (r[4].stunts.some(s => s.direction === -1) ? 3 : 2) : 1) + (branches.length ? 3 : 0) + (i === 6 ? 1 : 0), order: i + 1, district: r[1], rating: r[2], branches,
+  const jumps: readonly JumpRecipe[] = i === 5 ? Object.freeze([Object.freeze({ id: 'voltage-yard-drop', branchId: `${id}-fork`, routeIndex: 1 as const })]) : [];
+  return Object.freeze({ id, name: r[0], jumps, revision: (r[4] ? (r[4].stunts.some(s => s.direction === -1) ? 3 : 2) : 1) + (branches.length ? 3 : 0) + (i === 6 ? 1 : 0) + (jumps.length ? 1 : 0), order: i + 1, district: r[1], rating: r[2], branches,
     predecessor: i ? recipes[i - 1][0].toLowerCase().replaceAll(' ', '-') : null,
     laps: 3, lapLimit: lapLimits[i], halfWidth: r[2] <= 3 ? 14 : 13,
-    altitudeLevels: levels, obstacleLevels: Object.freeze(pattern), layout: r[4] ? Object.freeze({ ...r[4], stunts: Object.freeze(r[4].stunts.map(s => Object.freeze(s))) }) : null, features: r[3] + (branches.length ? ` · ${branches[0].intertwined ? '입체 교차 분기' : branches[0].kind === 'horizontal' ? '좌우 갈림길' : '상하 갈림길'}` : '') });
+    altitudeLevels: levels, obstacleLevels: Object.freeze(pattern), layout: r[4] ? Object.freeze({ ...r[4], stunts: Object.freeze(r[4].stunts.map(s => Object.freeze(s))) }) : null, features: r[3] + (jumps.length ? ' · 하강 점프' : '') + (branches.length ? ` · ${branches[0].intertwined ? '입체 교차 분기' : branches[0].kind === 'horizontal' ? '좌우 갈림길' : '상하 갈림길'}` : '') });
 }));
 export function trackDefinition(id: string) { return TRACK_CATALOG.find(t => t.id === id); }
 /** Explicit authored deadlines keep campaign rules independent of 3D geometry loading. */
@@ -88,6 +91,12 @@ export function validateTrackCatalog(catalog: readonly TrackDefinition[]) {
         || (b.direction !== undefined && b.direction !== 1 && b.direction !== -1)
         || (b.groundClearance !== undefined && (!Number.isFinite(b.groundClearance) || b.groundClearance < 0))) throw new Error('Invalid course branch');
       branchIds.add(b.id);
+    }
+    const jumpIds = new Set<string>(), jumpRoutes = new Set<string>();
+    for (const j of t.jumps ?? []) {
+      const route = `${j.branchId}:${j.routeIndex}`;
+      if (!j.id || jumpIds.has(j.id) || jumpRoutes.has(route) || !branchIds.has(j.branchId) || ![0, 1].includes(j.routeIndex)) throw new Error('Invalid course jump');
+      jumpIds.add(j.id); jumpRoutes.add(route);
     }
     if (!/^[a-z][a-z0-9-]*$/.test(t.id) || !t.name || !Number.isInteger(t.revision) || t.revision < 1 || !Number.isInteger(t.laps) || t.laps < 1 || t.laps > 10 || !Number.isInteger(t.rating) || t.rating < 1 || t.rating > 6 || !Number.isFinite(t.halfWidth) || t.halfWidth <= 4 || !Number.isFinite(t.lapLimit) || t.lapLimit <= 0 || ![2,3,4].includes(t.altitudeLevels) || t.obstacleLevels.some(n => !Number.isInteger(n) || n < 0 || n >= t.altitudeLevels)) throw new Error('Invalid track definition');
     if (t.layout) {

@@ -1,3 +1,4 @@
+import { createJumpTracker } from './jumpPassage.js';
 import { DEFAULT_DRONE_CONFIGURATION } from '../drone/droneConfiguration.js';
 import type { DronePerformance } from '../drone/droneConfiguration.js';
 import type { Track } from '../track/createTrack';
@@ -32,6 +33,8 @@ export interface DrivingState {
   awakeningsUsed: number;
   /** Actual transitions into boost, including partial activations. */
   boostUses: number;
+  jumpsPassed: number;
+  jumpsMissed: number;
   boosting: boolean;
   boostStage: 0 | 1 | 2;
   boostElapsed: number;
@@ -84,10 +87,11 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
     routeId: null,
     distance: 0, offset: 0, heading: 0, altitude: initialAltitude, targetAltitude: initialAltitude, altitudeLevel: initialLevel,
     speed: 0, charge: 1, awakeningCores: 0, coresCollected: 0, awakeningRemaining: 0, awakeningsUsed: 0,
-    boostUses: 0, boosting: false, boostStage: 0, boostElapsed: 0, boostStageProgress: 0, boostNeedsRelease: false, checkpoint: 0, elapsed: 0,
+    boostUses: 0, jumpsPassed: 0, jumpsMissed: 0, boosting: false, boostStage: 0, boostElapsed: 0, boostStageProgress: 0, boostNeedsRelease: false, checkpoint: 0, elapsed: 0,
     collisions: 0, recoveries: 0, offTrackExits: 0, penaltyPoints: 0, obstaclesPassed: 0, boostPads: 0, boostRings: 0, nearMisses: 0, cleanStreak: 0, bestStreak: 0, notice: null,
   };
   const initial = { ...state };
+  const jumps = createJumpTracker(track);
   const frame = track.sample(0);
   const aheadFrame = createTrackFrame();
   let rechargeDelay = 0;
@@ -182,7 +186,7 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
       state.notice = 'craft-collision'; noticeRemaining = 0.8;
     },
     reset() {
-      Object.assign(state, initial);
+      Object.assign(state, initial); jumps.reset();
       fieldPassages.clear(); completedPassages.clear(); margins.clear(); lateCalls.clear(); safeSince.clear(); accelerationRecovery = 0;
       rechargeDelay = 0; boostSpent = 0; impactCooldown = 0; noticeRemaining = 0; heightSwitchSpeed = 0;
       offTrackEpisode = false;
@@ -216,6 +220,7 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
         const dt = Math.min(remaining, 1 / 120, awake ? state.awakeningRemaining : Infinity); remaining -= dt;
         const timeFrom = state.elapsed;
         const offsetFrom = state.offset;
+        const altitudeFrom = state.altitude;
         state.elapsed += dt;
         impactCooldown = Math.max(0, impactCooldown - dt);
         accelerationRecovery = Math.max(0, accelerationRecovery - dt);
@@ -318,6 +323,10 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
         else if (!fork || enteredFork.id !== fork.id || branchChoiceOpen(track, state.distance))
           state.routeId = selectBranch(track, state.distance, state.offset, state.altitudeLevel);
         state.altitude += clamp(state.targetAltitude - state.altitude, -heightSwitchSpeed * dt, heightSwitchSpeed * dt);
+        for (const event of jumps.update({ distance: oldDistance, altitude: altitudeFrom, offset: offsetFrom, routeId: state.routeId }, state, awake)) {
+          if (event === 'missed') { state.jumpsMissed++; fieldImpact(.8, 'height-collision'); }
+          else { state.jumpsPassed++; passedField(); }
+        }
         // Swept travel catches boost-speed crossings. Fields let the craft continue.
         for (let i = 0; i < track.heightObstacles.length; i++) {
           if (track.heightObstacles[i].routeId && track.heightObstacles[i].routeId !== state.routeId) continue;

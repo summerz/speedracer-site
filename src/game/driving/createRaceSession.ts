@@ -1,3 +1,4 @@
+import { upcomingTrackJump } from '../track/trackJump.js';
 import { createFinishCoast } from './finishCoast.js';
 import type { FinishCoast } from './finishCoast.js';
 import { upcomingFork, forkAt, branchChoiceOpen, forkApproachDrift } from '../track/trackBranches.js';
@@ -175,6 +176,8 @@ export function aiDrivingInput(track: Track, configuration: DroneConfiguration, 
     else if (!next || next.distance > fork.start - state.distance % track.length)
       lift = Math.sign((branchSide ? track.altitudeProfile.levels.length - 1 : 0) - state.altitudeLevel);
   }
+  const jump = upcomingTrackJump(track, state.distance, state.routeId);
+  if (jump) lift = Math.sign(jump.requiredLevel - state.altitudeLevel);
   // Pull toward the lane, but never ask for a sideways slope beyond what the stabilizer can hold (heading gain 14 x MINE_CHAIN_SLOPE),
   // or the craft overshoots the lane and, for a weakly damped one, the road edge.
   const lateralPull = following ? Math.max(-14 * MINE_CHAIN_SLOPE, Math.min(14 * MINE_CHAIN_SLOPE, (lane - state.offset) * .5)) : (lane - state.offset) * .14;

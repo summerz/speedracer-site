@@ -1,3 +1,4 @@
+import type { TrackJump } from './trackJump.js';
 import { expandObstacleLayout, randomCorridorLanes, randomObstacleAltitudes, randomPadLanes, randomRingSides } from './obstacleLayout.js';
 import * as THREE from 'three';
 import { createDischargeBarrier } from './createDischargeBarrier.js';
@@ -85,6 +86,7 @@ export interface BoostRing {
 }
 
 export interface Track {
+  readonly jumps?: readonly TrackJump[];
   /** Scripted training has no randomly placed awakening pickups. */
   readonly awakeningCoresEnabled?: boolean;
   readonly altitudeProfile: AltitudeProfile;
