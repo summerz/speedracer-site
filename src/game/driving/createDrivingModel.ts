@@ -56,7 +56,7 @@ export interface DrivingState {
   /** Hazard passes in a row without an obstacle hit, and the best run so far. */
   cleanStreak: number;
   bestStreak: number;
-  notice: 'collision' | 'craft-collision' | 'height-collision' | 'corridor-collision' | 'off-track' | 'recovery' | 'obstacle-pass' | null;
+  notice: 'collision' | 'craft-collision' | 'height-collision' | 'corridor-collision' | 'jump-missed' | 'off-track' | 'recovery' | 'obstacle-pass' | null;
 }
 
 export const DRIVING_TUNING = {
@@ -132,7 +132,7 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
     state.recoveries++; state.notice = 'recovery'; noticeRemaining = 1.8;
     rechargeDelay = Math.max(rechargeDelay, 0.6);
   };
-  const fieldImpact = (retention: number, notice: 'height-collision' | 'corridor-collision') => {
+  const fieldImpact = (retention: number, notice: 'height-collision' | 'corridor-collision' | 'jump-missed') => {
     if (state.awakeningRemaining > 0) return;
     const severity = (1 - retention) / DEFAULT_DRONE_CONFIGURATION.performance.collisionSpeedLoss;
     state.speed *= impactSpeedRetention(tuning.collisionSpeedLoss, severity);
@@ -324,7 +324,7 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
           state.routeId = selectBranch(track, state.distance, state.offset, state.altitudeLevel);
         state.altitude += clamp(state.targetAltitude - state.altitude, -heightSwitchSpeed * dt, heightSwitchSpeed * dt);
         for (const event of jumps.update({ distance: oldDistance, altitude: altitudeFrom, offset: offsetFrom, routeId: state.routeId }, state, awake)) {
-          if (event === 'missed') { state.jumpsMissed++; fieldImpact(.8, 'height-collision'); }
+          if (event === 'missed') { state.jumpsMissed++; fieldImpact(.8, 'jump-missed'); }
           else { state.jumpsPassed++; passedField(); }
         }
         // Swept travel catches boost-speed crossings. Fields let the craft continue.

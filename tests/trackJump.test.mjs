@@ -119,6 +119,16 @@ test('failed jump slows the craft and counts one collision without resetting dis
   assert.ok(s.penaltyPoints > 0); assert.ok(s.speed > 0);
 });
 
+test('failed jump emits its own notice instead of an electrical obstacle notice', () => {
+  const model = createDrivingModel(track), s = model.state;
+  Object.assign(s, { routeId: jump.routeId, distance: jump.start - .1, speed: 65,
+    altitude: track.altitudeProfile.levels[jump.landingLevel] });
+  model.step(1 / 60, { throttle: true, steer: 0, lift: 0, boost: false, brake: false });
+  assert.equal(s.jumpsMissed, 1);
+  assert.equal(s.collisions, 1);
+  assert.equal(s.notice, 'jump-missed');
+});
+
 test('NPCs finish three real laps and follow the upper jump route on every challenge', () => {
   for (const challenge of ['easy', 'normal', 'hard']) for (const craft of DRONE_CATALOG) {
     const t = createCatalogTrack(definition, challenge), model = createDrivingModel(t, craft.configuration.performance), s = model.state;
