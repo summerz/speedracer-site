@@ -3,9 +3,13 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { Track } from './createTrack.js';
 import type { TrackDefinition } from './trackCatalog.js';
 import type { RenderQuality } from '../../platform/renderQuality.js';
+import { MARINE_ZONES, type MarinePalette } from '../environment/marineZones.js';
 import { createTrackLandmark, describeTrackLandmarks, sceneryRoute, scenerySeed } from './createTrackLandmark.js';
 
-const CYAN = new THREE.Color('#5ff5e6'), PINK = new THREE.Color('#ff7aa8');
+/** GLSL vec3 literal from sRGB components (the shaders write them straight to the output, as the old literals did). */
+const v3 = (c: THREE.Color, k = 1) => { const o = { r: 0, g: 0, b: 0 }; c.getRGB(o, THREE.SRGBColorSpace); return `vec3(${(o.r * k).toFixed(3)},${(o.g * k).toFixed(3)},${(o.b * k).toFixed(3)})`; };
+const sceneryV3 = (hex: string, k = 1) => v3(new THREE.Color(hex), k);
+let paletteKey = '';
 const timeUniform = { value: 0 };
 
 const PRELUDE_V = `varying vec3 vWorld; varying vec3 vN; varying vec3 vView; varying vec2 vUv; varying float vHash, vDepth, vLen, vY;
@@ -49,7 +53,8 @@ function shader(key: string, local: string, world: string, fragment: string, o: 
     transparent: !!o.additive, depthWrite: !o.additive, blending: o.additive ? THREE.AdditiveBlending : THREE.NormalBlending,
     defines: o.additive ? { ADDITIVE: '' } : {},
   });
-  material.customProgramCacheKey = () => key;
+  const programKey = `${key}:${paletteKey}`;
+  material.customProgramCacheKey = () => programKey;
   return material;
 }
 
@@ -58,7 +63,11 @@ function shader(key: string, local: string, world: string, fragment: string, o: 
  * Same return shape as createDistrictScenery. `hidesGround` tells the caller to hide the GridHelper
  * (the seabed plane at y=0.05 would otherwise z-fight with it at distance).
  */
-export function createAbyssScenery(track: Track, definition: TrackDefinition) {
+export function createAbyssScenery(track: Track, definition: TrackDefinition, palette: MarinePalette = MARINE_ZONES[0].palette) {
+  paletteKey = [palette.glow, palette.accent, palette.kelp.join(), palette.sand, palette.caustic].join();
+  const CYAN = new THREE.Color(palette.glow), PINK = new THREE.Color(palette.accent);
+  const glowHue = CYAN.getHSL({ h: 0, s: 0, l: 0 }).h, accentHue = PINK.getHSL({ h: 0, s: 0, l: 0 }).h;
+  const glow = (k = 1) => sceneryV3(palette.glow, k), accent = () => sceneryV3(palette.accent);
   let seed = (scenerySeed(definition.id) ^ 0xab55) >>> 0;
   const random = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 4294967296; };
   const range = (a: number, b: number) => a + random() * (b - a);
@@ -100,7 +109,7 @@ export function createAbyssScenery(track: Track, definition: TrackDefinition) {
     for (let i = 0; i < n; i++) {
       const ang = random() * 6.283, dist = Math.sqrt(random()) * r * .78, h = 1.5 + random() * Math.min(12, r * .4);
       lights.push(matrix(x + Math.cos(ang) * dist, h / 2, z + Math.sin(ang) * dist, range(.8, 2.6), h, range(.8, 2.6)));
-      colors.push(new THREE.Color().setHSL(random() < .6 ? .5 + random() * .04 : random() < .5 ? .08 + random() * .04 : .93, .9, .62).multiplyScalar(1.4));
+      colors.push(new THREE.Color().setHSL((random() < .6 ? glowHue : accentHue) + random() * .04, .9, .62).multiplyScalar(1.4));
     }
     domes.push({ center: new THREE.Vector3(x, r / 2, z), radius: r, shell: matrix(x, 0, z, r, r, r), lights, colors });
   }
@@ -109,7 +118,7 @@ export function createAbyssScenery(track: Track, definition: TrackDefinition) {
     vec3 n=normalize(vN), v=normalize(-vView);
     float fres=pow(1.-abs(dot(n,v)),2.5);
     float line=max(gridLine(vUv.x*12.)*smoothstep(.985,.86,vUv.y), gridLine(vUv.y*4.));
-    vec3 c=vec3(.3,.8,.76)*(.3+line*.9+fres*.5);
+    vec3 c=${glow(.82)}*(.3+line*.9+fres*.5);
     gl_FragColor=fogOut(c,.07+.04*fres+line*.55);`, { additive: true });
   const domeMesh = add(new THREE.InstancedMesh(domeGeometry, domeMaterial, domes.length), 'abyss-domes');
   const lightMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false });
@@ -136,7 +145,7 @@ export function createAbyssScenery(track: Track, definition: TrackDefinition) {
     vec3 n=normalize(vN), v=normalize(-vView);
     float fres=pow(1.-abs(dot(n,v)),2.);
     float ring=gridLine(vUv.y*vLen/12.);
-    vec3 c=vec3(.37,.96,.9)*(.4+ring*1.5+fres*.5);
+    vec3 c=${glow()}*(.4+ring*1.5+fres*.5);
     gl_FragColor=fogOut(c,.1+.12*fres+ring*.7);`, { additive: true });
   const tubeMesh = add(new THREE.InstancedMesh(new THREE.CylinderGeometry(1, 1, 1, 14, 1, true), tubeMaterial, tubes.length), 'abyss-tubes');
   tubes.forEach((m, i) => tubeMesh.setMatrixAt(i, m)); tubeMesh.frustumCulled = false;
@@ -179,8 +188,8 @@ export function createAbyssScenery(track: Track, definition: TrackDefinition) {
     w.x+=(sin(uTime*.7+kp+vY*1.8)+.35*sin(uTime*1.35+kp*1.7+vY*3.4)+.5)*ka*kb;
     w.z+=(cos(uTime*.55+kp*.8+vY*1.5)*.7+.2*sin(uTime*1.1+kp+vY*4.))*ka*kb;`, `
     float kh=vUv.y, km=1.-smoothstep(0.,.5,abs(vUv.x-.5));
-    vec3 c=mix(vec3(.006,.045,.06),vec3(.025,.2,.17),smoothstep(0.,.65,kh));
-    c+=vec3(.1,.8,.6)*(kh*kh*sqrt(max(kh,.0001))*.8+km*.04);
+    vec3 c=mix(${sceneryV3(palette.kelp[0])},${sceneryV3(palette.kelp[1])},smoothstep(0.,.65,kh));
+    c+=${sceneryV3(palette.kelp[2])}*(kh*kh*sqrt(max(kh,.0001))*.8+km*.04);
     gl_FragColor=fogOut(c,1.);`);
   const kelpMesh = add(new THREE.InstancedMesh(bladeGeometry, kelpMaterial, kelp.reduce((n, c) => n + c.blades.length, 0)), 'abyss-kelp');
 
@@ -202,7 +211,7 @@ export function createAbyssScenery(track: Track, definition: TrackDefinition) {
     }
     rocks.push({ center: new THREE.Vector3(x, 2, z), radius: 22, rocks: rs, tips: ts, tipColors: tc });
   }
-  const rockMesh = add(new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1, 0), new THREE.MeshStandardMaterial({ color: '#0f2a30', roughness: .95, metalness: .1, flatShading: true }), rocks.reduce((n, r) => n + r.rocks.length, 0)), 'abyss-rocks');
+  const rockMesh = add(new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1, 0), new THREE.MeshStandardMaterial({ color: palette.rock, roughness: .95, metalness: .1, flatShading: true }), rocks.reduce((n, r) => n + r.rocks.length, 0)), 'abyss-rocks');
   const tipCount = rocks.reduce((n, r) => n + r.tips.length, 0);
   const tipMesh = add(new THREE.InstancedMesh(new THREE.ConeGeometry(.5, 1, 5), new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false }), tipCount), 'abyss-coral-tips');
   tipMesh.instanceColor = colorBuf(tipCount);
@@ -224,14 +233,14 @@ export function createAbyssScenery(track: Track, definition: TrackDefinition) {
   const poleGeometry = new THREE.CylinderGeometry(1, 1, 1, 6, 1, true); poleGeometry.translate(0, .5, 0);
   const poleMaterial = shader('abyss-pylon', '', '', `
     float bead=gridLine(vUv.y*vLen/5.);
-    gl_FragColor=fogOut(vec3(.37,.96,.9)*(.5+bead*1.6),.22+bead*.5);`, { additive: true });
+    gl_FragColor=fogOut(${glow()}*(.5+bead*1.6),.22+bead*.5);`, { additive: true });
   const poleMesh = add(new THREE.InstancedMesh(poleGeometry, poleMaterial, pylons.length), 'abyss-pylons');
   const buoyCount = pylons.length * 3;
   const buoyMesh = add(new THREE.InstancedMesh(new THREE.SphereGeometry(1, 10, 8), new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false }), buoyCount), 'abyss-buoys');
   buoyMesh.instanceColor = colorBuf(buoyCount);
 
   // --- Glass tunnels: decorative half-tube arches over 2-3 straight stretches (no collision; 2 draw calls) ---
-  const tunnelGlass = createTunnels(track, random, range);
+  const tunnelGlass = createTunnels(track, random, range, palette);
   if (tunnelGlass) { tunnelGlass.glass.name = 'abyss-tunnel-glass'; tunnelGlass.glass.userData.ranges = tunnelGlass.chosen; tunnelGlass.ribs.name = 'abyss-tunnel-ribs'; object.add(tunnelGlass.glass, tunnelGlass.ribs); }
 
   // --- Landmark: tint city-looking materials to the abyss palette ---
@@ -241,7 +250,7 @@ export function createAbyssScenery(track: Track, definition: TrackDefinition) {
     for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
       if (tinted.has(m)) continue; tinted.add(m);
       const std = m as THREE.MeshStandardMaterial, basic = m as THREE.MeshBasicMaterial;
-      if (std.isMeshStandardMaterial) { std.color.set('#0c2a33'); std.emissive.copy(CYAN).multiplyScalar(.1); std.metalness = .3; }
+      if (std.isMeshStandardMaterial) { std.color.set(palette.rock).multiplyScalar(.8); std.emissive.copy(CYAN).multiplyScalar(.1); std.metalness = .3; }
       else if (basic.isMeshBasicMaterial) { const lum = Math.max(basic.color.r, basic.color.g, basic.color.b, .2); basic.color.copy(tinted.size % 3 === 0 ? PINK : CYAN).multiplyScalar(lum); }
     }
   }));
@@ -257,7 +266,7 @@ export function createAbyssScenery(track: Track, definition: TrackDefinition) {
     else pos.xz+=vec2(sin(uTime*1.2+pos.y*2.+vHash*9.),cos(uTime*1.1+pos.y*2.+vHash*7.))*.25*(-pos.y);`, '', `
     vec3 n=normalize(vN), v=normalize(-vView);
     float fres=pow(1.-abs(dot(n,v)),1.8), pulse=.6+.4*sin(uTime*1.6+vHash*40.);
-    vec3 base=mix(vec3(1.,.48,.66),vec3(.37,.96,.9),step(.5,fract(vHash*7.)));
+    vec3 base=mix(${accent()},${glow()},step(.5,fract(vHash*7.)));
     float tent=step(vY,-.01);
     gl_FragColor=fogOut(base*(.5+pulse*1.1)*(tent*.8+(1.-tent)*(.6+fres)), tent*.55+(1.-tent)*(.2+fres*.55));`, { additive: true });
   const jellyMesh = add(new THREE.InstancedMesh(mergeGeometries([bell, ...tentacles]), jellyMaterial, JELLY.high), 'abyss-jellyfish');
@@ -268,7 +277,7 @@ export function createAbyssScenery(track: Track, definition: TrackDefinition) {
   const tail = new THREE.ConeGeometry(5, 26, 6); tail.rotateX(-Math.PI / 2); tail.translate(0, 0, -36); parts.push(tail);
   const fluke = new THREE.BoxGeometry(26, .8, 7); fluke.translate(0, 0, -52); parts.push(fluke);
   for (const s of [-1, 1]) { const f = new THREE.BoxGeometry(14, .6, 5); f.rotateZ(s * .3); f.translate(s * 9, -4, 8); parts.push(f); }
-  const whale = new THREE.Mesh(mergeGeometries(parts.map(p => p.toNonIndexed())), new THREE.MeshBasicMaterial({ color: '#020b0f', toneMapped: false }));
+  const whale = new THREE.Mesh(mergeGeometries(parts.map(p => p.toNonIndexed())), new THREE.MeshBasicMaterial({ color: palette.whale, toneMapped: false }));
   whale.name = 'abyss-whale'; whale.scale.setScalar(1.5); whale.frustumCulled = false; object.add(whale);
   const whaleAngle = random() * 6.283, whaleDistance = range(450, 750);
 
@@ -283,7 +292,7 @@ export function createAbyssScenery(track: Track, definition: TrackDefinition) {
     float fade=pow(clamp(vUv.y,0.,1.),1.3);
     float fres=pow(abs(dot(normalize(vN),normalize(vView))),1.6);
     float near=smoothstep(60.,260.,length(vView));
-    gl_FragColor=fogOut(vec3(.6,1.,.95),.2*fade*fres*near);`, { additive: true });
+    gl_FragColor=fogOut(${sceneryV3(new THREE.Color(palette.glow).lerp(new THREE.Color('#ffffff'), .35).getHexString())},.2*fade*fres*near);`, { additive: true });
   const shaftMesh = add(new THREE.InstancedMesh(shaftGeometry, shaftMaterial, SHAFTS.high), 'abyss-light-shafts');
 
   // --- Seabed ---
@@ -293,7 +302,7 @@ export function createAbyssScenery(track: Track, definition: TrackDefinition) {
     vec2 p=vWorld.xz*.033;
     float cA=caustic(p,t), cB=caustic(p*1.9+7.3,t*1.3+3.);
     float fadeD=(1.-smoothstep(140.,520.,vDepth))*(1.-smoothstep(45.,230.,length(vView)));
-    vec3 c=vec3(.1,.16,.17)*.55+vec3(.2,.9,.85)*(cA*.3+cB*.18)*fadeD+vec3(.02,.05,.05)*(1.-fadeD);
+    vec3 c=${sceneryV3(palette.sand,.55)}+${sceneryV3(palette.caustic)}*(cA*.3+cB*.18)*fadeD+${sceneryV3(palette.sand,.3)}*(1.-fadeD);
     gl_FragColor=fogOut(c,1.);`, { side: THREE.FrontSide });
   seabedMaterial.fragmentShader = seabedMaterial.fragmentShader.replace('void main(){', `
     float caustic(vec2 uv,float t){
@@ -371,7 +380,8 @@ export function createAbyssScenery(track: Track, definition: TrackDefinition) {
 }
 
 /** Straight, flat, feature-free stretches of 60-120 m get a translucent glass half-tube with cyan ribs. Decoration only. */
-function createTunnels(track: Track, random: () => number, range: (a: number, b: number) => number) {
+function createTunnels(track: Track, random: () => number, range: (a: number, b: number) => number, palette: MarinePalette) {
+  const CYAN = new THREE.Color(palette.glow);
   const STEP = 4, MARGIN = 40, count = Math.floor(track.length / STEP);
   const frame = (d: number) => track.sample(d);
   const blocked: [number, number][] = [];
@@ -455,7 +465,7 @@ function createTunnels(track: Track, random: () => number, range: (a: number, b:
     vec3 n=normalize(vN), v=normalize(-vView);
     float fres=pow(1.-abs(dot(n,v)),2.2);
     float line=gridLine(vUv.x*14.)*.25;
-    gl_FragColor=fogOut(vec3(.35,.95,.92)*(.55+fres*.9+line),.07+.2*fres+line*.1);`, { additive: true });
+    gl_FragColor=fogOut(${sceneryV3(palette.glow,.97)}*(.55+fres*.9+line),.07+.2*fres+line*.1);`, { additive: true });
   const glass = new THREE.Mesh(glassGeometry, glassMaterial);
   const ribs = new THREE.Mesh(ribGeometry, new THREE.MeshBasicMaterial({ color: CYAN.clone().multiplyScalar(1.3), side: THREE.DoubleSide, toneMapped: false }));
   glass.frustumCulled = ribs.frustumCulled = false; glass.renderOrder = 1;

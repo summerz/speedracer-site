@@ -1,3 +1,4 @@
+import { marineZone } from './game/environment/marineZones';
 import { FEATURE_TEST_TRACKS } from './game/track/featureTestTracks';
 import { createDrivingTutorial } from './game/driving/drivingTutorial';
 import { createTutorialCoach } from './game/driving/createTutorialCoach';
@@ -54,7 +55,7 @@ const BOOST_ICON = '<svg viewBox="0 0 16 20" aria-hidden="true"><path d="M9 1 2 
 interface SectorDelta { checkpoint: number; lap: number; gate: number; time: number; bestTime: number; delta: number; cumulativeDelta: number }
 interface ResultData { previousBestTotal: number | null; lapDeltas: (number | null)[]; sectors?: SectorDelta[]; collisions: number; nearMisses: number; bestStreak: number; offTrackExits: number; boostUses?: number }
 
-export function mountRace(root: HTMLDivElement, onExit: () => void, configuration: DroneConfiguration = DEFAULT_DRONE_CONFIGURATION, store?: ProgressStore, onShop?: () => void, campaign?: { track: TrackDefinition; mode: RaceMode; challenge: RaceChallengeId; test?: boolean }): () => void {
+export function mountRace(root: HTMLDivElement, onExit: () => void, configuration: DroneConfiguration = DEFAULT_DRONE_CONFIGURATION, store?: ProgressStore, onShop?: () => void, campaign?: { track: TrackDefinition; mode: RaceMode; challenge: RaceChallengeId; test?: boolean; zone?: string }): () => void {
   let focusSlots = store ? Math.min(store.snapshot().focusSlots, store.snapshot().focus) : 0;
   document.title = 'Speedracer — 타임어택';
   root.innerHTML = `
@@ -195,7 +196,8 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
   const tutorialProgress = createTutorialProgress(tutorialStorage);
   const coach = createTutorialCoach(screen, { skip: () => race?.skipTutorial(), skipAll: () => race?.skipAllTutorial(), continue: () => { race?.continueTutorial(); } });
   let tutorialCompleteShown = false;
-  const defaultEnvironment = selectRaceEnvironment(campaign?.track.district);
+  const previewZone = campaign?.test && campaign.zone && campaign.track.district === 'abyss' ? marineZone(campaign.zone) : undefined;
+  const defaultEnvironment = previewZone ? previewZone.environments[Math.floor(Math.random() * previewZone.environments.length)] : selectRaceEnvironment(campaign?.track.district);
   const rainToggle = root.querySelector<HTMLButtonElement>('#dev-rain-toggle');
   let previewRain = true;
   if (import.meta.env.DEV) {
@@ -735,7 +737,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
     const tutorial = tutorialMode ? createDrivingTutorial({ mode: tutorialMode, onFinish: status => { if (status.outcome) tutorialProgress.finish(status.outcome); } }) : undefined;
     document.title = `Speedracer — ${selectedMode === 'competition' ? '경쟁 레이스' : '타임어택'}`;
     get('race-course-name').textContent = course?.name ?? 'NEON CIRCUIT';
-    get('race-mode-title').textContent = `${featureTest ? 'FEATURE TEST · ' : isTraining() ? 'PRACTICE · ' : ''}${selectedMode === 'competition' ? 'COMPETITION RACE' : 'TIME ATTACK'} · ${campaign ? RACE_CHALLENGES[challenge].label : DIFFICULTIES[selectedDifficulty].label}`;
+    get('race-mode-title').textContent = `${featureTest ? `FEATURE TEST · ${previewZone ? `${previewZone.name} · ` : ''}` : isTraining() ? 'PRACTICE · ' : ''}${selectedMode === 'competition' ? 'COMPETITION RACE' : 'TIME ATTACK'} · ${campaign ? RACE_CHALLENGES[challenge].label : DIFFICULTIES[selectedDifficulty].label}`;
     if (course) { const zone = document.createElement('span'); zone.className = 'result-zone'; zone.textContent = ` · ${DISTRICTS[course.district].name} · ${String(course.order ?? 0).padStart(2, '0')}`; get('race-mode-title').append(zone); }
     get('race-loadout').textContent = featureTest ? featureRecipe ? '수중 도시 기능 테스트 · 기록과 보상을 저장하지 않습니다' : '기능 테스트 · 끊긴 도로 점프 — 갈림길에서 위쪽 송전 우회로 · 기록과 보상을 저장하지 않습니다' : isTraining() ? '첫 코스 조작 연습 · 기록과 보상을 저장하지 않습니다' : `${selectedMode === 'competition' ? `상대 기체 ${AI_OPPONENT_COUNT}대와 경쟁` : '타임어택'} · ${focusSlots || equippedRivalSlots.length ? `장착 아이템 ${focusSlots + equippedRivalSlots.length}개 · 기본 보상 80%` : '코스에서 각성 코어 획득'}`;
     rewardInput = undefined; campaignOutcome = undefined; get('result-reward').textContent = ''; get('reward-retry').hidden = true; get('result-shop').hidden = true; get('campaign-next').hidden = true;

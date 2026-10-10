@@ -92,7 +92,7 @@ export function mountApp(root: HTMLDivElement): () => void {
     const mount = import.meta.env.DEV && screen === 'sound-lab'
       ? () => import('./devAudioApp').then(({ mountDevAudio }) => () => mountDevAudio(root, profile.balance, params.get('view') === 'library' ? 'library' : 'assignments'))
       : screen === 'drive'
-      ? () => import('./raceApp').then(({ mountRace }) => () => mountRace(root, () => { location.hash = track && isFeatureTestTrack(track.id) ? '' : track ? `campaign?track=${track.id}&mode=${mode}&challenge=${challenge}` : 'campaign'; }, selected.configuration, store, () => { location.hash = 'shop'; }, track ? { track, mode, challenge, test: params.get('test') === '1' } : undefined))
+      ? () => import('./raceApp').then(({ mountRace }) => () => mountRace(root, () => { location.hash = track && isFeatureTestTrack(track.id) ? '' : track ? `campaign?track=${track.id}&mode=${mode}&challenge=${challenge}` : 'campaign'; }, selected.configuration, store, () => { location.hash = 'shop'; }, track ? { track, mode, challenge, test: params.get('test') === '1', zone: params.get('zone') ?? undefined } : undefined))
       : screen === 'campaign' ? () => import('./campaignApp').then(({ mountCampaign }) => () => mountCampaign(root, store, params.has('mode') ? { mode, trackId: params.get('track') ?? undefined, challenge } : undefined))
       : screen === 'shop' ? () => import('./shopApp').then(({ mountShop }) => () => mountShop(root, store, () => { location.hash = ''; }))
       : () => import('./hangarApp').then(({ mountHangar }) => () => mountHangar(root, selected, () => {}, () => { location.hash = 'campaign'; }, store));

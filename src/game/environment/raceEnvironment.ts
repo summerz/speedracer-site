@@ -1,7 +1,7 @@
 import { ABYSS_ENVIRONMENTS } from './abyssEnvironment.js';
 
 export type NightEnvironmentId = 'midnight' | 'deep-night' | 'predawn' | 'afterglow' | 'storm-night';
-export type UnderwaterEnvironmentId = 'abyss-shallow' | 'abyss-deep';
+export type UnderwaterEnvironmentId = 'abyss-shallow' | 'abyss-deep' | 'kelp-forest' | 'coral-garden' | 'sun-lagoon';
 export type RaceEnvironmentId = NightEnvironmentId | UnderwaterEnvironmentId;
 export type RainIntensity = 'light' | 'moderate' | 'heavy';
 export const RAIN_INTENSITIES: Record<RainIntensity, { label: string; density: number; volume: number }> = {

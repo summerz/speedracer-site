@@ -2,7 +2,9 @@ import * as THREE from 'three';
 import type { RaceEnvironment } from './raceEnvironment';
 
 /** Celestial bodies are angular sky features: no nearby sphere, translation parallax or extra draw. */
-export function createNightSky(environment: RaceEnvironment, forward: THREE.Vector3) {
+/** `shimmer` (CSS color) tints the underwater surface caustics. */
+export function createNightSky(environment: RaceEnvironment, forward: THREE.Vector3, shimmer = '#8cf2e6') {
+  const shimmerRgb = { r: 0, g: 0, b: 0 }; new THREE.Color(shimmer).getRGB(shimmerRgb, THREE.SRGBColorSpace);
   const object = new THREE.Group(); object.name = `sky-${environment.id}`;
   object.userData.environment = environment.id;
   const center = new THREE.Vector3(forward.x, 0, forward.z).normalize();
@@ -21,14 +23,14 @@ export function createNightSky(environment: RaceEnvironment, forward: THREE.Vect
       diskRadius: { value: Math.tan(environment.celestialRadius) },
       ringed: { value: environment.celestial === 'ringed-planet' ? 1 : 0 },
       crescent: { value: environment.celestial === 'crescent' ? 1 : 0 },
-      uTime: { value: 0 }, underwater: { value: environment.underwater ? 1 : 0 },
+      uTime: { value: 0 }, underwater: { value: environment.underwater ? 1 : 0 }, shimmer: { value: new THREE.Vector3(shimmerRgb.r, shimmerRgb.g, shimmerRgb.b) },
     },
     vertexShader: 'varying vec3 direction; void main(){ direction=position; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }',
     fragmentShader: `
       varying vec3 direction;
       uniform float storm, flash;
       uniform vec3 zenith, horizon, tint, center, celestialRight, celestialUp;
-      uniform float starStrength, diskRadius, ringed, crescent, uTime, underwater;
+      uniform float starStrength, diskRadius, ringed, crescent, uTime, underwater; uniform vec3 shimmer;
       float hash(vec3 p){p=fract(p*.1031); p+=dot(p,p.yzx+33.33); return fract((p.x+p.y)*p.z);}
       float noise(vec3 p){
         vec3 i=floor(p), f=fract(p); f=f*f*(3.-2.*f);
@@ -116,7 +118,7 @@ export function createNightSky(environment: RaceEnvironment, forward: THREE.Vect
             float c=sin((q.x+q.y)*5.3+uTime*.6);
             float caustic=pow(1.-abs(a*b),5.)*.75+pow(1.-abs(c*a),7.)*.5;
             float up=smoothstep(.04,.75,d.y);
-            w=mix(zenith,vec3(.55,.95,.9),.3)*caustic*up*.7+zenith*up*.3;
+            w=mix(zenith,shimmer,.3)*caustic*up*.7+zenith*up*.3;
           }
           color=sky*.8+w;
           color=mix(color,horizon*.7,horizonHaze);
