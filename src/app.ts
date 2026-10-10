@@ -88,11 +88,11 @@ export function mountApp(root: HTMLDivElement): () => void {
     const profile = store.snapshot();
     const entry = DRONE_CATALOG.find(craft => craft.configuration.id === profile.equipped)!;
     const selected = { ...entry, configuration: upgradedConfiguration(profile.equipped, profile.upgrades[profile.equipped]) };
-    if (screen === 'drive' && params.has('track') && (!track || campaignStatus(profile.campaign, mode, track) === 'locked')) { location.hash = 'campaign'; return; }
+    if (screen === 'drive' && params.has('track') && (!track || (params.get('test') !== '1' && campaignStatus(profile.campaign, mode, track) === 'locked'))) { location.hash = 'campaign'; return; }
     const mount = import.meta.env.DEV && screen === 'sound-lab'
       ? () => import('./devAudioApp').then(({ mountDevAudio }) => () => mountDevAudio(root, profile.balance, params.get('view') === 'library' ? 'library' : 'assignments'))
       : screen === 'drive'
-      ? () => import('./raceApp').then(({ mountRace }) => () => mountRace(root, () => { location.hash = track ? `campaign?track=${track.id}&mode=${mode}&challenge=${challenge}` : 'campaign'; }, selected.configuration, store, () => { location.hash = 'shop'; }, track ? { track, mode, challenge } : undefined))
+      ? () => import('./raceApp').then(({ mountRace }) => () => mountRace(root, () => { location.hash = track ? `campaign?track=${track.id}&mode=${mode}&challenge=${challenge}` : 'campaign'; }, selected.configuration, store, () => { location.hash = 'shop'; }, track ? { track, mode, challenge, test: params.get('test') === '1' } : undefined))
       : screen === 'campaign' ? () => import('./campaignApp').then(({ mountCampaign }) => () => mountCampaign(root, store, params.has('mode') ? { mode, trackId: params.get('track') ?? undefined, challenge } : undefined))
       : screen === 'shop' ? () => import('./shopApp').then(({ mountShop }) => () => mountShop(root, store, () => { location.hash = ''; }))
       : () => import('./hangarApp').then(({ mountHangar }) => () => mountHangar(root, selected, () => {}, () => { location.hash = 'campaign'; }, store));

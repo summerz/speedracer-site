@@ -534,3 +534,12 @@ button:focus-visible { outline:2px solid #c9f9f2; outline-offset:3px; }
 .height-guide[data-coach-target], .boost-readout[data-coach-target] { border-radius:8px; }
 @keyframes coach-pulse { 50% { outline-color:#ffd66b80; box-shadow:0 0 0 12px #ffd66b11, 0 0 18px #ffd66b55; } }
 @media (prefers-reduced-motion:reduce) { [data-coach-target] { animation:none; } }
+.jump-cue { position:absolute; left:50%; bottom:max(150px,calc(env(safe-area-inset-bottom) + 130px)); transform:translateX(-50%); display:flex; align-items:center; gap:8px; margin:0; padding:5px 12px 5px 6px; border-radius:999px; border:1px solid var(--cue,#ffb347); background:#071019cc; box-shadow:0 0 14px color-mix(in srgb,var(--cue,#ffb347) 45%,transparent); color:#fff4de; font:600 13px/1 'IBM Plex Mono',monospace; white-space:nowrap; pointer-events:none; text-shadow:0 1px 4px #000; }
+.jump-cue[hidden] { display:none; }
+.jump-cue[data-phase='approach'] { --cue:#ffb347; }
+.jump-cue[data-phase='airborne'] { --cue:#4ff0a6; color:#dcfff0; }
+.jump-cue[data-phase='landing'] { --cue:#4ff0a6; opacity:.7; color:#dcfff0; }
+.jump-badge { padding:3px 7px; border-radius:999px; background:var(--cue); color:#10161c; font:700 11px/1 'IBM Plex Mono',monospace; letter-spacing:1px; }
+.jump-distance { font-style:normal; color:var(--cue); }
+.has-touch-controls .jump-cue { bottom:max(250px,calc(env(safe-area-inset-bottom) + 232px)); }
+.driving-overlay.is-inset .jump-cue { bottom:60px; font-size:9px; padding:3px 8px 3px 4px; }

@@ -1,3 +1,4 @@
+import { upcomingTrackJump } from '../track/trackJump.js';
 import type { Track } from '../track/createTrack.js';
 import { forkAt } from '../track/trackBranches.js';
 import { resolveHeightObstacle } from '../track/obstacleDynamics.js';
@@ -71,6 +72,8 @@ export function awakeningTarget(track: Track, distance: number, routeId: string 
     if (safe.length) level = safe[0].i;
     safeAltitude = clamp(levels[level], opening.minAltitude, opening.maxAltitude);
   }
+  const jump = upcomingTrackJump(track, distance, routeId);
+  if (jump) { level = jump.requiredLevel; safeAltitude = levels[level]; }
   const bound = Math.max(0, track.halfWidth - CRAFT_HALF_WIDTH - .5);
   return { offset: clamp(lanes[0]?.offset ?? 0, -bound, bound), level, altitude: safeAltitude };
 }

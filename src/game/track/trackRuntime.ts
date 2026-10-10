@@ -1,3 +1,4 @@
+import { withTrackJumps } from './trackJump.js';
 import type { RaceChallengeId } from './raceChallenge.js';
 import { createTrack, createTrackFrame } from './createTrack.js';
 import type { Track } from './createTrack.js';
@@ -15,7 +16,7 @@ export function trackPreset(definition: TrackDefinition): DifficultyPreset {
 }
 export function createCatalogTrack(definition: TrackDefinition, challenge: RaceChallengeId = 'normal'): Track {
   const track = withTrackBranches(createTrack(undefined, trackPreset(definition), definition.layout ? authorClosedTrack(definition.layout) : undefined), definition.branches);
-  return configureExtraObstacles(track, challenge, definition.id);
+  return configureExtraObstacles(withTrackJumps(track, definition.jumps), challenge, definition.id);
 }
 export function trackMetrics(track: Track) {
   const frame = createTrackFrame(); let maxCurvature = 0, minHeight = Infinity, maxHeight = -Infinity, rollingMetres = 0;
