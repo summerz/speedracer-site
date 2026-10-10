@@ -94,6 +94,59 @@ test('ordinary driving clears every authored route with starter and fast craft a
   }
 });
 
+for (const challenge of ['easy', 'normal', 'hard']) test(`${challenge}: held steering selects left and right without entrance wall contacts`, () => {
+  for (const craft of DRONE_CATALOG) for (const boost of [false, true]) for (const steer of [-1, 1]) {
+    const track = withoutHazards(createCatalogTrack(definition, challenge)), fork = track.branches[0];
+    const model = createDrivingModel(track, craft.configuration.performance), s = model.state;
+    Object.assign(s, { distance: fork.start - 180, speed: boost ? craft.configuration.performance.boostStage2Speed : craft.configuration.performance.topSpeed });
+    const expected = fork.routes[steer < 0 ? 0 : 2].id;
+    let previewed = false;
+    for (let tick = 0; tick < 600 && s.distance < fork.start + fork.junctionLength + .1; tick++) {
+      // Same full-range input as holding A/D or the touch steering control.
+      model.step(1 / 60, { ...controls, steer, boost });
+      previewed ||= readForkCue(track, s)?.previewRouteId === expected;
+    }
+    const context = `${craft.name} ${challenge} ${boost ? 'boost' : 'ordinary'} ${steer}`;
+    assert.ok(s.distance >= fork.start + fork.junctionLength, context);
+    assert.ok(previewed, `${context}: preview responds to held input`);
+    assert.equal(s.routeId, expected, context);
+    assert.equal(s.collisions, 0, context);
+    assert.equal(s.offTrackExits, 0, context);
+  }
+});
+
+test('releasing held steering keeps the side preview and selection through the shared mouth', () => {
+  for (const challenge of ['easy', 'normal', 'hard']) for (const steer of [-1, 1]) {
+    const track = withoutHazards(createCatalogTrack(definition, challenge)), fork = track.branches[0];
+    const model = createDrivingModel(track), s = model.state;
+    Object.assign(s, { distance: fork.start - 180, speed: 100 });
+    let released = false;
+    for (let tick = 0; tick < 600 && s.distance < fork.start + fork.junctionLength + .1; tick++) {
+      released ||= Math.abs(s.offset) > track.halfWidth * .45;
+      model.step(1 / 60, { ...controls, steer: released ? 0 : steer });
+    }
+    assert.ok(released);
+    assert.equal(s.routeId, fork.routes[steer < 0 ? 0 : 2].id);
+    assert.equal(s.collisions, 0);
+  }
+});
+
+test('reversing held steering before the mouth can change the selected side', () => {
+  for (const challenge of ['easy', 'normal', 'hard']) for (const steer of [-1, 1]) {
+    const track = withoutHazards(createCatalogTrack(definition, challenge)), fork = track.branches[0];
+    const model = createDrivingModel(track), s = model.state;
+    Object.assign(s, { distance: fork.start - 180, speed: 100 });
+    let previewedFirst = false;
+    for (let tick = 0; tick < 600 && s.distance < fork.start + fork.junctionLength + .1; tick++) {
+      model.step(1 / 60, { ...controls, steer: s.distance < fork.start - 100 ? steer : -steer });
+      previewedFirst ||= readForkCue(track, s)?.previewRouteId === fork.routes[steer < 0 ? 0 : 2].id;
+    }
+    assert.ok(previewedFirst);
+    assert.equal(s.routeId, fork.routes[steer < 0 ? 2 : 0].id);
+    assert.equal(s.collisions, 0);
+  }
+});
+
 test('awakening takes the middle at entry and follows any already locked route without collision', () => {
   const track = createCatalogTrack(definition), fork = track.branches[0];
   for (const route of [null, ...fork.routes]) {

@@ -3,7 +3,7 @@ import { DEFAULT_DRONE_CONFIGURATION } from '../drone/droneConfiguration.js';
 import type { DronePerformance } from '../drone/droneConfiguration.js';
 import type { Track } from '../track/createTrack';
 import { createTrackFrame } from '../track/createTrack.js';
-import { forkAt, selectBranch, routeDistanceScale, branchChoiceOpen, advanceTrackDistance, forkApproachDrift } from '../track/trackBranches.js';
+import { forkAt, upcomingFork, selectBranch, routeDistanceScale, branchChoiceOpen, advanceTrackDistance, forkApproachDrift } from '../track/trackBranches.js';
 import { flightAcceleration, slopeHandling, impactSpeedRetention, impactAccelerationScale } from './flightDynamics.js';
 import { ALTITUDE_PROFILES, altitudeCanPass, resolveAltitudeProfile } from '../track/altitudeProfile.js';
 import type { TravelSegment } from './raceProgress.js';
@@ -256,7 +256,12 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
           state.routeId = selectBranch(track, state.distance, state.offset, state.altitudeLevel);
         const sampled = track.sample(state.distance, frame, state.routeId);
         const curvature = sampled.curvature;
-        const fade = forkApproachDrift(track, state.distance);
+        const choiceFork = fork ?? upcomingFork(track, state.distance, Math.max(180, state.speed * 2.5));
+        const choiceAssist = !awake && !Number.isFinite(input.guidedOffset) && !!choiceFork?.authoredLayout
+          && (!fork || branchChoiceOpen(track, state.distance));
+        // While the three-way sign is visible, steering chooses a lane instead
+        // of fighting the trunk curve. Normal cornering resumes after selection.
+        const fade = choiceAssist ? 0 : forkApproachDrift(track, state.distance);
         const drift = curvature * fade;
         const bend = sampled.tangent ? sampled.tangent.distanceTo(track.sample(state.distance + 2, aheadFrame, state.routeId).tangent) / (2 * (sampled.distanceScale ?? 1)) : Math.abs(curvature);
         const grade = clamp((sampled.tangent?.y ?? 0) * Math.cos(state.heading) + (sampled.right?.y ?? 0) * Math.sin(state.heading), -1, 1);
@@ -299,6 +304,16 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
         const yaw = clamp((dampedHeading - oldHeading) / dt + drift * travel, -yawCapacity, yawCapacity);
         state.heading = clamp(oldHeading + (yaw - drift * travel) * dt, -1.1, 1.1);
         state.offset += speed * Math.sin((oldHeading + state.heading) * 0.5) * dt;
+        if (choiceAssist) {
+          // Holding a direction must reach beyond the 30% selection boundary,
+          // then settle safely short of the rail. Preserve inward movement and
+          // never snap an already-wide approach pose to a new position.
+          const edge = Math.max(track.halfWidth * .55, Math.abs(offsetFrom));
+          if (Math.abs(state.offset) > edge) {
+            state.offset = clamp(state.offset, -edge, edge);
+            if (state.heading * state.offset > 0) state.heading = 0;
+          }
+        }
         if (awake) {
           const target = awakeningTarget(track, state.distance, state.routeId, state.altitude, levels,
             track.obstacleTime ?? state.elapsed, state.speed);
@@ -312,7 +327,7 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
           state.heading = 0;
         }
         // Legacy two-way forks ease hands-off flight to the trunk; authored choices retain the chosen lane.
-        if (!fork?.authoredLayout && !Number.isFinite(input.guidedOffset) && Math.abs(steer) < .15) state.offset *= Math.exp(-6 * (1 - fade) * dt);
+        if (!choiceAssist && !fork?.authoredLayout && !Number.isFinite(input.guidedOffset) && Math.abs(steer) < .15) state.offset *= Math.exp(-6 * (1 - fade) * dt);
         const oldDistance = state.distance;
         state.distance = advanceTrackDistance(track, state.distance, travel * dt, state.routeId);
         if (Number.isFinite(input.guidedStopDistance)) state.distance = Math.max(oldDistance, Math.min(state.distance, input.guidedStopDistance!));
