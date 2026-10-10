@@ -543,3 +543,41 @@ button:focus-visible { outline:2px solid #c9f9f2; outline-offset:3px; }
 .jump-distance { font-style:normal; color:var(--cue); }
 .has-touch-controls .jump-cue { bottom:max(250px,calc(env(safe-area-inset-bottom) + 232px)); }
 .driving-overlay.is-inset .jump-cue { bottom:60px; font-size:9px; padding:3px 8px 3px 4px; }
+
+/* ARENA RING 3-way fork guide: arrow + name + road height + hazard icons, never colour alone. */
+.fork-cue { position:absolute; left:50%; top:max(140px,calc(env(safe-area-inset-top) + 128px)); transform:translateX(-50%); width:min(372px,calc(100% - 24px)); margin:0; pointer-events:none; text-shadow:0 1px 4px #000; font-family:'IBM Plex Mono',monospace; animation:fork-cue-in .25s ease-out; }
+.fork-cue[hidden] { display:none; }
+.fork-cue .fork-head { display:flex; justify-content:center; align-items:baseline; gap:8px; margin:0 0 4px; font-size:13px; color:#bcefe7; }
+.fork-cue[data-phase='choice'] .fork-head { color:#fff0b4; }
+.fork-cue .fork-head small { font-size:10px; color:#9db7c2; }
+.fork-slots { display:grid; grid-template-columns:repeat(var(--n,3),1fr); gap:4px; }
+.fork-slot { display:grid; justify-items:center; align-content:start; gap:2px; padding:4px 2px 5px; border:1px solid #3d6676; border-radius:8px; background:#071019e6; color:#b9d2db; min-width:0; }
+.fork-slot:not(.is-on) { opacity:.78; }
+.fork-cue[data-phase='route'] .fork-slots { grid-template-columns:minmax(0,1fr); width:calc((100% - 8px) / 3); margin:0 auto; }
+.fork-slot.is-on { opacity:1; border-color:#7fffe6; background:#0b2a34e6; box-shadow:0 0 12px #7fffe655; color:#eaffff; }
+.fork-slot.is-locked { border-color:#ffd86a; box-shadow:0 0 14px #ffd86a66; }
+.fork-slot .fork-arrow { font-size:20px; line-height:1; color:#7fffe6; }
+.fork-slot strong { max-width:100%; font-size:10px; line-height:1.2; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.fork-height { display:flex; align-items:flex-end; gap:3px; }
+.fork-bars { display:flex; align-items:flex-end; gap:1px; height:13px; }
+.fork-bars i { width:4px; background:#2b4a56; }
+.fork-bars i.on { background:#7fffe6; }
+.fork-height small { font-size:9px; }
+.fork-chips { display:flex; gap:4px; font-size:11px; line-height:1; color:#ffb15e; }
+.fork-chips span { display:inline-flex; align-items:center; gap:1px; }
+.fork-chips small { font-size:8px; color:#e6f3f7; }
+.fork-chips .clear { color:#9fd6c6; }
+.fork-slot em { font-style:normal; font-size:9px; padding:0 4px; border-radius:3px; background:#ffd86a; color:#07131e; }
+.fork-cue[data-phase='route'] { animation:fork-cue-in .25s ease-out, fork-cue-out .5s ease-in 2.7s forwards; }
+@keyframes fork-cue-in { from { opacity:0; } }
+@keyframes fork-cue-out { to { opacity:0; } }
+@media (prefers-reduced-motion:reduce) { .fork-cue,.fork-cue[data-phase='route'] { animation:none; } }
+.drive-screen[data-phase='ready'] .fork-cue,.drive-screen[data-phase='paused'] .fork-cue { visibility:hidden; }
+@media (min-width:700px) {
+  .fork-cue { width:480px; top:140px; }
+  .fork-cue .fork-head { font-size:16px; } .fork-cue .fork-head small { font-size:12px; }
+  .fork-slot { gap:3px; padding:6px 3px 7px; }
+  .fork-slot .fork-arrow { font-size:26px; } .fork-slot strong { font-size:13px; }
+  .fork-height small { font-size:11px; } .fork-bars { height:16px; } .fork-bars i { width:5px; }
+  .fork-chips { font-size:14px; } .fork-chips small { font-size:10px; } .fork-slot em { font-size:11px; }
+}

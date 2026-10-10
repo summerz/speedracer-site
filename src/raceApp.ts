@@ -1,3 +1,4 @@
+import type { ForkCue } from './game/track/forkCue';
 import { marineZone } from './game/environment/marineZones';
 import { FEATURE_TEST_TRACKS } from './game/track/featureTestTracks';
 import { createDrivingTutorial } from './game/driving/drivingTutorial';
@@ -71,7 +72,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
         <div class="race-telemetry" aria-label="주행 정보"><div class="telemetry-row"><span class="speed-readout" aria-label="현재 주행 속도"><strong id="drive-speed">000</strong><span class="speed-unit mono"><small>속도</small>km/h</span></span><span id="race-rank" class="rank-readout mono" hidden></span><span id="race-lap" class="lap-readout mono">LAP 1/3</span><time id="drive-time" class="mono">00:00.000</time><span id="race-ghost" class="ghost-delta mono" aria-label="고스트와의 시간 차이" hidden></span></div><div class="corner-guide"><span id="lap-deadline" hidden></span><strong id="corner-text">직선</strong><span class="corner-hint">급한 코너에서는 S로 감속</span></div></div>
       </header>
       <button type="button" id="race-pause" class="race-pause" aria-label="일시정지 메뉴" aria-keyshortcuts="Escape" aria-controls="drive-overlay" aria-expanded="false"><span aria-hidden="true">Ⅱ</span><kbd class="key-badge">Esc</kbd></button>
-      <div class="driving-overlay"><div id="race-announcement" class="race-announcement" role="status" aria-live="polite" hidden><strong></strong><span></span><em id="race-clean" hidden>클린 +${CLEAN_HALF_LAP_POINTS}P</em></div><p id="race-callout" class="race-callout" role="status" hidden></p><p id="race-nearmiss" class="race-nearmiss" aria-hidden="true" hidden>NEAR MISS</p><p id="race-streak" class="race-streak" aria-hidden="true" hidden></p><p id="race-jump" class="jump-cue" role="status" hidden><b class="jump-badge">JUMP</b><span class="jump-text"></span><i class="jump-distance mono"></i></p><p id="race-notice" class="race-notice" role="status" aria-live="polite"></p><div id="race-countdown" class="race-countdown" role="status" aria-live="assertive" hidden><span>READY</span><strong>3</strong></div>
+      <div class="driving-overlay"><div id="race-announcement" class="race-announcement" role="status" aria-live="polite" hidden><strong></strong><span></span><em id="race-clean" hidden>클린 +${CLEAN_HALF_LAP_POINTS}P</em></div><p id="race-callout" class="race-callout" role="status" hidden></p><p id="race-nearmiss" class="race-nearmiss" aria-hidden="true" hidden>NEAR MISS</p><p id="race-streak" class="race-streak" aria-hidden="true" hidden></p><section id="race-fork3" class="fork-cue" role="status" aria-label="갈림길 안내" hidden></section><p id="race-jump" class="jump-cue" role="status" hidden><b class="jump-badge">JUMP</b><span class="jump-text"></span><i class="jump-distance mono"></i></p><p id="race-notice" class="race-notice" role="status" aria-live="polite"></p><div id="race-countdown" class="race-countdown" role="status" aria-live="assertive" hidden><span>READY</span><strong>3</strong></div>
       <div class="race-items"><button id="race-focus" type="button" class="race-focus" aria-keyshortcuts="V" hidden>집중 모드<kbd class="key-badge">V</kbd></button>${RIVAL_ITEMS.map(item => `<button type="button" id="race-${item.id}" class="race-focus" data-use-item="${item.id}" hidden>${item.name}</button>`).join('')}</div><p id="focus-feedback" class="focus-feedback" role="status" aria-live="polite"></p><footer class="drive-hud" aria-label="고도와 부스트 계기판">
         <aside class="height-guide" aria-label="고도 안내: 선택 단계, 민트색 통과 가능, 빨강 통과 불가, 주황 전환 중"><div id="height-level" class="height-bars"></div><strong id="height-instruction"></strong></aside>
         <div class="drive-controls">
@@ -591,9 +592,11 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
       spans[2].textContent = `${Math.ceil(cue.distance)}m`;
       if (jumpCue.dataset.phase !== cue.phase) jumpCue.dataset.phase = cue.phase;
     }
+    const forkCueEl = get('race-fork3');
+    renderForkCue(forkCueEl, state.phase === 'running' ? state.forkCue : null, matchMedia('(any-pointer: coarse)').matches);
     const forkGuide = get('race-fork');
-    forkGuide.hidden = !state.fork || state.phase !== 'running';
-    if (state.fork) {
+    forkGuide.hidden = !state.fork || state.phase !== 'running' || !!state.forkCue;
+    if (state.fork && !state.forkCue) {
       const fork = state.fork;
       forkGuide.textContent = fork.selected ? `${fork.selected} · 합류 ${Math.round(fork.distance)}m` :
         fork.kind === 'horizontal' ? `← 왼쪽 길 ${fork.names[0]} · 오른쪽 길 ${fork.names[1]} →`
@@ -860,4 +863,40 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
     hapticsButton.setAttribute('aria-pressed', String(enabled)); race?.setHapticsEnabled(enabled);
   }, listen);
   return () => { analytics.quit(lost ? 'render_error' : 'navigation'); screenDisposed = true; preferences.close(); restartConfirm.close(); impactAnimation?.cancel(); boostFlashAnimation?.cancel(); events.abort(); race?.dispose(); coach.dispose(); window.dispatchEvent(new CustomEvent('speedracer:phase', { detail: 'hangar' })); };
+}
+
+const FORK_ARROWS: Record<string, string> = { left: '←', center: '↑', right: '→', lower: '↓', upper: '↑' };
+const FORK_HEIGHT: Record<string, [number, string]> = { low: [1, '낮은 도로'], middle: [2, '중간 도로'], high: [3, '높은 도로'], variable: [2, '높이 변화'] };
+let forkCueKey = '';
+let forkCueRouteSince = 0;
+
+/** 3-slot route guide: arrow, name, road height and hazard icons per route; the highlighted slot follows the preview, then locks on selection. */
+function renderForkCue(el: HTMLElement, cue: ForkCue | null, coarse: boolean) {
+  if (cue?.phase !== 'route') forkCueRouteSince = 0;
+  else if (!forkCueRouteSince) forkCueRouteSince = performance.now();
+  const routeAge = performance.now() - forkCueRouteSince;
+  if (!cue || (cue.phase === 'route' && routeAge > 3200)) { if (!el.hidden) { el.hidden = true; forkCueKey = ''; } return; }
+  const dist = `${Math.max(0, Math.ceil(cue.distance / 5) * 5)}m`;
+  const head = cue.phase === 'approach' ? `갈림길 ${dist}` : cue.phase === 'choice' ? `방향 선택 · ${dist}` : '경로 확정';
+  const how = coarse ? '조이스틱 좌우' : '← → 조향';
+  const shown = cue.phase === 'route' ? cue.routes.filter(r => r.id === cue.selectedRouteId) : cue.routes;
+  const key = [cue.phase, cue.previewRouteId, cue.selectedRouteId, head, how].join('|');
+  el.hidden = false;
+  if (key === forkCueKey) return;
+  forkCueKey = key;
+  el.dataset.phase = cue.phase;
+  el.style.setProperty('--n', String(shown.length));
+  const slots = shown.map(r => {
+    const [steps, label] = FORK_HEIGHT[r.roadHeight] ?? FORK_HEIGHT.middle;
+    const bars = [0, 1, 2].map(i => `<i class="${i < steps ? 'on' : ''}" style="height:${5 + i * 3}px"></i>`).join('');
+    const chips = [
+      ...(r.hazards.includes('height') ? ['<span title="고도 장애물">⇕<small>고도</small></span>'] : []),
+      ...(r.hazards.includes('corridor') ? ['<span title="통로 게이트">▥<small>통로</small></span>'] : []),
+      ...(r.features.some(f => f.includes('부스트')) ? ['<span title="부스트 패드">⚡<small>부스트</small></span>'] : []),
+    ].join('') || '<span class="clear">✓<small>안전</small></span>';
+    const on = cue.phase === 'route' || r.id === cue.previewRouteId;
+    const mark = cue.phase === 'route' ? '<em>✓ 확정</em>' : r.id === cue.defaultRouteId ? '<em>기본</em>' : '';
+    return `<div class="fork-slot${on ? ' is-on' : ''}${cue.phase === 'route' ? ' is-locked' : ''}"><b class="fork-arrow">${FORK_ARROWS[r.choice] ?? '↑'}</b><strong>${r.name}</strong><span class="fork-height"><span class="fork-bars">${bars}</span><small>${label}</small></span><span class="fork-chips">${chips}</span>${mark}</div>`;
+  }).join('');
+  el.innerHTML = `<p class="fork-head"><b>${head}</b>${cue.phase === 'route' ? '' : `<small>${how}</small>`}</p><div class="fork-slots">${slots}</div>`;
 }
