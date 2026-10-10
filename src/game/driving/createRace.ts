@@ -5,7 +5,7 @@ import { RACE_CHALLENGES, challengeLapLimit, type RaceChallengeId } from '../tra
 import { createRaceWeather } from '../environment/createRaceWeather';
 import { createNightSky } from '../environment/createNightSky';
 import { NIGHT_ENVIRONMENTS } from '../environment/raceEnvironment';
-import type { NightEnvironment } from '../environment/raceEnvironment';
+import type { RaceEnvironment } from '../environment/raceEnvironment';
 import { createCatalogTrack } from '../track/trackRuntime';
 import type { TrackDefinition } from '../track/trackCatalog';
 import { createDistrictScenery } from '../track/createDistrictScenery';
@@ -125,7 +125,7 @@ export function createRace(
   mode: RaceMode = 'time-attack',
   course?: TrackDefinition,
   rivalSlots: readonly RivalItemId[] = [],
-  environment: NightEnvironment = NIGHT_ENVIRONMENTS[0],
+  environment: RaceEnvironment = NIGHT_ENVIRONMENTS[0],
   challenge: RaceChallengeId = 'normal',
   intro = false,
   guidance: { tutorial?: ReturnType<typeof createDrivingTutorial>; practice?: boolean } = {},

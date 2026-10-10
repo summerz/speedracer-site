@@ -122,7 +122,7 @@ export function mountCampaign(root: HTMLDivElement, store: ProgressStore, contex
       ? `<div class="continue-banner" data-done="true"><span class="eyebrow">COMPLETE</span><strong>모든 코스 통과 · <span class="stat-stars">★ ${starTotal}/${starMax}</span></strong></div>`
       : `<div class="continue-banner" style="--district-color:${DISTRICTS[next.district].color}"><span class="continue-copy"><span class="eyebrow">${firstRun ? '첫 코스' : '이어하기'}</span><strong><em>${DISTRICTS[next.district].name}</em> · <span class="mono">${number2(next.order)}</span> ${next.name}</strong></span><button id="campaign-continue" type="button" class="continue-button" data-autofocus>${firstRun ? '첫 도전' : '이어서 도전'} ↗</button></div>`;
     get('districts-summary').innerHTML = `${banner}<div class="overall"><p class="mono"><span>통과 <b>${cleared}</b>/${TRACK_CATALOG.length}</span><span class="stat-stars">★ <b>${starTotal}</b>/${starMax}</span></p><span class="meter" aria-hidden="true"><i style="width:${starTotal / starMax * 100}%"></i></span></div>`;
-    get('district-list').innerHTML = (Object.entries(DISTRICTS) as [DistrictId, typeof DISTRICTS[DistrictId]][]).map(([id, entry], index) => {
+    get('district-list').innerHTML = (Object.entries(DISTRICTS) as [DistrictId, typeof DISTRICTS[DistrictId]][]).filter(([id]) => TRACK_CATALOG.some(track => track.district === id)).map(([id, entry], index) => {
       const tracks = districtTracks(id);
       const statuses = tracks.map(t => campaignStatus(campaign, mode, t));
       const done = statuses.filter(s => s === 'cleared').length, stars = tracks.reduce((sum, t) => sum + bestStars(campaign, t), 0);

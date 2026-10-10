@@ -1,8 +1,8 @@
 import * as THREE from 'three';
-import type { NightEnvironment } from './raceEnvironment';
+import type { RaceEnvironment } from './raceEnvironment';
 
 /** Celestial bodies are angular sky features: no nearby sphere, translation parallax or extra draw. */
-export function createNightSky(environment: NightEnvironment, forward: THREE.Vector3) {
+export function createNightSky(environment: RaceEnvironment, forward: THREE.Vector3) {
   const object = new THREE.Group(); object.name = `sky-${environment.id}`;
   object.userData.environment = environment.id;
   const center = new THREE.Vector3(forward.x, 0, forward.z).normalize();
