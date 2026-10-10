@@ -1,5 +1,6 @@
 import type { ArcRail, BoostPad, BoostRing, CorridorObstacle, HeightObstacle, MineField, Track } from './createTrack.js';
 import type { RaceChallengeId } from './raceChallenge.js';
+export { safePlacement } from './obstaclePlacement.js';
 import { physicalDistance } from './trackBranches.js';
 import { layoutObstacles, mulberry32, randomCorridorLanes, randomObstacleAltitudes, randomPadLanes, randomRingSides, ringQuota } from './obstacleLayout.js';
 import { boostKindFor } from './hazardCatalog.js';
@@ -89,14 +90,6 @@ export function mineFieldGuide(track: Track, distance: number, speed: number, ro
       hint: easy ? (['left', 'center', 'right'] as const)[mineLane(mineLineOffset(field, 0), track.halfWidth)] : null };
   }
   return best && (hazardDistance === null || best.distance < hazardDistance) ? best : null;
-}
-
-/** Gentle, straight-ish road around a field: the site rule for corridors and mine fields. */
-export function safePlacement(track: Track, obstacle: { distance: number; routeId?: string }) {
-  return [-60, -30, 0, 30, 60].every(offset => {
-    const frame = track.sample(obstacle.distance + offset, undefined, obstacle.routeId);
-    return frame.section === 'course' && Math.abs(frame.curvature) < .008 && Math.abs(frame.tangent.y) < .55;
-  });
 }
 
 /**

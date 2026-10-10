@@ -83,11 +83,11 @@ for (const kind of ['horizontal', 'vertical']) for (const intertwined of [false,
     }
   });
 }
-test('first two courses introduce both choices and all Neon City districts have branches', () => {
+test('first two courses introduce both choices and all campaign districts have branches', () => {
   assert.equal(TRACK_CATALOG[0].branches[0].kind, 'horizontal');
   assert.equal(TRACK_CATALOG[1].branches[0].kind, 'vertical');
-  assert.equal(new Set(definitions.map(d => d.district)).size, new Set(TRACK_CATALOG.filter(track => track.order <= 32).map(track => track.district)).size);
-  assert.equal(definitions.length, 19);
+  assert.equal(new Set(definitions.map(d => d.district)).size, new Set(TRACK_CATALOG.map(track => track.district)).size);
+  assert.equal(definitions.length, 26);
 });
 for (const definition of definitions) test(`${definition.name}: continuous fork geometry, distinct experiences and physical progress`, () => {
   const track = createCatalogTrack(definition, 'easy');

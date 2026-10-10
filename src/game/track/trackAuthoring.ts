@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { TrackControlPoint } from './createTrack.js';
 
-export type CourseShape = 'ring' | 'kidney' | 'thumb' | 'eight' | 'clover' | 'triangle' | 'horseshoe' | 'star' | 'knot';
+export type CourseShape = 'ring' | 'kidney' | 'thumb' | 'eight' | 'clover' | 'triangle' | 'horseshoe' | 'star' | 'knot' | 'crescent' | 'slalom' | 'diamond';
 export interface CourseLayout {
   shape: CourseShape;
   radiusX: number;
@@ -17,8 +17,13 @@ export interface CourseLayout {
 /** Closed footprints and local stunts are independent: a loop need not force a long return road. */
 export function authorClosedTrack(layout: CourseLayout): TrackControlPoint[] {
   const knots: THREE.Vector3[] = [];
-  const custom = layout.shape === 'thumb' ? [[-.8,-.6],[-.7,-1.1],[.05,-1.25],[.55,-.95],[.45,-.25],[.95,.15],[.95,.8],[.45,1],[-.25,.8],[-.85,.25]]
-    : layout.shape === 'horseshoe' ? [[-1,-.55],[-1,.5],[-.6,1],[.5,1],[1,.5],[1,-.55],[.9,-.9],[.68,-1],[.52,-.75],[.45,-.45],[.4,.15],[-.35,.15],[-.45,-.45],[-.52,-.75],[-.68,-1],[-.9,-.9]] : undefined;
+  const marineKnots: Partial<Record<CourseShape, number[][]>> = {
+    crescent: [[-.6,-1], [.25,-1.15], [.85,-.65], [1,.1], [.7,.85], [0,1.1], [-.7,.75], [-1,.1], [-.75,-.45], [-.25,-.4], [.05,0], [-.1,.45], [.25,.55], [.55,.15], [.4,-.45]],
+    slalom: [[-.6,-1.2], [-.05,-1.25], [.55,-.85], [.25,-.3], [.65,.25], [.25,.8], [.55,1.3], [-.1,1.5], [-.7,1.1], [-.95,.6], [-.65,.05], [-1,-.5]],
+    diamond: [[0,-1.25], [.35,-.9], [1,0], [.5,.7], [0,1.25], [-.5,.7], [-1,0], [-.35,-.9]],
+  };
+  const custom = marineKnots[layout.shape] ?? (layout.shape === 'thumb' ? [[-.8,-.6],[-.7,-1.1],[.05,-1.25],[.55,-.95],[.45,-.25],[.95,.15],[.95,.8],[.45,1],[-.25,.8],[-.85,.25]]
+    : layout.shape === 'horseshoe' ? [[-1,-.55],[-1,.5],[-.6,1],[.5,1],[1,.5],[1,-.55],[.9,-.9],[.68,-1],[.52,-.75],[.45,-.45],[.4,.15],[-.35,.15],[-.45,-.45],[-.52,-.75],[-.68,-1],[-.9,-.9]] : undefined);
   const count = custom?.length ?? 96;
   const rotation = new THREE.Matrix4().makeRotationY(layout.rotation);
   for (let i = 0; i < count; i++) {

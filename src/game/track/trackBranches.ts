@@ -11,6 +11,8 @@ export interface BranchRecipe {
   /** Minimum ground clearance below the pavement in a low-lying coil. */
   readonly groundClearance?: number;
   readonly variety?: BranchVariety;
+  /** Authored district-specific names, in displayed route order. */
+  readonly routeNames?: readonly string[];
 }
 export interface BranchRoute {
   readonly id: string; readonly name: string; readonly description: string;
@@ -338,7 +340,10 @@ export function withTrackBranches(track: Track, recipes: readonly BranchRecipe[]
         description: technical ? '가까운 구조물 · 굽이와 고도 대응' : '트인 전망 · 긴 부스트 기회' };
     };
     const routeSides = three ? [0, 2, 1] as const : [0, 1] as const;
-    const routes = routeSides.map(makeRoute);
+    const routes = routeSides.map((side, order) => {
+      const route = makeRoute(side);
+      return recipe.routeNames?.[order] ? { ...route, name: recipe.routeNames[order] } : route;
+    });
     for (const [order, side] of routeSides.entries()) pairs.set(routes[order].id, (distance, otherId) => {
       const otherOrder = routes.findIndex(r => r.id === otherId);
       const own = geometry[side], other = geometry[routeSides[otherOrder]];

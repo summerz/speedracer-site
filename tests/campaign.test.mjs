@@ -143,9 +143,9 @@ test('district scenery is deterministic, instanced and omitted in the track over
   }
 });
 
-test('closed footprints include nine shapes and elevated crossings, with different course recipes', () => {
+test('closed footprints include twelve shapes and elevated crossings, with different course recipes', () => {
   const layouts = TRACK_CATALOG.map(t => t.layout).filter(Boolean);
-  assert.equal(new Set(layouts.map(l => l.shape)).size, 9);
+  assert.equal(new Set(layouts.map(l => l.shape)).size, 12);
   assert.equal(new Set(layouts.map(l => JSON.stringify(l))).size, layouts.length);
   assert.ok(layouts.some(l => l.stunts.some(s => s.kind === 'loop')));
   assert.ok(layouts.some(l => l.stunts.some(s => s.kind === 'helix' && s.turns >= 4)));

@@ -1,4 +1,5 @@
 import type { BoostPad, CorridorObstacle, HeightObstacle, Track } from './createTrack.js';
+import { safePlacement } from './obstaclePlacement.js';
 import { advanceTrackDistance } from './trackBranches.js';
 
 /** Pilot forks own their complete layout; run randomization must preserve these sites. */
@@ -27,7 +28,13 @@ export function authoredForkLayout(track: Track, template: HeightObstacle) {
             maxAltitude: level === 0 ? height + .45 : height });
         }
       } else if (route.cue?.choice === 'center') {
-        corridors.push({ routeId: route.id, distance: at(80), depth: 4, speedRetention: template.speedRetention,
+        // A new footprint can bend the neutral route; keep the corridor on gentle pavement.
+        let distance = at(80);
+        while (!safePlacement(track, { distance, routeId: route.id })) {
+          distance = advanceTrackDistance(track, distance, 10, route.id);
+          if (distance > route.mergeStart - 15) throw new Error(`No safe authored corridor site: ${route.id}`);
+        }
+        corridors.push({ routeId: route.id, distance, depth: 4, speedRetention: template.speedRetention,
           lane: 'center', safeCenter: 0, safeWidth: track.halfWidth * 1.1 });
       } else {
         pads.push({ routeId: route.id, distance: at(terrace ? 130 : 80), lane: 'center', center: 0, width: track.halfWidth, length: 14 });
