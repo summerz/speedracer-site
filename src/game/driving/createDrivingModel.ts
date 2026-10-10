@@ -30,6 +30,8 @@ export interface DrivingState {
   coresCollected: number;
   awakeningRemaining: number;
   awakeningsUsed: number;
+  /** Actual transitions into boost, including partial activations. */
+  boostUses: number;
   boosting: boolean;
   boostStage: 0 | 1 | 2;
   boostElapsed: number;
@@ -82,7 +84,7 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
     routeId: null,
     distance: 0, offset: 0, heading: 0, altitude: initialAltitude, targetAltitude: initialAltitude, altitudeLevel: initialLevel,
     speed: 0, charge: 1, awakeningCores: 0, coresCollected: 0, awakeningRemaining: 0, awakeningsUsed: 0,
-    boosting: false, boostStage: 0, boostElapsed: 0, boostStageProgress: 0, boostNeedsRelease: false, checkpoint: 0, elapsed: 0,
+    boostUses: 0, boosting: false, boostStage: 0, boostElapsed: 0, boostStageProgress: 0, boostNeedsRelease: false, checkpoint: 0, elapsed: 0,
     collisions: 0, recoveries: 0, offTrackExits: 0, penaltyPoints: 0, obstaclesPassed: 0, boostPads: 0, boostRings: 0, nearMisses: 0, cleanStreak: 0, bestStreak: 0, notice: null,
   };
   const initial = { ...state };
@@ -223,7 +225,9 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
           boostSpent = 0;
           if (state.charge >= 0.15) state.boostNeedsRelease = false;
         }
+        const wasBoosting = state.boosting;
         state.boosting = !awake && input.boost && !input.brake && !state.boostNeedsRelease && state.charge > 0;
+        if (state.boosting && !wasBoosting) state.boostUses++;
         if (state.boosting) {
           state.boostElapsed += dt;
           state.boostStageProgress = Math.min(1, state.boostElapsed / boostStage2Seconds);

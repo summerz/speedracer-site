@@ -330,3 +330,64 @@ test('a headless rival steers onto a free boost pad ahead', () => {
   for (let tick = 0; tick < 6000 && racer.model.state.distance < 280; tick++) racer.step(1 / 120, aiDrivingInput(track, config, racer.model.state, 1, []));
   assert.equal(racer.model.state.boostPads, 1);
 });
+
+test('early NPC finishers coast visibly past the line, keep their official result, pause and reset', t => {
+  const originalWindow = globalThis.window;
+  globalThis.window = { devicePixelRatio: 1 };
+  t.after(() => { if (originalWindow === undefined) delete globalThis.window; else globalThis.window = originalWindow; });
+  const race = session(); race.start();
+  const stopped = { ...input, throttle: false };
+  let rival;
+  for (let tick = 0; tick < 120 * 80 && !rival; tick++) {
+    race.step(1 / 120, stopped);
+    rival = race.rivals.find(entry => entry.finishCoast);
+  }
+  assert.ok(rival, 'an NPC finishes while the player is still racing');
+  assert.equal(race.phase, 'running');
+  const officialState = { ...rival.controller.model.state };
+  const finish = race.snapshot().competition.standings.find(entry => entry.id === rival.id);
+  const initialSpeed = rival.finishCoast.pose.speed;
+  assert.ok(initialSpeed > 0);
+  advance(race, .2, stopped);
+  assert.ok(rival.finishCoast.pose.distance > straight.length * 3);
+  assert.ok(rival.finishCoast.pose.speed < initialSpeed && rival.finishCoast.pose.speed > 0);
+  const scene = new THREE.Scene(), visuals = createRivalVisuals(scene, course, race.rivals);
+  visuals.update(1 / 60, false);
+  const visual = visuals.entries.find(entry => entry.rival === rival);
+  assert.equal(visual.object.visible, true);
+  const frame = course.sample(rival.finishCoast.pose.distance);
+  const expected = frame.position.clone().addScaledVector(frame.right, rival.finishCoast.pose.offset)
+    .addScaledVector(frame.up, rival.finishCoast.pose.altitude);
+  assert.ok(visual.object.position.distanceTo(expected) < 1e-8);
+  race.pause(); const pausedPose = { ...rival.finishCoast.pose };
+  advance(race, 1, stopped); assert.deepEqual(rival.finishCoast.pose, pausedPose);
+  race.start(); advance(race, 5, stopped);
+  assert.equal(rival.finishCoast.pose.speed, 0);
+  const parked = { ...rival.finishCoast.pose };
+  advance(race, 2, stopped); assert.deepEqual(rival.finishCoast.pose, parked);
+  assert.deepEqual(rival.controller.model.state, officialState);
+  assert.deepEqual(race.snapshot().competition.standings.find(entry => entry.id === rival.id), finish);
+  visuals.update(1 / 60, true); assert.equal(visual.object.visible, true);
+  race.restart(); assert.ok(race.rivals.every(entry => entry.finishCoast === null));
+  visuals.dispose();
+});
+
+test('coasting positions and stationary spacing agree across rendering frame rates', async () => {
+  const { createFinishCoast } = await import('../output/test/game/driving/finishCoast.js');
+  const state = { distance: 1500, speed: 0, offset: 2, altitude: 2, heading: .1 };
+  const sample = (fps, seconds, slot = 0) => {
+    const coast = createFinishCoast(state, 100, slot, 500);
+    for (let tick = 0; tick < fps * seconds; tick++) coast.step(1 / fps);
+    return coast.pose;
+  };
+  for (const seconds of [.5, 5]) {
+    const poses = [30, 60, 120].map(fps => sample(fps, seconds));
+    for (const pose of poses.slice(1)) {
+      assert.ok(Math.abs(pose.distance - poses[0].distance) < 1e-8);
+      assert.ok(Math.abs(pose.speed - poses[0].speed) < 1e-8);
+    }
+  }
+  const parked = Array.from({ length: 7 }, (_, slot) => sample(60, 5, slot));
+  assert.ok(parked.every(pose => pose.distance > 1500 && pose.distance < 1700 && pose.speed === 0));
+  assert.equal(new Set(parked.map(pose => pose.distance)).size, 7);
+});

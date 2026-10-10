@@ -1,3 +1,5 @@
+import { createFinishCoast } from './finishCoast.js';
+import type { FinishCoast } from './finishCoast.js';
 import { upcomingFork, forkAt, branchChoiceOpen, forkApproachDrift } from '../track/trackBranches.js';
 import { RACE_CHALLENGES, type RaceChallengeId } from '../track/raceChallenge.js';
 import { DRONE_CATALOG } from '../drone/droneCatalog.js';
@@ -182,7 +184,7 @@ export function aiDrivingInput(track: Track, configuration: DroneConfiguration, 
     steer: (curvature * forkApproachDrift(track, state.distance) * state.speed - (state.heading - lineSlope) * (following ? 14 : enteringCorridor ? 8 : 4.2) + lateralPull) / Math.max(.1, steeringYawRate(state.speed, p)), lift };
 }
 
-/** One clock, countdown and pause lifecycle for both modes; completed pilots become ghosts. */
+/** One clock, countdown and pause lifecycle for both modes; completed pilots coast beyond the finish without changing their result. */
 export function createRaceSession(track: Track, configuration: DroneConfiguration,
   records: ReturnType<typeof createRaceRecords>, focusSlots = 0, mode: RaceMode = 'time-attack',
   random: () => number = Math.random, controlMode: AiControlMode = 'desktop', rules: RaceRules = {}, rating?: number, rivalSlots: readonly RivalItemId[] = [], challenge: RaceChallengeId = 'normal') {
@@ -210,6 +212,7 @@ export function createRaceSession(track: Track, configuration: DroneConfiguratio
       core: '#ffffff', body: color, tail: color, afterglow: color, pulseColor: color,
     } };
     return {
+      finishCoast: null as FinishCoast | null,
       id: `ai-${racer.id}`, name: racer.name, craftName: entry.name, color, racer, effects: { freeze: 0, jam: 0 },
       style: AI_STYLE_LABELS[racer.style], rating: racer.rating, profile, configuration: rivalConfiguration,
       controller: createTimeAttack(track, rivalConfiguration.performance,
@@ -224,6 +227,7 @@ export function createRaceSession(track: Track, configuration: DroneConfiguratio
   const grid = () => {
     contacts.clear(); clock = 0; track.obstacleTime = 0; itemCooldown = 0; itemUsed.length = 0;
     rivals.forEach((rival, index) => {
+      rival.finishCoast = null;
       rival.effects.freeze = 0; rival.effects.jam = 0;
       rival.controller.model.state.distance = -(index + 1) * 7;
       rival.controller.model.state.offset = (index % 3 - 1) * Math.min(4.5, track.halfWidth - 3.5);
@@ -260,7 +264,12 @@ export function createRaceSession(track: Track, configuration: DroneConfiguratio
     start() {
       const fresh = player.phase === 'ready' || player.phase === 'finished';
       if (fresh) track.randomizeObstacles?.(random);
-      player.start(); rivals.forEach(p => fresh ? p.controller.restart() : p.controller.start()); if (fresh) grid();
+      player.start();
+      rivals.forEach(p => {
+        if (fresh) p.controller.restart();
+        else if (p.controller.phase === 'paused') p.controller.start();
+      });
+      if (fresh) grid();
     },
     restart() { track.randomizeObstacles?.(random); player.restart(); rivals.forEach(p => p.controller.restart()); grid(); },
     pause() { player.pause(); rivals.forEach(p => p.controller.pause()); },
@@ -310,6 +319,13 @@ export function createRaceSession(track: Track, configuration: DroneConfiguratio
           rival.controller.step(step, { ...controls, ...(rival.effects.jam > 1e-8 ? { targetSpeedScale: .5 } : {}) }, rival.effects.freeze > 1e-8);
           rival.effects.freeze = Math.max(0, rival.effects.freeze - step);
           rival.effects.jam = Math.max(0, rival.effects.jam - step);
+        });
+        rivals.forEach((rival, index) => {
+          if (rival.controller.phase !== 'finished') return;
+          if (!rival.finishCoast) {
+            rival.finishCoast = createFinishCoast(rival.controller.model.state,
+              rival.controller.snapshot().finishSpeed, index, track.length);
+          } else rival.finishCoast.step(step);
         });
         clock += Math.max(0, ...participants.map((p, i) => p.controller.model.state.elapsed - before[i].elapsed));
         track.obstacleTime = clock;
