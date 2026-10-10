@@ -17,6 +17,7 @@
     "src/game/environment/createRaceWeather.ts",
     "src/game/track/createDistrictScenery.ts",
     "src/game/track/trackRuntime.ts",
+    "src/game/track/featureTestTracks.ts",
     "src/game/driving/createTimeAttack.ts",
     "src/game/driving/createRaceSession.ts",
     "src/game/driving/createRivalVisuals.ts",

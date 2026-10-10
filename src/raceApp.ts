@@ -1,9 +1,10 @@
+import { FEATURE_TEST_TRACKS } from './game/track/featureTestTracks';
 import { createDrivingTutorial } from './game/driving/drivingTutorial';
 import { createTutorialCoach } from './game/driving/createTutorialCoach';
 import type { TutorialMode } from './game/driving/drivingTutorial';
 import { createTutorialProgress } from './game/driving/tutorialProgress';
 import { RACE_CHALLENGES, challengeStars, challengeStarPenalty, type RaceChallengeId } from './game/track/raceChallenge';
-import { NIGHT_ENVIRONMENTS, RAIN_INTENSITIES, selectRaceEnvironment, selectRainIntensity } from './game/environment/raceEnvironment';
+import { RAIN_INTENSITIES, previewRaceEnvironment, selectRaceEnvironment, selectRainIntensity } from './game/environment/raceEnvironment';
 import { hazardEdgeAlert } from './game/driving/hazardEdgeAlert';
 import { raceResultData } from './game/driving/raceResultData';
 import { AI_OPPONENT_COUNT } from './game/driving/aiRoster';
@@ -185,6 +186,9 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
   let practice = false;
   let tutorialMode: TutorialMode | null = null;
   const featureTest = !!campaign?.test;
+  const featureRecipe = FEATURE_TEST_TRACKS.find(track => track.id === campaign?.track.id);
+  const featureInstructions = featureRecipe?.instructions
+    ?? '갈림길에서 위쪽 송전 우회로로 가세요. 도로가 끊기기 전에 ↑로 높은 고도, 공중에서 ↓로 낮은 고도에 착지합니다. 기록과 보상은 저장하지 않습니다.';
   const isTraining = () => practice || tutorialMode !== null || featureTest;
   let tutorialStorage: Storage | undefined;
   try { tutorialStorage = window.localStorage; } catch { /* Optional tutorial persistence. */ }
@@ -645,9 +649,9 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
       screen.dataset.phase = state.phase;
       window.dispatchEvent(new CustomEvent('speedracer:phase', { detail: state.phase }));
       get('drive-overlay-title').textContent = state.phase === 'paused' ? '일시정지' : state.phase === 'finished' ? attack.disqualified ? '타임어택 실격' : '레이스 완료' : '레이스 준비';
-      get('drive-overlay-copy').textContent = state.phase === 'ready' && featureTest ? '갈림길에서 위쪽 송전 우회로로 가세요. 도로가 끊기기 전에 ↑로 높은 고도, 공중에서 ↓로 낮은 고도에 착지합니다. 기록과 보상은 저장하지 않습니다.' : state.phase === 'ready' && isTraining() ? '자동 가속부터 다시 연습합니다. 제한시간 없이 달리며 기록과 보상을 저장하지 않습니다.' : state.phase === 'ready' && campaign ? selectedMode === 'competition' ? `${campaign.track.laps}랩 경기에서 ${campaignRankLimit(campaign.track)}위 이내로 완주하면 다음 트랙이 열립니다.` : `매 랩 ${attack.lapLimit}초 안에 ${attack.totalLaps}랩을 완주하세요. 제한시간이 지나면 실격됩니다.` : state.phase === 'ready' ? (selectedMode === 'competition' ? `상대 기체 ${AI_OPPONENT_COUNT}대와 3랩을 겨룹니다. 직선에서 추월하고 급한 코너에서는 감속하세요.` : '3랩을 완주해 기록에 도전하세요. 자동으로 가속하며 급한 코너에서는 감속합니다.') : '';
+      get('drive-overlay-copy').textContent = state.phase === 'ready' && featureTest ? featureInstructions : state.phase === 'ready' && isTraining() ? '자동 가속부터 다시 연습합니다. 제한시간 없이 달리며 기록과 보상을 저장하지 않습니다.' : state.phase === 'ready' && campaign ? selectedMode === 'competition' ? `${campaign.track.laps}랩 경기에서 ${campaignRankLimit(campaign.track)}위 이내로 완주하면 다음 트랙이 열립니다.` : `매 랩 ${attack.lapLimit}초 안에 ${attack.totalLaps}랩을 완주하세요. 제한시간이 지나면 실격됩니다.` : state.phase === 'ready' ? (selectedMode === 'competition' ? `상대 기체 ${AI_OPPONENT_COUNT}대와 3랩을 겨룹니다. 직선에서 추월하고 급한 코너에서는 감속하세요.` : '3랩을 완주해 기록에 도전하세요. 자동으로 가속하며 급한 코너에서는 감속합니다.') : '';
       startButton.innerHTML = `${state.phase === 'paused' ? '계속하기' : state.phase === 'finished' ? '다시 도전' : '레이스 시작'} <span aria-hidden="true">↗</span>`;
-      get('race-hangar').textContent = state.phase === 'paused' ? '포기하고 캠페인으로' : '캠페인으로';
+      get('race-hangar').textContent = featureRecipe ? state.phase === 'paused' ? '포기하고 격납고로' : '격납고로' : state.phase === 'paused' ? '포기하고 캠페인으로' : '캠페인으로';
     }
     paintMenu();
     if (phaseChanged || cinematicEnded) menuDialog.scrollTop = 0;
@@ -714,13 +718,10 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
   }, listen);
   get('drive-retry').addEventListener('click', () => location.reload(), listen);
   const prepareRace = () => {
-    // The development switch overrides every course; production retains random weather.
-    const weather = import.meta.env.DEV
-      ? previewRain ? NIGHT_ENVIRONMENTS.find(value => value.id === 'storm-night')!
-        : defaultEnvironment.rain ? NIGHT_ENVIRONMENTS[0] : defaultEnvironment
-      : defaultEnvironment;
+    const weather = previewRaceEnvironment(defaultEnvironment, import.meta.env.DEV ? previewRain : undefined);
     const environment = weather.rain ? { ...weather, rainIntensity: selectRainIntensity() } : weather;
     if (rainToggle) {
+      rainToggle.hidden = defaultEnvironment.underwater;
       rainToggle.setAttribute('aria-pressed', String(previewRain));
       get('dev-rain-state').textContent = previewRain ? '켜짐' : '꺼짐';
     }
@@ -736,7 +737,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
     get('race-course-name').textContent = course?.name ?? 'NEON CIRCUIT';
     get('race-mode-title').textContent = `${featureTest ? 'FEATURE TEST · ' : isTraining() ? 'PRACTICE · ' : ''}${selectedMode === 'competition' ? 'COMPETITION RACE' : 'TIME ATTACK'} · ${campaign ? RACE_CHALLENGES[challenge].label : DIFFICULTIES[selectedDifficulty].label}`;
     if (course) { const zone = document.createElement('span'); zone.className = 'result-zone'; zone.textContent = ` · ${DISTRICTS[course.district].name} · ${String(course.order ?? 0).padStart(2, '0')}`; get('race-mode-title').append(zone); }
-    get('race-loadout').textContent = featureTest ? '기능 테스트 · 끊긴 도로 점프 — 갈림길에서 위쪽 송전 우회로 · 기록과 보상을 저장하지 않습니다' : isTraining() ? '첫 코스 조작 연습 · 기록과 보상을 저장하지 않습니다' : `${selectedMode === 'competition' ? `상대 기체 ${AI_OPPONENT_COUNT}대와 경쟁` : '타임어택'} · ${focusSlots || equippedRivalSlots.length ? `장착 아이템 ${focusSlots + equippedRivalSlots.length}개 · 기본 보상 80%` : '코스에서 각성 코어 획득'}`;
+    get('race-loadout').textContent = featureTest ? featureRecipe ? '수중 도시 기능 테스트 · 기록과 보상을 저장하지 않습니다' : '기능 테스트 · 끊긴 도로 점프 — 갈림길에서 위쪽 송전 우회로 · 기록과 보상을 저장하지 않습니다' : isTraining() ? '첫 코스 조작 연습 · 기록과 보상을 저장하지 않습니다' : `${selectedMode === 'competition' ? `상대 기체 ${AI_OPPONENT_COUNT}대와 경쟁` : '타임어택'} · ${focusSlots || equippedRivalSlots.length ? `장착 아이템 ${focusSlots + equippedRivalSlots.length}개 · 기본 보상 80%` : '코스에서 각성 코어 획득'}`;
     rewardInput = undefined; campaignOutcome = undefined; get('result-reward').textContent = ''; get('reward-retry').hidden = true; get('result-shop').hidden = true; get('campaign-next').hidden = true;
     tutorialCompleteShown = false; screen.classList.remove('is-tutorial-complete'); coach.hideComplete();
     race?.dispose(); lastPhase = ''; lastViewKey = ''; previewing = false; lastCollisions = 0; lastBoostStage = 0; lastAnnouncement = 0; lastCallout = 0; lastNearMisses = 0; lastStreak = 0; impactAnimation?.cancel(); boostFlashAnimation?.cancel();

@@ -1,8 +1,8 @@
 import * as THREE from 'three';
-import type { NightEnvironment } from './raceEnvironment';
+import type { RaceEnvironment } from './raceEnvironment';
 
 /** Celestial bodies are angular sky features: no nearby sphere, translation parallax or extra draw. */
-export function createNightSky(environment: NightEnvironment, forward: THREE.Vector3) {
+export function createNightSky(environment: RaceEnvironment, forward: THREE.Vector3) {
   const object = new THREE.Group(); object.name = `sky-${environment.id}`;
   object.userData.environment = environment.id;
   const center = new THREE.Vector3(forward.x, 0, forward.z).normalize();
@@ -21,13 +21,14 @@ export function createNightSky(environment: NightEnvironment, forward: THREE.Vec
       diskRadius: { value: Math.tan(environment.celestialRadius) },
       ringed: { value: environment.celestial === 'ringed-planet' ? 1 : 0 },
       crescent: { value: environment.celestial === 'crescent' ? 1 : 0 },
+      uTime: { value: 0 }, underwater: { value: environment.underwater ? 1 : 0 },
     },
     vertexShader: 'varying vec3 direction; void main(){ direction=position; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }',
     fragmentShader: `
       varying vec3 direction;
       uniform float storm, flash;
       uniform vec3 zenith, horizon, tint, center, celestialRight, celestialUp;
-      uniform float starStrength, diskRadius, ringed, crescent;
+      uniform float starStrength, diskRadius, ringed, crescent, uTime, underwater;
       float hash(vec3 p){p=fract(p*.1031); p+=dot(p,p.yzx+33.33); return fract((p.x+p.y)*p.z);}
       float noise(vec3 p){
         vec3 i=floor(p), f=fract(p); f=f*f*(3.-2.*f);
@@ -105,6 +106,21 @@ export function createNightSky(environment: NightEnvironment, forward: THREE.Vec
         color=mix(color,horizon*.65,horizonHaze);
         float clouds=smoothstep(.2,.65,noise(d*5.+vec3(0.,2.,0.)));
         color=mix(color, mix(zenith,horizon,clouds)*.7, storm*(.78+clouds*.2));
+        if(underwater>.5){
+          // Water surface seen from below: project the view ray onto a plane and layer moving ripple lines.
+          vec3 w=vec3(0.);
+          if(d.y>.02){
+            vec2 q=d.xz/(d.y+.12)*1.6;
+            float a=sin(q.x*3.1+uTime*.45+sin(q.y*2.3+uTime*.3)*1.6);
+            float b=sin(q.y*3.7-uTime*.38+sin(q.x*2.9-uTime*.27)*1.4);
+            float c=sin((q.x+q.y)*5.3+uTime*.6);
+            float caustic=pow(1.-abs(a*b),5.)*.75+pow(1.-abs(c*a),7.)*.5;
+            float up=smoothstep(.04,.75,d.y);
+            w=mix(zenith,vec3(.55,.95,.9),.3)*caustic*up*.7+zenith*up*.3;
+          }
+          color=sky*.8+w;
+          color=mix(color,horizon*.7,horizonHaze);
+        }
         color+=vec3(.55,.68,.85)*flash;
         gl_FragColor=vec4(color,1.);
       }`,
@@ -116,7 +132,7 @@ export function createNightSky(environment: NightEnvironment, forward: THREE.Vec
   object.add(sky);
   return {
     object,
-    update(cameraPosition: THREE.Vector3) { object.position.copy(cameraPosition); },
+    update(cameraPosition: THREE.Vector3, time = 0) { object.position.copy(cameraPosition); material.uniforms.uTime.value = time; },
     setLightning(value: number) { material.uniforms.flash.value = value; },
     setOverview(value: boolean) { object.visible = !value; },
   };

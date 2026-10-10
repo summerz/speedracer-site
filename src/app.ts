@@ -4,7 +4,7 @@ import { soundtrack } from './game/audio/soundtrack';
 import { DRONE_CATALOG } from './game/drone/droneCatalog';
 import { createProgressStore, indexedProgressRepository } from './game/progression/progressStore';
 import { upgradedConfiguration } from './game/progression/catalog';
-import { trackDefinition } from './game/track/trackCatalog';
+import { isFeatureTestTrack, resolveDriveTrack } from './game/track/featureTestTracks';
 import { campaignStatus } from './game/progression/campaign';
 import { mountMenuNavigation } from './platform/menuNavigation';
 import { gameAnalytics } from './platform/gameAnalytics';
@@ -80,7 +80,7 @@ export function mountApp(root: HTMLDivElement): () => void {
     if (disposed || id !== renderId) return;
     const [screen, query = ''] = location.hash.slice(1).split('?');
     const params = new URLSearchParams(query);
-    const track = trackDefinition(params.get('track') ?? '');
+    const track = resolveDriveTrack(params.get('track') ?? '', params.get('test') === '1');
     const challenge = raceChallenge(params.get('challenge'));
     const mode = params.get('mode') === 'competition' ? 'competition' : 'time-attack';
     if (import.meta.env.DEV && screen === 'sound-lab') soundtrack.suspend();
@@ -92,7 +92,7 @@ export function mountApp(root: HTMLDivElement): () => void {
     const mount = import.meta.env.DEV && screen === 'sound-lab'
       ? () => import('./devAudioApp').then(({ mountDevAudio }) => () => mountDevAudio(root, profile.balance, params.get('view') === 'library' ? 'library' : 'assignments'))
       : screen === 'drive'
-      ? () => import('./raceApp').then(({ mountRace }) => () => mountRace(root, () => { location.hash = track ? `campaign?track=${track.id}&mode=${mode}&challenge=${challenge}` : 'campaign'; }, selected.configuration, store, () => { location.hash = 'shop'; }, track ? { track, mode, challenge, test: params.get('test') === '1' } : undefined))
+      ? () => import('./raceApp').then(({ mountRace }) => () => mountRace(root, () => { location.hash = track && isFeatureTestTrack(track.id) ? '' : track ? `campaign?track=${track.id}&mode=${mode}&challenge=${challenge}` : 'campaign'; }, selected.configuration, store, () => { location.hash = 'shop'; }, track ? { track, mode, challenge, test: params.get('test') === '1' } : undefined))
       : screen === 'campaign' ? () => import('./campaignApp').then(({ mountCampaign }) => () => mountCampaign(root, store, params.has('mode') ? { mode, trackId: params.get('track') ?? undefined, challenge } : undefined))
       : screen === 'shop' ? () => import('./shopApp').then(({ mountShop }) => () => mountShop(root, store, () => { location.hash = ''; }))
       : () => import('./hangarApp').then(({ mountHangar }) => () => mountHangar(root, selected, () => {}, () => { location.hash = 'campaign'; }, store));

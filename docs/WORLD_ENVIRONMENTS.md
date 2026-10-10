@@ -1,6 +1,6 @@
 # 월드 환경과 천체
 
-현재 v0.19.12 제작 데이터에서 생성한 문서입니다. 수정은 카탈로그와 이 문서 생성 스크립트에 반영하고 `npm run docs:world`로 갱신합니다. `npm run docs:world:check`는 데이터와 문서의 일치를 확인합니다.
+현재 v0.19.13 제작 데이터에서 생성한 문서입니다. 수정은 카탈로그와 이 문서 생성 스크립트에 반영하고 `npm run docs:world`로 갱신합니다. `npm run docs:world:check`는 데이터와 문서의 일치를 확인합니다.
 
 환경은 [트랙](TRACK_CATALOG.md)과 [랜드마크](LANDMARK_CATALOG.md)에 덧입히는 독립적인 연출입니다. 시간대 때문에 물리·제한시간·해금·기록 버전은 바뀌지 않습니다.
 
@@ -15,6 +15,15 @@
 | `predawn` / 동트기 직전 | crescent | 66 / 9 | `#0c1735` / `#805d87` | `#283047` / 0.001 | 0.35 | 맑음 |
 | `afterglow` / 해가 진 직후 | satellite | 78 / 6 | `#18102d` / `#864536` | `#362136` / 0.0011 | 0.2 | 맑음 |
 | `storm-night` / 폭풍우의 밤 | moon | 61 / 7 | `#02050c` / `#131d30` | `#0a1422` / 0.0015 | 0.05 | 비 / 번개 / 천둥 |
+
+## 수중 도시 시험 환경
+
+`abyss` 구역은 밤하늘 대신 아래 두 물속 환경만 같은 확률로 선택합니다. `RaceEnvironment.underwater`는 `true`이며 별·천체·비·번개·천둥은 사용하지 않습니다. 개발용 비 토글도 수중 환경을 덮어쓰지 않습니다. 재도전에서는 선택을 유지합니다. 시험 트랙 TRENCH LINE은 캠페인 밖에 있고 `test=1`로만 진입합니다. 환경 데이터와 진입 계약은 [수중 도시 런타임](ABYSS_RUNTIME.md)을 참조합니다. 물속 하늘·해저 장식은 Claude의 시각 작업에서 연결합니다.
+
+| 환경 ID / 이름 | 천정 / 지평선 색 | 안개 색 / 밀도 |
+| --- | --- | --- |
+| `abyss-shallow` / 얕은 해역 | `#1d6f80` / `#0a3a48` | `#06222e` / 0.0019 |
+| `abyss-deep` / 깊은 해역 | `#0c3a48` / `#06202a` | `#031219` / 0.0024 |
 
 ## 천체 연출
 
@@ -38,5 +47,6 @@
 | 오비탈 프런티어 | 21 ORBITAL RISE / 22 APEX DESCENT / 23 INFINITY COIL / 24 ZERO HORIZON | 한밤중 / 깊은 밤 / 동트기 직전 / 해가 진 직후 / 폭풍우의 밤 |
 | 네온 항만 | 25 DOCKSIDE RUN / 26 CRANE CROSSING / 27 BREAKWATER ARC / 28 TIDAL KNOT | 한밤중 / 깊은 밤 / 동트기 직전 / 해가 진 직후 / 폭풍우의 밤 |
 | 솔라 사막기지 | 29 SOLAR APPROACH / 30 MIRAGE CLOVER / 31 SUNSPIRE DESCENT / 32 SOLSTICE CIRCUIT | 한밤중 / 깊은 밤 / 동트기 직전 / 해가 진 직후 / 폭풍우의 밤 |
+| 수중 도시 | TEST TRENCH LINE | 얕은 해역 / 깊은 해역 |
 
 제작 데이터: `src/game/environment/raceEnvironment.ts`. 하늘/천체: `createNightSky.ts`. 비/번개: `createRaceWeather.ts`. 경기 진입 시 선택과 재도전 유지: `raceApp.ts`. 실제 iPhone의 GPU 프레임 시간·발열은 별도 실기 검증이 필요합니다.
