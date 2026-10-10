@@ -1,5 +1,6 @@
-import { applyCommand, initialProgress, validateProgress } from './progress.js';
+import { applyCommand, initialProgress, validateProgress, previewRelock } from './progress.js';
 import type { Progress, ProgressCommand } from './progress.js';
+import { campaignRecordKeys, type CampaignRecordStorage } from './campaignRecordCleanup.js';
 
 export interface ProgressRepository {
   read(): Promise<unknown>;
@@ -44,7 +45,11 @@ export function indexedProgressRepository(factory: IDBFactory): ProgressReposito
     close() { void opening?.then(db => db.close()).catch(() => {}); opening = undefined; },
   };
 }
-export function createProgressStore(repository: ProgressRepository) {
+function browserRecordStorage(): CampaignRecordStorage | undefined {
+  try { return typeof window === 'undefined' ? undefined : window.localStorage; }
+  catch { return undefined; }
+}
+export function createProgressStore(repository: ProgressRepository, recordStorage = browserRecordStorage()) {
   let state = initialProgress(); let issue = ''; let closed = false;
   const listeners = new Set<() => void>();
   const channel = typeof BroadcastChannel === 'function' ? new BroadcastChannel('speedracer-progress') : undefined;
@@ -57,14 +62,26 @@ export function createProgressStore(repository: ProgressRepository) {
   if (channel) channel.onmessage = () => { void refresh(); };
   return {
     snapshot: () => structuredClone(state),
+    previewRelock: () => previewRelock(state, recordStorage),
     get issue() { return issue; },
     refresh,
     subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; },
     async command(command: ProgressCommand) {
       try {
-        const saved = await repository.transact(value => applyCommand(value === undefined ? initialProgress() : validateProgress(value), command));
+        let removeKeys: string[] = [];
+        const saved = await repository.transact(value => {
+          const current = value === undefined ? initialProgress() : validateProgress(value);
+          if (command.kind === 'campaign-unlock-all' && !command.on && recordStorage)
+            removeKeys = campaignRecordKeys(previewRelock(current, recordStorage), recordStorage);
+          return applyCommand(current, command);
+        });
         if (saved.revision >= state.revision) state = saved;
-        issue = ''; publish(); if (!closed) channel?.postMessage('changed'); return structuredClone(saved);
+        if (!closed) channel?.postMessage('changed');
+        // Never discard caches if the profile transaction failed. All variants
+        // are collected before removing keys, since localStorage indices shift.
+        try { if (recordStorage) for (const key of removeKeys) recordStorage.removeItem(key); }
+        catch (error) { throw new Error(`해금 설정은 저장됐지만 주행 기록 정리를 완료하지 못했습니다. 다시 잠금을 시도해주세요. ${error instanceof Error ? error.message : ''}`); }
+        issue = ''; publish(); return structuredClone(saved);
       } catch (error) { issue = error instanceof Error ? error.message : '저장하지 못했습니다.'; publish(); throw error; }
     },
     close() { closed = true; channel?.close(); repository.close(); listeners.clear(); },

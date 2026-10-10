@@ -1,6 +1,8 @@
-import { initialCampaign, validateCampaign, completeCampaign } from './campaign.js';
+import { initialCampaign, validateCampaign, completeCampaign, campaignTrackUnlocked } from './campaign.js';
 import type { CampaignProgress, CampaignOutcome } from './campaign.js';
-import { trackDefinition } from '../track/trackCatalog.js';
+import { trackDefinition, TRACK_CATALOG } from '../track/trackCatalog.js';
+import { campaignRecordEntries, type CampaignRecordStorage, type CampaignRelockPreview } from './campaignRecordCleanup.js';
+export type { CampaignRecordStorage, CampaignRelockPreview } from './campaignRecordCleanup.js';
 import { CRAFT_PRICES, craftResaleValue, emptyLevels, FOCUS_PRICE, INVENTORY_LIMIT, STARTER_ID, UPGRADES, UPGRADE_COSTS, RIVAL_ITEMS, isRivalItem } from './catalog.js';
 import type { UpgradeId, UpgradeLevels, RivalItemId } from './catalog.js';
 import type { DifficultyId } from '../track/difficulty.js';
@@ -27,6 +29,36 @@ export interface Progress {
 export const initialProgress = (): Progress => ({ version: 1, revision: 0, balance: 0, owned: [STARTER_ID], equipped: STARTER_ID,
   upgrades: { [STARTER_ID]: emptyLevels() }, focus: 0, focusSlots: 0, rewards: {}, focusUses: {}, campaign: initialCampaign(),
   rivalInventory: { 'time-stop': 0, interference: 0 }, rivalSlots: [], rivalUses: {} });
+export function isCampaignUnlockAll(profile: Progress): boolean { return profile.campaign.unlockAll === true; }
+
+function relockCampaign(current: CampaignProgress) {
+  const campaign = structuredClone(current);
+  campaign.unlockAll = false;
+  const locked: CampaignRelockPreview[] = [{ mode: 'time-attack', trackIds: [] }, { mode: 'competition', trackIds: [] }];
+  // Catalog order is topological. Visit both modes before the next track so the
+  // shared city gate cannot use a clear that the other mode is about to lose.
+  for (const track of [...TRACK_CATALOG].sort((a, b) => a.order - b.order)) for (const group of locked) {
+    if (campaignTrackUnlocked(campaign, group.mode, track)) continue;
+    group.trackIds.push(track.id);
+    delete campaign.modes[group.mode][track.id];
+  }
+  if (locked.some(group => group.mode === campaign.last.mode && group.trackIds.includes(campaign.last.trackId)))
+    campaign.last = { ...campaign.last, trackId: TRACK_CATALOG[0].id };
+  return { campaign, locked };
+}
+
+/** Actual affected track/mode pairs; optional storage includes cache-only progress. No mutation. */
+export function previewRelock(profile: Progress, storage?: CampaignRecordStorage): CampaignRelockPreview[] {
+  const cached = new Set(storage ? campaignRecordEntries(storage).map(entry => `${entry.mode}/${entry.trackId}`) : []);
+  return relockCampaign(profile.campaign).locked.map(group => ({ ...group, trackIds: group.trackIds.filter(id =>
+    Object.hasOwn(profile.campaign.modes[group.mode], id)
+      || cached.has(`${group.mode}/${id}`)) }));
+}
+
+/** Pure profile change. Persist through ProgressStore.command to also clean separate race caches. */
+export function setCampaignUnlockAll(profile: Progress, on: boolean): Progress {
+  return applyCommand(profile, { kind: 'campaign-unlock-all', on });
+}
 const integer = (n: unknown, max = Number.MAX_SAFE_INTEGER): n is number => Number.isSafeInteger(n) && (n as number) >= 0 && (n as number) <= max;
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
 const own = (object: object, key: string) => Object.hasOwn(object, key);
@@ -90,6 +122,7 @@ export function calculateReward(input: RewardInput): Reward {
   return { base, clean, best, obstacles, placement, penalty: input.penaltyPoints, total: Math.max(0, base + clean + best + obstacles + placement - input.penaltyPoints), assisted: input.assisted };
 }
 export type ProgressCommand = { kind: 'campaign-select'; mode: CampaignOutcome['mode']; trackId: string; challenge?: CampaignOutcome['challenge'] }
+  | { kind: 'campaign-unlock-all'; on: boolean }
   | { kind: 'campaign-result'; input: RewardInput; outcome: CampaignOutcome } | { kind: 'reward'; input: RewardInput } | { kind: 'craft'; id: string }
   | { kind: 'equip'; id: string } | { kind: 'sell-craft'; id: string } | { kind: 'upgrade'; id: string; upgrade: UpgradeId }
   | { kind: 'focus' } | { kind: 'slots'; count: number } | { kind: 'consume-focus'; id: string } | { kind: 'refund-focus'; id: string } | { kind: 'confirm-focus'; id: string }
@@ -101,6 +134,11 @@ export function applyCommand(current: Progress, command: ProgressCommand): Progr
   const next = validateProgress(current);
   const charge = (cost: number) => { if (next.balance < cost) throw new Error(`${cost - next.balance}P가 부족합니다.`); next.balance -= cost; };
   switch (command.kind) {
+    case 'campaign-unlock-all': {
+      if (typeof command.on !== 'boolean') throw new Error('잘못된 캠페인 테스트 설정');
+      next.campaign = command.on ? { ...next.campaign, unlockAll: true } : relockCampaign(next.campaign).campaign;
+      break;
+    }
     case 'campaign-select': {
       if (!trackDefinition(command.trackId) || !['time-attack', 'competition'].includes(command.mode)) throw new Error('알 수 없는 트랙입니다.');
       if (command.challenge !== undefined && !['easy', 'normal', 'hard'].includes(command.challenge)) throw new Error('잘못된 난이도');
