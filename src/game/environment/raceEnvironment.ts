@@ -1,4 +1,4 @@
-export type NightEnvironmentId = 'midnight' | 'deep-night' | 'predawn' | 'afterglow' | 'storm-night';
+export type NightEnvironmentId = 'midnight' | 'deep-night' | 'predawn' | 'afterglow' | 'storm-night' | 'abyss-shallow' | 'abyss-deep';
 export type RainIntensity = 'light' | 'moderate' | 'heavy';
 export const RAIN_INTENSITIES: Record<RainIntensity, { label: string; density: number; volume: number }> = {
   light: { label: '약한 비', density: .45, volume: .045 },
@@ -25,6 +25,8 @@ export interface NightEnvironment {
   celestialColor: string;
   stars: number;
   rain?: boolean;
+  /** Water-surface shimmer replaces the celestial disc and stars. */
+  underwater?: true;
   rainIntensity?: RainIntensity;
   /** Apparent angular radius and center elevation in radians, independent of camera distance. */
   celestialRadius: number;

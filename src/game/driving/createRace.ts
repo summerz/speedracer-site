@@ -9,6 +9,9 @@ import type { NightEnvironment } from '../environment/raceEnvironment';
 import { createCatalogTrack } from '../track/trackRuntime';
 import type { TrackDefinition } from '../track/trackCatalog';
 import { createDistrictScenery } from '../track/createDistrictScenery';
+import { createAbyssScenery } from '../track/createAbyssScenery';
+import { createMarineSnow } from '../environment/createMarineSnow';
+import { ABYSS_ENVIRONMENTS } from '../environment/abyssEnvironment';
 import { RENDER_QUALITIES } from '../../platform/renderQuality';
 import type { RenderQuality } from '../../platform/renderQuality';
 import { createAutomaticQuality } from '../../platform/automaticQuality';
@@ -125,13 +128,16 @@ export function createRace(
   mode: RaceMode = 'time-attack',
   course?: TrackDefinition,
   rivalSlots: readonly RivalItemId[] = [],
-  environment: NightEnvironment = NIGHT_ENVIRONMENTS[0],
+  selectedEnvironment: NightEnvironment = NIGHT_ENVIRONMENTS[0],
   challenge: RaceChallengeId = 'normal',
   intro = false,
   guidance: { tutorial?: ReturnType<typeof createDrivingTutorial>; practice?: boolean } = {},
 ): Race {
   const config = resolveDroneConfiguration(configuration);
   const visuals = config.speedEffects;
+  // ponytail: dev preview until DistrictId 'abyss' lands; replace with course.district === 'abyss'
+  const abyssPreview = import.meta.env.DEV && /[?&]abyss=\d/.test(location.hash);
+  const environment = abyssPreview ? ABYSS_ENVIRONMENTS[/[?&]abyss=2/.test(location.hash) ? 1 : 0] : selectedEnvironment;
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setClearColor(environment.fog);
   container.dataset.environment = environment.id;
@@ -151,10 +157,13 @@ export function createRace(
   const sky = createNightSky(environment, track.sample(0).tangent); scene.add(sky.object);
   const weather = createRaceWeather(!!environment.rain, track.length, Math.random, environment.rainIntensity); scene.add(weather.object);
   container.dataset.rainIntensity = environment.rain ? weather.intensity : 'none';
-  const scenery = course ? createDistrictScenery(track, course) : undefined;
+  const scenery = course ? (abyssPreview ? createAbyssScenery(track, course) : createDistrictScenery(track, course)) : undefined;
   if (scenery) scene.add(scenery.object);
+  const marineSnow = abyssPreview ? createMarineSnow() : undefined;
+  if (marineSnow) scene.add(marineSnow.object);
   const trackVisual = createTrackVisual(track, config.boostStyle.pulseColor);
   scene.add(trackVisual.object);
+  if (abyssPreview) trackVisual.object.traverse(o => { if (o instanceof THREE.GridHelper) o.visible = false; });
   const drone = createRacingDrone({ variant: config.modelVariant, neonBoost: 1.7, thrusterIntensity: 0.35 });
   scene.add(drone);
   const thrusters = createThrusterEffect(drone, scene, config.boostStyle);
@@ -680,7 +689,7 @@ export function createRace(
     if (replaying) speedLines.update(replayClock + replayT, replayPose.speed, replayPick.shot === 1 && replayPose.mode >= 2, reducedMotion.matches, replayPose.mode === 3);
     else speedLines.update(state.elapsed, state.speed, awake || state.boosting, reducedMotion.matches, awake || state.boostStage === 2);
     views.prepareDriving();
-    scenery?.setOverview(false); scenery?.update(drone.position, reducedMotion.matches ? 0 : performance.now() / 1000); sky.update(camera.position);
+    scenery?.setOverview(false); scenery?.update(drone.position, reducedMotion.matches ? 0 : performance.now() / 1000); sky.update(camera.position, reducedMotion.matches ? 0 : performance.now() / 1000); marineSnow?.update(camera.position, reducedMotion.matches ? 0 : performance.now() / 1000, reducedMotion.matches);
     const weatherFrame = weather.update(camera.position, state.distance, (guidance.tutorial ? worldDelta : delta) * slow, phase === 'running' && !tutorialFrozen(), reducedMotion.matches);
     ambient.intensity = environment.ambientIntensity + weatherFrame.flash * 5;
     sun.intensity = environment.lightIntensity + weatherFrame.flash * 10;
@@ -691,7 +700,7 @@ export function createRace(
     if (layout.track) {
       const linesVisible = speedLines.object.visible;
       speedLines.object.visible = false;
-      views.prepareOverview(); scenery?.setOverview(true); sky.setOverview(true); weather.setOverview(true); overviewComposer.render(delta); scenery?.setOverview(false); sky.setOverview(false); weather.setOverview(false);
+      views.prepareOverview(); scenery?.setOverview(true); marineSnow?.setOverview(true); sky.setOverview(true); weather.setOverview(true); overviewComposer.render(delta); scenery?.setOverview(false); marineSnow?.setOverview(false); sky.setOverview(false); weather.setOverview(false);
       speedLines.object.visible = linesVisible;
       views.prepareDriving();
     }
@@ -719,7 +728,7 @@ export function createRace(
   renderer.domElement.addEventListener('webglcontextlost', (event) => {
     event.preventDefault(); lost = true; pause(); cancelAnimationFrame(animation); onError();
   }, listen);
-  const applyQuality = (quality: RenderQuality) => { scenery?.setQuality(quality); weather.setQuality(quality); renderQuality = quality; resize(); };
+  const applyQuality = (quality: RenderQuality) => { scenery?.setQuality(quality); marineSnow?.setQuality(quality); weather.setQuality(quality); renderQuality = quality; resize(); };
   const unsubscribeQuality = autoQuality.onChange(status => applyQuality(status.quality));
   notify(); animation = requestAnimationFrame(tick);
   return {
@@ -752,7 +761,7 @@ export function createRace(
       render.dispose(); bloom.dispose(); exhaustHaze.pass.dispose(); boostWarp.pass.dispose(); output.dispose(); composer.dispose();
       overviewRender.dispose(); overviewOutput.dispose(); overviewComposer.dispose();
       blitGeometry.dispose(); blitMaterial.dispose(); pipFrame.remove();
-      renderer.dispose(); renderer.forceContextLoss(); renderer.domElement.remove(); delete container.dataset.environment;
+      marineSnow?.dispose(); renderer.dispose(); renderer.forceContextLoss(); renderer.domElement.remove(); delete container.dataset.environment;
     },
   };
 }
