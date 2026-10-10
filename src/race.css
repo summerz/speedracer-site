@@ -265,6 +265,7 @@ button:focus-visible { outline:2px solid #c9f9f2; outline-offset:3px; }
 .race-boost-flash { position:absolute; inset:0; z-index:2; pointer-events:none; opacity:0; background:radial-gradient(ellipse at center,#e8fbff99,#c8edffc9 60%,#80caff); }
 
 .render-options { display:flex; align-items:center; justify-content:space-between; gap:16px; margin:16px 0 8px; font-size:13px; }
+.quality-status { margin-left:auto; color:#9bb4c1; font-size:11px; }
 .render-options select { min-height:44px; padding:8px 12px; background:#14232d; color:#d7e9ec; border:1px solid #58717d70; font:inherit; }
 .quality-hint { font-size:11px; line-height:1.6; color:#9bb4c1; }
 
