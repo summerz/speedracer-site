@@ -1,3 +1,4 @@
+import type { createDrivingTutorial, TutorialSnapshot, TutorialStatus } from './drivingTutorial';
 import { RACE_CHALLENGES, challengeLapLimit, type RaceChallengeId } from '../track/raceChallenge';
 import { createRaceWeather } from '../environment/createRaceWeather';
 import { createNightSky } from '../environment/createNightSky';
@@ -62,6 +63,8 @@ import { boostPadGuide, configureExtraObstacles, corridorCanPass, mineFieldGuide
 
 export type DrivingPhase = RacePhase;
 export interface RaceSnapshot extends DrivingState {
+  tutorial: TutorialSnapshot | null;
+  tutorialStatus: TutorialStatus | null;
   competition: CompetitionSnapshot | null;
   altitudeProfile: AltitudeProfile;
   announcement: RaceAnnouncement | null;
@@ -89,6 +92,8 @@ export interface Race {
   start(): void;
   togglePause(): void;
   restart(): void;
+  skipTutorial(): void;
+  skipAllTutorial(): void;
   skipCinematic(): void;
   useFocus(): boolean;
   useAwakening(): boolean;
@@ -118,6 +123,7 @@ export function createRace(
   environment: NightEnvironment = NIGHT_ENVIRONMENTS[0],
   challenge: RaceChallengeId = 'normal',
   intro = false,
+  guidance: { tutorial?: ReturnType<typeof createDrivingTutorial>; practice?: boolean } = {},
 ): Race {
   const config = resolveDroneConfiguration(configuration);
   const visuals = config.speedEffects;
@@ -160,7 +166,7 @@ export function createRace(
   try { storage = window.localStorage; } catch { /* Private browsing can deny storage. */ }
   const trackId = course ? `${course.id}:v${course.revision}` : `neon-circuit-v1:${difficulty?.id ?? 'beginner'}`;
   const records = createRaceRecords({ laps: course?.laps, trackId, configurationId: JSON.stringify({ ...(challenge !== 'normal' ? { challenge } : {}), performance: config.performance, altitude: track.altitudeProfile, ...(focusSlots || rivalSlots.length ? { assisted: true } : {}), ...(mode === 'competition' ? { mode } : {}) }) }, storage);
-  const timeAttack = createRaceSession(track, config, records, focusSlots, mode, Math.random, coarsePointer.matches ? 'touch' : 'desktop', course ? { laps: course.laps, ...(mode === 'time-attack' ? { lapLimit: challengeLapLimit(course, challenge) } : {}) } : {}, course?.rating, rivalSlots, challenge);
+  const timeAttack = createRaceSession(track, config, records, focusSlots, mode, Math.random, coarsePointer.matches ? 'touch' : 'desktop', { practice: guidance.practice, ...(course ? { laps: course.laps, ...(mode === 'time-attack' ? { lapLimit: challengeLapLimit(course, challenge) } : {}) } : {}) }, course?.rating, rivalSlots, challenge);
   const rivalVisuals = createRivalVisuals(scene, track, timeAttack.rivals);
   const ghostStorageKey = ghostKey(trackId, challenge);
   const ghost = mode === 'time-attack' ? loadGhost(storage, ghostStorageKey) : null;
@@ -263,12 +269,14 @@ export function createRace(
   const SHOWCASE_FOV = 42, REPLAY_MODES = ['idle', 'accelerate', 'boost', 'boost-stage2'] as const;
   let replayClock = 0, replayT = 0, replaying = false;
 
+  let tutorialHazardNearby = false;
   const notify = () => {
     track.sample(model.state.distance + Math.max(22, model.state.speed * 1.1), upcoming, model.state.routeId);
     const next = upcomingHeightObstacle(track, model.state.distance, model.state.routeId);
     const passage = upcomingCorridor(track, model.state.distance, model.state.routeId);
     const corridor = passage ? { distance: passage.distance, lane: passage.obstacle.lane, safe: corridorCanPass(model.state.offset, passage.obstacle) } : null;
     const nearestHazard = Math.min(passage?.distance ?? Infinity, next?.distance ?? Infinity);
+    tutorialHazardNearby = nearestHazard < Math.max(60, model.state.speed * 3);
     const mineField = mineFieldGuide(track, model.state.distance, model.state.speed, model.state.routeId, nearestHazard < Infinity ? nearestHazard : null, challenge === 'easy');
     const heightObstacle = !mineField && next && (!passage || next.distance < passage.distance) ? {
       ...resolveHeightObstacle(next.obstacle, model.altitudeProfile.levels,
@@ -286,7 +294,7 @@ export function createRace(
     const selected = choosing ? undefined : junction?.routes.find(r => r.id === model.state.routeId);
     const fork = junction ? { kind: junction.kind, names: junction.routes.map(r => r.name), level: verticalThreshold(track) + 1, selected: selected?.name ?? null,
       distance: physicalDistance(track, model.state.distance, (selected ? junction.end : junction.start + junction.junctionLength) - model.state.distance % track.length, model.state.routeId) } : null;
-    onUpdate({ ...model.state, competition: session.competition, announcement: feedback.announcement, boostStage2Seconds: model.boostStage2Seconds, altitudeProfile: model.altitudeProfile, phase: timeAttack.phase, timeAttack: session, cinematic: cinematic && { kind: cinematic.kind, reduced: cinematic.reduced, seconds: cinematic.duration, shot: currentShot() }, callout, ghostDelta: ghost && timeAttack.phase !== 'finished' && model.state.elapsed > 0 ? ghostDelta(ghost, model.state.elapsed, model.state.distance) : null, view: views.view, trackDisplay: views.trackDisplay, trackLength: track.length, upcomingCurvature: upcoming.curvature, upcomingSection: upcoming.section, heightObstacle, corridor, mineField, boostPad, arcRail, boostRing, fork });
+    onUpdate({ ...model.state, tutorial: timeAttack.phase === 'finished' ? null : guidance.tutorial?.snapshot() ?? null, tutorialStatus: guidance.tutorial?.status() ?? null, competition: session.competition, announcement: feedback.announcement, boostStage2Seconds: model.boostStage2Seconds, altitudeProfile: model.altitudeProfile, phase: timeAttack.phase, timeAttack: session, cinematic: cinematic && { kind: cinematic.kind, reduced: cinematic.reduced, seconds: cinematic.duration, shot: currentShot() }, callout, ghostDelta: ghost && timeAttack.phase !== 'finished' && model.state.elapsed > 0 ? ghostDelta(ghost, model.state.elapsed, model.state.distance) : null, view: views.view, trackDisplay: views.trackDisplay, trackLength: track.length, upcomingCurvature: upcoming.curvature, upcomingSection: upcoming.section, heightObstacle, corridor, mineField, boostPad, arcRail, boostRing, fork });
   };
   const heightRequests: { lift: number; targetAltitudeLevel?: number }[] = [];
   const touchControls = createTouchControls(container.parentElement ?? container, {
@@ -307,6 +315,7 @@ export function createRace(
     timeAttack.pause(); touchControls.setRunning(false); notify();
   };
   const finishGhost = () => {
+    if (guidance.practice) return;
     const { result, disqualified } = timeAttack.snapshot();
     if (result && shouldSaveGhost({ mode, disqualified, isNewBest: result.isNewBest })) saveGhost(storage, ghostStorageKey, ghostRecorder.finish(model.state, model.state.elapsed, model.state.distance));
   };
@@ -453,6 +462,7 @@ export function createRace(
       const touch = touchControls.read();
       input.brake = keys.has('KeyS') || touch.brake || gamepadDriving.brake;
       input.throttle = !input.brake;
+      input.guidedSpeedScale = course?.predecessor === null ? guidance.tutorial?.speedScale() : undefined;
       input.steer = THREE.MathUtils.clamp(Number(keys.has('KeyD')) - Number(keys.has('KeyA')) + touch.steer + gamepadDriving.steer, -1, 1);
       input.boost = keys.has('Space') || touch.boost || gamepadDriving.boost;
       const padBoost = touch.boost || gamepadDriving.boost;
@@ -468,6 +478,13 @@ export function createRace(
     }
     if (oldPhase === 'finished') timeAttack.step(delta * slow, { throttle: false, brake: false, boost: false, steer: 0, lift: 0 });
     const phase = timeAttack.phase;
+    if (guidance.tutorial) {
+      guidance.tutorial.update(delta, { phase, speed: model.state.speed, steer: model.state.awakeningRemaining > 0 ? 0 : input.steer, brake: model.state.awakeningRemaining <= 0 && input.brake,
+        altitudeLevel: model.state.altitudeLevel, altitudeChanged: heightChanged, boosting: model.state.boosting,
+        obstaclesPassed: model.state.obstaclesPassed, collisions: model.state.collisions, nearMisses: model.state.nearMisses,
+        hazardNearby: tutorialHazardNearby,
+      });
+    }
     if (oldPhase === 'countdown' || oldPhase === 'running') untilGo = Math.max(-1, untilGo - delta);
     if (phase === 'running' && !launched) {
       if (isPerfectStart(pressAt)) {
@@ -692,7 +709,7 @@ export function createRace(
   const unsubscribeQuality = autoQuality.onChange(status => applyQuality(status.quality));
   notify(); animation = requestAnimationFrame(tick);
   return {
-    start, togglePause, restart, skipCinematic: endCinematic, useAwakening, useFocus() { const used = timeAttack.useFocus(); if (used) notify(); return used; }, useRivalItem(item) { const used = timeAttack.useRivalItem(item); if (used) notify(); return used; }, recover, toggleCockpit, cycleTrack,
+    start, togglePause, restart, skipTutorial() { guidance.tutorial?.skip(); notify(); }, skipAllTutorial() { guidance.tutorial?.skipAll(); notify(); }, skipCinematic: endCinematic, useAwakening, useFocus() { const used = timeAttack.useFocus(); if (used) notify(); return used; }, useRivalItem(item) { const used = timeAttack.useRivalItem(item); if (used) notify(); return used; }, recover, toggleCockpit, cycleTrack,
     setBloom(enabled) { bloom.enabled = enabled; },
     setQuality(preference) { autoQuality.setPreference(preference); },
     onQualityChange(listener) { return autoQuality.onChange(listener); },

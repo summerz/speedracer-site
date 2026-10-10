@@ -86,3 +86,51 @@ test('quit is emitted once; no failure in analytics can break observation', () =
   const broken = createRaceAnalytics(() => { throw Error('blocked'); });
   assert.doesNotThrow(() => { broken.observe(state(), context); broken.quit('navigation'); });
 });
+
+const tutorialStatus = changes => ({ mode: 'first-run', outcome: null, completedSteps: 0, skippedSteps: 0, ...changes });
+const tutorialStep = changes => ({ step: 'throttle', stepId: 'throttle', index: 0, total: 7,
+  phase: 'show', checks: [{ id: 'auto', done: false }], progress: 0, ...changes });
+const guidedContext = { ...context, tutorial_mode: 'first-run', practice: false };
+
+test('tutorial begins only on driving, records each step once, and includes the cohort in race completion', () => {
+  const { events, race } = raceFixture();
+  const guided = { tutorial: tutorialStep(), tutorialStatus: tutorialStatus() };
+  race.observe(state({ phase: 'countdown', ...guided }), guidedContext);
+  assert.deepEqual(events.map(e => e.event), ['level_start']);
+  race.observe(state(guided), guidedContext); race.observe(state(guided), guidedContext);
+  const done = { tutorial: tutorialStep({ phase: 'done', checks: [{ id: 'auto', done: true }], progress: 1, nextIn: 1.2 }),
+    tutorialStatus: tutorialStatus({ completedSteps: 1 }) };
+  for (const phase of ['running', 'paused', 'running']) race.observe(state({ phase, ...done }), guidedContext);
+  const finished = { tutorial: null, tutorialStatus: tutorialStatus({ outcome: 'completed', completedSteps: 7 }) };
+  race.observe(state(finished), guidedContext); race.observe(state(finished), guidedContext);
+  race.observe(state({ phase: 'finished', success: true, ...finished }), guidedContext);
+  assert.deepEqual(events.map(e => e.event), ['level_start', 'tutorial_begin', 'tutorial_step', 'tutorial_complete', 'level_end']);
+  assert.equal(events[2].params.skipped, false); assert.equal(events[2].params.tutorial_step, 'throttle');
+  assert.equal(events[3].params.tutorial_outcome, 'completed');
+  assert.equal(events[4].params.tutorial_mode, 'first-run'); assert.equal(events[4].params.tutorial_completed_steps, 7);
+});
+
+test('skip and dismiss during pause are reported once without waiting for resume', () => {
+  const { events, race } = raceFixture();
+  race.observe(state({ tutorial: tutorialStep(), tutorialStatus: tutorialStatus() }), guidedContext);
+  race.observe(state({ phase: 'paused', tutorial: tutorialStep({ phase: 'done', progress: 1 }),
+    tutorialStatus: tutorialStatus({ skippedSteps: 1 }) }), guidedContext);
+  const dismissed = state({ phase: 'paused', tutorial: null, tutorialStatus: tutorialStatus({ outcome: 'skipped', skippedSteps: 7 }) });
+  race.observe(dismissed, guidedContext); race.observe(dismissed, guidedContext); race.quit('navigation');
+  assert.deepEqual(events.map(e => e.event), ['level_start', 'tutorial_begin', 'tutorial_step', 'tutorial_complete', 'race_quit']);
+  assert.equal(events[2].params.skipped, true); assert.equal(events[3].params.tutorial_skipped_steps, 7);
+  assert.equal(events[4].params.tutorial_outcome, 'skipped');
+});
+
+test('abandoned tutorial remains incomplete and practice restart has its own funnel', () => {
+  const { events, race } = raceFixture();
+  race.observe(state({ tutorial: tutorialStep(), tutorialStatus: tutorialStatus() }), guidedContext);
+  const practiceContext = { ...context, tutorial_mode: 'practice', practice: true };
+  const practice = { id: 'practice', tutorial: tutorialStep(), tutorialStatus: tutorialStatus({ mode: 'practice' }) };
+  race.observe(state(practice), practiceContext);
+  assert.deepEqual(events.map(e => e.event), ['level_start', 'tutorial_begin', 'race_quit', 'level_start', 'tutorial_begin']);
+  assert.equal(events[2].params.tutorial_outcome, 'incomplete');
+  assert.equal(events[3].params.practice, true); assert.equal(events[4].params.tutorial_mode, 'practice');
+  race.observe(state({ ...practice, phase: 'finished', tutorialStatus: tutorialStatus({ mode: 'practice', outcome: 'completed', completedSteps: 7 }) }), practiceContext);
+  assert.equal(events[5].event, 'tutorial_complete'); assert.equal(events[6].event, 'level_end');
+});
