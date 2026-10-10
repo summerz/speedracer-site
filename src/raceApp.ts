@@ -1,4 +1,5 @@
 import type { ForkCue } from './game/track/forkCue';
+import { LANE_HUES } from './game/track/createForkLanes';
 import { marineZone } from './game/environment/marineZones';
 import { FEATURE_TEST_TRACKS } from './game/track/featureTestTracks';
 import { createDrivingTutorial } from './game/driving/drivingTutorial';
@@ -897,7 +898,7 @@ function renderForkCue(el: HTMLElement, cue: ForkCue | null, coarse: boolean) {
     ].join('') || '<span class="clear">✓<small>안전</small></span>';
     const on = cue.phase === 'route' || r.id === cue.previewRouteId;
     const mark = cue.phase === 'route' ? '<em>✓ 확정</em>' : r.id === cue.defaultRouteId ? '<em>기본</em>' : '';
-    return `<div class="fork-slot${on ? ' is-on' : ''}${cue.phase === 'route' ? ' is-locked' : ''}"><b class="fork-arrow">${FORK_ARROWS[r.choice] ?? '↑'}</b><strong>${r.name}</strong><span class="fork-height"><span class="fork-bars">${bars}</span><small>${label}</small></span><span class="fork-chips">${chips}</span>${mark}</div>`;
+    return `<div class="fork-slot${on ? ' is-on' : ''}${cue.phase === 'route' ? ' is-locked' : ''}" style="--lane:${LANE_HUES[r.choice as keyof typeof LANE_HUES] ?? 'transparent'}"><b class="fork-arrow">${FORK_ARROWS[r.choice] ?? '↑'}</b><strong>${r.name}</strong><span class="fork-height"><span class="fork-bars">${bars}</span><small>${label}</small></span><span class="fork-chips">${chips}</span>${mark}</div>`;
   }).join('');
   el.innerHTML = `<p class="fork-head"><b>${head}</b>${cue.phase === 'route' ? '' : `<small>${how}</small>`}</p><div class="fork-slots">${slots}</div>`;
 }

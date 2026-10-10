@@ -551,9 +551,10 @@ button:focus-visible { outline:2px solid #c9f9f2; outline-offset:3px; }
 .fork-cue[data-phase='choice'] .fork-head { color:#fff0b4; }
 .fork-cue .fork-head small { font-size:10px; color:#9db7c2; }
 .fork-slots { display:grid; grid-template-columns:repeat(var(--n,3),1fr); gap:4px; }
-.fork-slot { display:grid; justify-items:center; align-content:start; gap:2px; padding:4px 2px 5px; border:1px solid #3d6676; border-radius:8px; background:#071019e6; color:#b9d2db; min-width:0; }
+.fork-slot { position:relative; display:grid; justify-items:center; align-content:start; gap:2px; padding:4px 2px 5px; border:1px solid #3d6676; border-radius:8px; background:#071019e6; color:#b9d2db; min-width:0; }
 .fork-slot:not(.is-on) { opacity:.78; }
 .fork-cue[data-phase='route'] .fork-slots { grid-template-columns:minmax(0,1fr); width:calc((100% - 8px) / 3); margin:0 auto; }
+.fork-slot::before { content:''; position:absolute; left:8px; right:8px; top:-1px; height:4px; border-radius:2px; background:var(--lane, transparent); }
 .fork-slot.is-on { opacity:1; border-color:#7fffe6; background:#0b2a34e6; box-shadow:0 0 12px #7fffe655; color:#eaffff; }
 .fork-slot.is-locked { border-color:#ffd86a; box-shadow:0 0 14px #ffd86a66; }
 .fork-slot .fork-arrow { font-size:20px; line-height:1; color:#7fffe6; }

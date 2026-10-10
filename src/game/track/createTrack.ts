@@ -12,6 +12,7 @@ import { createMineFieldVisual } from './createMineFieldVisual.js';
 import { createArcRailVisual } from './createArcRailVisual.js';
 import { createBoostRingVisual } from './createBoostRingVisual.js';
 import { createForkSign } from './createForkSign.js';
+import { createForkLanes } from './createForkLanes.js';
 import { createTrackJumpVisual } from './createTrackJumpVisual.js';
 import { roadBoundary, roadPaths, routeDistanceScale, verticalThreshold, type TrackFork } from './trackBranches.js';
 
@@ -352,6 +353,7 @@ export function createTrackVisual(track: Track, lineColor?: string) {
       roof.position.y = 17; rib.add(roof);
       rib.position.copy(frame.position); orient(rib); group.add(rib);
     }
+    const lanes = createForkLanes(track, fork); if (lanes) group.add(lanes);
     track.sample(fork.start - 95, frame);
     const sign = new THREE.Group(); sign.name = `junction-sign-${fork.id}`;
     const arrows = fork.kind === 'horizontal' ? ['←', '→'] : ['↓', '↑'];
