@@ -18,8 +18,8 @@ const COPY: Record<TutorialStepId, Record<TutorialDevice, TutorialCopy>> = {
     keys: { name: '고도', title: '고도 한 단계 바꾸기', body: '<kbd>↑</kbd> <kbd>↓</kbd> 로 고도를 한 단계씩 바꿔요.', checks: { up: '올리기', down: '내리기' }, targets: ['height-guide'] },
   },
   boost: {
-    touch: { name: '부스트', title: '누른 채 밀어서 고도 바꾸기', body: 'BOOST를 누르고 있으면 빨라져요. 누른 채 위아래로 밀면 고도를 고를 수 있어요.', checks: { on: '부스트 켜기', 'alt-change': '누른 채 고도 바꾸기' }, targets: ['boost'] },
-    keys: { name: '부스트', title: '누른 채 고도 바꾸기', body: '<kbd>Space</kbd> 를 누르고 있으면 빨라져요. 누른 채 <kbd>↑</kbd> <kbd>↓</kbd> 로 고도를 바꿔요.', checks: { on: '부스트 켜기', 'alt-change': '누른 채 고도 바꾸기' }, targets: ['boost-meter'] },
+    touch: { name: '부스트', title: '누른 채 밀어서 고도 바꾸기', body: 'BOOST를 누르고 있으면 빨라져요. 누른 채 위아래로 밀면 고도를 고를 수 있어요. 끝 고도에서는 반대 방향으로 바꿔 보세요.', checks: { on: '부스트 켜기', 'alt-change': '누른 채 고도 바꾸기' }, targets: ['boost'] },
+    keys: { name: '부스트', title: '누른 채 고도 바꾸기', body: '<kbd>Space</kbd> 를 누르고 있으면 빨라져요. 누른 채 <kbd>↑</kbd> <kbd>↓</kbd> 로 고도를 바꿔요. 끝 고도에서는 반대 방향으로 바꿔 보세요.', checks: { on: '부스트 켜기', 'alt-change': '누른 채 고도 바꾸기' }, targets: ['boost-meter'] },
   },
   brake: {
     touch: { name: '감속', title: '속도 줄이기', body: '조이스틱을 아래로 당기면 감속해요.', checks: { on: '감속하기' }, targets: ['joystick'] },
