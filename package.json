@@ -9,6 +9,7 @@
     "build": "npm run typecheck && vite build",
     "preview": "vite preview --host 127.0.0.1 --port 5679 --strictPort",
     "test": "tsc -p tsconfig.test.json && node --test tests/*.test.mjs",
+    "audit:forks": "tsc -p tsconfig.test.json && node scripts/audit-track-forks.mjs",
     "docs:world": "tsc -p tsconfig.test.json && node scripts/update-world-docs.mjs",
     "docs:world:check": "tsc -p tsconfig.test.json && node scripts/update-world-docs.mjs --check",
     "audio:import": "node scripts/import-dev-audio.mjs"

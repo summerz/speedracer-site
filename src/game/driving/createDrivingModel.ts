@@ -102,6 +102,9 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
   let offTrackEpisode = false;
   let accelerationRecovery = 0;
   let recoveryDuration = 1;
+  let forkHandoffRemaining = 0;
+  let approachChoiceId: string | null = null;
+  let approachSteered = false;
   const impairAcceleration = (duration: number) => {
     // A craft contact cannot shorten an outstanding obstacle recovery.
     if (duration >= accelerationRecovery) { accelerationRecovery = duration; recoveryDuration = duration; }
@@ -189,7 +192,7 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
       Object.assign(state, initial); jumps.reset();
       fieldPassages.clear(); completedPassages.clear(); margins.clear(); lateCalls.clear(); safeSince.clear(); accelerationRecovery = 0;
       rechargeDelay = 0; boostSpent = 0; impactCooldown = 0; noticeRemaining = 0; heightSwitchSpeed = 0;
-      offTrackEpisode = false;
+      offTrackEpisode = false; forkHandoffRemaining = 0; approachChoiceId = null; approachSteered = false;
       cores = createAwakeningCores(track); collectedCores.clear(); handoffRemaining = 0;
     },
     recover,
@@ -257,11 +260,17 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
         const sampled = track.sample(state.distance, frame, state.routeId);
         const curvature = sampled.curvature;
         const choiceFork = fork ?? upcomingFork(track, state.distance, Math.max(180, state.speed * 2.5));
-        const choiceAssist = !awake && !Number.isFinite(input.guidedOffset) && !!choiceFork?.authoredLayout
+        if (choiceFork?.id !== approachChoiceId) { approachChoiceId = choiceFork?.id ?? null; approachSteered = false; }
+        if (Math.abs(input.steer) >= .15) approachSteered = true;
+        forkHandoffRemaining = Math.max(0, forkHandoffRemaining - dt);
+        const choiceAssist = !awake && !Number.isFinite(input.guidedOffset) && !!choiceFork
           && (!fork || branchChoiceOpen(track, state.distance));
-        // While the three-way sign is visible, steering chooses a lane instead
-        // of fighting the trunk curve. Normal cornering resumes after selection.
-        const fade = choiceAssist ? 0 : forkApproachDrift(track, state.distance);
+        // Every fork accepts sustained steering as a lane choice. Keep the
+        // transition into its Y separate from ordinary road cornering.
+        const route = fork?.routes.find(r => r.id === state.routeId);
+        const inMouth = !!fork && !!route && !branchChoiceOpen(track, state.distance) && state.distance % track.length < route.mouthEnd;
+        const mouthAssist = !awake && !Number.isFinite(input.guidedOffset) && (!!fork && (inMouth || forkHandoffRemaining > 0));
+        const fade = choiceAssist || mouthAssist ? 0 : forkApproachDrift(track, state.distance);
         const drift = curvature * fade;
         const bend = sampled.tangent ? sampled.tangent.distanceTo(track.sample(state.distance + 2, aheadFrame, state.routeId).tangent) / (2 * (sampled.distanceScale ?? 1)) : Math.abs(curvature);
         const grade = clamp((sampled.tangent?.y ?? 0) * Math.cos(state.heading) + (sampled.right?.y ?? 0) * Math.sin(state.heading), -1, 1);
@@ -304,7 +313,7 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
         const yaw = clamp((dampedHeading - oldHeading) / dt + drift * travel, -yawCapacity, yawCapacity);
         state.heading = clamp(oldHeading + (yaw - drift * travel) * dt, -1.1, 1.1);
         state.offset += speed * Math.sin((oldHeading + state.heading) * 0.5) * dt;
-        if (choiceAssist) {
+        if (choiceAssist || mouthAssist) {
           // Holding a direction must reach beyond the 30% selection boundary,
           // then settle safely short of the rail. Preserve inward movement and
           // never snap an already-wide approach pose to a new position.
@@ -326,14 +335,28 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
           state.offset = offsetFrom + clamp((input.guidedOffset! - offsetFrom) * (1 - Math.exp(-10 * dt)), -24 * dt, 24 * dt);
           state.heading = 0;
         }
-        // Legacy two-way forks ease hands-off flight to the trunk; authored choices retain the chosen lane.
-        if (!choiceAssist && !fork?.authoredLayout && !Number.isFinite(input.guidedOffset) && Math.abs(steer) < .15) state.offset *= Math.exp(-6 * (1 - fade) * dt);
+        const choiceDistance = choiceFork ? (choiceFork.start - state.distance % track.length + track.length) % track.length : 0;
+        if (choiceAssist && !fork && choiceDistance > choiceFork!.junctionLength && !approachSteered && Math.abs(steer) < .15) {
+          state.offset *= Math.exp(-6 * dt); state.heading *= Math.exp(-8 * dt);
+        }
+        // After locking, the chosen road moves under the craft. Settle toward
+        // its centre while allowing opposite input to avoid an obstacle.
+        if (mouthAssist) {
+          const side = fork!.routes.indexOf(route!);
+          const selectedDirection = fork!.kind === 'vertical' ? 0 : fork!.routes.length === 3 ? side - 1 : side ? 1 : -1;
+          if (Math.abs(steer) < .15 || steer * selectedDirection > 0) {
+            state.offset *= Math.exp(-4 * dt);
+            state.heading *= Math.exp(-8 * dt);
+          }
+        }
+        if (!choiceAssist && !mouthAssist && !fork?.authoredLayout && !Number.isFinite(input.guidedOffset) && Math.abs(steer) < .15) state.offset *= Math.exp(-6 * (1 - fade) * dt);
         const oldDistance = state.distance;
         state.distance = advanceTrackDistance(track, state.distance, travel * dt, state.routeId);
         if (Number.isFinite(input.guidedStopDistance)) state.distance = Math.max(oldDistance, Math.min(state.distance, input.guidedStopDistance!));
         // Commit the choice in the same tick that crosses the entrance, before
         // any renderer, obstacle or rival can observe an unselected route.
         const enteredFork = forkAt(track, state.distance);
+        if (enteredFork && branchChoiceOpen(track, oldDistance) && !branchChoiceOpen(track, state.distance)) forkHandoffRemaining = 1.7;
         if (!enteredFork) state.routeId = null;
         else if (!fork || enteredFork.id !== fork.id || branchChoiceOpen(track, state.distance))
           state.routeId = selectBranch(track, state.distance, state.offset, state.altitudeLevel);

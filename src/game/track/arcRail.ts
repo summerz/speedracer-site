@@ -48,7 +48,13 @@ export function createArcRails(track: Track, challenge: RaceChallengeId, random:
   const fits = stuntSections(track).flatMap(section => {
     // Hands-off craft drift to the centre in the 150 m before a fork (see forkApproachDrift), so a rail never runs into that approach.
     const fork = section.routeId ? undefined : track.branches?.find(f => f.start >= section.start && f.start - 150 < section.end);
-    const distance = section.start + MARGIN, length = Math.min(section.end - MARGIN, fork ? fork.start - 150 : Infinity) - distance;
+    // A forked helix includes its Y mouths in the section classification, but
+    // those mouths are for route selection, before ordinary hazard steering.
+    const route = track.branches?.flatMap(f => f.routes).find(r => r.id === section.routeId);
+    // Route handoff also needs time to release the selection input before
+    // crossing onto a safe half; use the easy lane-switch allowance here.
+    const distance = Math.max(section.start + MARGIN, route ? route.mouthEnd + Math.max(120, arcGap(challenge)) : -Infinity);
+    const length = Math.min(section.end - MARGIN, route ? route.mergeStart - MARGIN : Infinity, fork ? fork.start - 150 : Infinity) - distance;
     const stretch = 1 / Math.min(1, routeDistanceScale(track, distance + length / 2, section.routeId));
     const gap = arcGap(challenge) * stretch, [min, max] = [SEGMENT[0] * stretch, SEGMENT[1] * stretch];
     const most = Math.floor((length + gap) / (min + gap));

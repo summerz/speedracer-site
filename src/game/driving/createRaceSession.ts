@@ -80,7 +80,8 @@ export function aiDrivingInput(track: Track, configuration: DroneConfiguration, 
   index: number, opponents: readonly DrivingState[], profile?: AiDrivingProfile, speedScale = 1): DrivingInput {
   const p = configuration.performance;
   const fork = branchChoiceOpen(track, state.distance) ? forkAt(track, state.distance) : upcomingFork(track, state.distance, Math.max(150, state.speed * 2));
-  const branchSide = (index + Math.floor(state.distance / track.length) + (p.topSpeed > 100 ? 1 : 0)) % (fork?.routes.length ?? 2);
+  // Starting-grid rivals can be behind zero; that is still the first lap.
+  const branchSide = (index + Math.max(0, Math.floor(state.distance / track.length)) + (p.topSpeed > 100 ? 1 : 0)) % (fork?.routes.length ?? 2);
   const routeId = fork?.routes[branchSide].id ?? state.routeId;
   const curvature = track.sample(state.distance, undefined, routeId).curvature;
   let bend = Math.abs(curvature);
