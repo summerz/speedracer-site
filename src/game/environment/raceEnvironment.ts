@@ -1,3 +1,4 @@
+import { MARINE_ZONES } from './marineZones.js';
 import { ABYSS_ENVIRONMENTS } from './abyssEnvironment.js';
 
 export type NightEnvironmentId = 'midnight' | 'deep-night' | 'predawn' | 'afterglow' | 'storm-night';
@@ -60,12 +61,13 @@ export const NIGHT_ENVIRONMENTS: readonly NightEnvironment[] = [
     ambient: '#7990ae', ambientIntensity: 1.8, light: '#9cb9d9', lightIntensity: 2, celestial: 'moon', celestialColor: '#8798b3', stars: .05, celestialRadius: .53, celestialElevation: .12, rain: true },
 ];
 
-/** Compatibility alias for the underwater environment pool. */
-export const UNDERWATER_ENVIRONMENTS = ABYSS_ENVIRONMENTS;
+/** All authored underwater environments; district selection uses its own zone pool. */
+export const UNDERWATER_ENVIRONMENTS = Object.freeze(MARINE_ZONES.flatMap(zone => zone.environments));
 export { ABYSS_ENVIRONMENTS };
 
 export function raceEnvironmentsForDistrict(district?: string): readonly RaceEnvironment[] {
-  return district === 'abyss' ? ABYSS_ENVIRONMENTS : NIGHT_ENVIRONMENTS;
+  const zoneId = district === 'abyss' ? 'trench' : district;
+  return MARINE_ZONES.find(zone => zone.id === zoneId)?.environments ?? NIGHT_ENVIRONMENTS;
 }
 
 /** Select once on entry; restarts reuse the selection. Free driving keeps midnight. */

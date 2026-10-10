@@ -18,7 +18,7 @@ const outcome = (track = first, mode = 'time-attack', changes = {}) => ({ mode, 
 const complete = (p, id, result = outcome()) => applyCommand(p, { kind: 'campaign-result', input: reward(id), outcome: result });
 
 test('new districts append eight varied courses without changing earlier campaign identities', () => {
-  assert.equal(TRACK_CATALOG.length,32); assert.equal(new Set(TRACK_CATALOG.map(track => track.district)).size,8);
+  assert.equal(TRACK_CATALOG.length,48); assert.equal(new Set(TRACK_CATALOG.map(track => track.district)).size,12);
   assert.equal(TRACK_CATALOG[23].order,24);
   for (const district of ['harbor','desert']) {
     const courses=TRACK_CATALOG.filter(t=>t.district===district);
@@ -133,7 +133,7 @@ for (const definition of TRACK_CATALOG) test(`${definition.name}: five stock cra
   }
 });
 test('district scenery is deterministic, instanced and omitted in the track overview', () => {
-  for(const definition of TRACK_CATALOG.filter(t => t.order % 4 === 1)) {
+  for(const definition of TRACK_CATALOG.filter(t => t.order <= 32 && t.order % 4 === 1)) {
     const track = createCatalogTrack(definition), a = createDistrictScenery(track, definition), b = createDistrictScenery(track, definition);
     assert.equal(a.object.children.length, 11); assert.ok(a.counts.buildings > 20); assert.ok(a.counts.windows > 50);
     assert.deepEqual(a.object.children[0].instanceMatrix.array, b.object.children[0].instanceMatrix.array);
@@ -186,7 +186,7 @@ test('campaign keeps varied lap lengths, early stunts and difficulty relief betw
   assert.ok(lengths.at(-1)<lengths[18]*1.3);
   for(const t of TRACK_CATALOG)assert.ok(t.layout ? t.layout.stunts.length>=1 : createCatalogTrack(t).sections.length>=2);
   assert.deepEqual(new Set(TRACK_CATALOG[0].layout.stunts.map(s=>s.kind)),new Set(['loop','helix','roll']));
-  assert.ok(TRACK_CATALOG[2].layout.stunts.length>=4);assert.ok(TRACK_CATALOG.at(-1).layout.stunts.length>=6);
+  assert.ok(TRACK_CATALOG[2].layout.stunts.length>=4);assert.ok(TRACK_CATALOG[31].layout.stunts.length>=6);
   for(let i=4;i<TRACK_CATALOG.length;i+=4)assert.ok(TRACK_CATALOG[i].rating<TRACK_CATALOG[i-1].rating);
   for(let i=1;i<TRACK_CATALOG.length;i++)assert.ok(TRACK_CATALOG[i].rating-TRACK_CATALOG[i-1].rating<=1);
   assert.ok(Math.max(...TRACK_CATALOG.map(t=>t.rating))<=4);

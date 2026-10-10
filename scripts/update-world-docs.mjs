@@ -1,5 +1,6 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { TRACK_CATALOG, DISTRICTS, campaignRankLimit } from '../output/test/game/track/trackCatalog.js';
+import { CITY_CATALOG, campaignTracksForCity } from '../output/test/game/track/cityCatalog.js';
 import { FEATURE_TEST_TRACKS } from '../output/test/game/track/featureTestTracks.js';
 import { createCatalogTrack, trackMetrics } from '../output/test/game/track/trackRuntime.js';
 import { describeTrackLandmarks } from '../output/test/game/track/createTrackLandmark.js';
@@ -8,6 +9,7 @@ import { roadPaths } from '../output/test/game/track/trackBranches.js';
 import { NIGHT_ENVIRONMENTS, UNDERWATER_ENVIRONMENTS, raceEnvironmentsForDistrict } from '../output/test/game/environment/raceEnvironment.js';
 
 const { version } = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+const cityRows = CITY_CATALOG.map(city => [city.name, city.districts.map(id => DISTRICTS[id].name).join(' / '), campaignTracksForCity(city.id).map(track => track.order).join(', ')]);
 const definitions = [...TRACK_CATALOG, ...FEATURE_TEST_TRACKS];
 const courses = definitions.map(definition => {
   const track = createCatalogTrack(definition);
@@ -28,12 +30,14 @@ const nearestFraction = (track, landmark) => {
   return Math.round(nearest / track.length * 100);
 };
 const documents = {
-  'TRACK_CATALOG.md': prefix('트랙 카탈로그') +
+  'TRACK_CATALOG.md': prefix('트랙 카탈로그') + table(['도시', '구역', '트랙 번호'], cityRows) + '\n' +
     '캠페인 규칙과 저장/해금은 [트랙 제작과 캠페인](TRACK_CAMPAIGN.md), 경로별 구성은 [갈림길 카탈로그](TRACK_BRANCHES.md), 끊긴 도로는 [점프 계약](TRACK_JUMPS.md), 주변 구조물은 [랜드마크 카탈로그](LANDMARK_CATALOG.md), 하늘·안개·천체는 [월드 환경](WORLD_ENVIRONMENTS.md)을 참조합니다.\n\n' +
     `## 제작 원칙\n\n${TRACK_CATALOG.length}개 코스는 각각 닫힌 경로와 최소 1개 특수 구간을 갖습니다. 길이와 난이도는 별도로 조정하며 새 구역 입구에서 난이도가 낮아집니다. 아래 거리와 시간은 1랩 기준이고 캠페인 경기는 3랩입니다. 시험 트랙은 캠페인 밖 1랩이며 기록·보상·해금에 반영하지 않습니다. 기체에 따른 트랙 주색, 구역별 배경색, 난이도에 따른 고도 단계를 사용합니다. 환경 연출 변경만으로 기록 제작 버전을 올리지 않습니다.\n\n` +
     '## 구역별 특징\n\n' + table(['구역 / 주색', '트랙 번호', '경관과 주행 특징'], Object.entries(DISTRICTS).map(([id, spec]) => {
-      const tracks = definitions.filter(t => t.district === id);
-      return [`${spec.name} / \`${spec.color}\``, tracks[0]?.order === 0 ? '시험용 · 캠페인 밖' : `${number(tracks[0]?.order)}–${number(tracks.at(-1)?.order)}`, spec.description];
+      const tracks = TRACK_CATALOG.filter(t => t.district === id);
+      const hasTest = FEATURE_TEST_TRACKS.some(t => t.district === id);
+      const range = tracks.length ? `${number(tracks[0].order)}–${number(tracks.at(-1).order)}` : '';
+      return [`${spec.name} / \`${spec.color}\``, [range, hasTest ? '시험용 · 캠페인 밖' : ''].filter(Boolean).join(' / '), spec.description];
     })) + '\n' +
     table(['번호 / ID', '이름', '구역', '길이 km', '트랙 강도 /6', '고도 단계', '랩 제한 초', '경쟁 레이스 통과 순위', '전체 형태 / 특수 구간'], courses.map(({ definition: d, metrics }) => [
       `${number(d.order)} / \`${d.id}\``, d.name, DISTRICTS[d.district].name, `${(metrics.lengthMin / 1000).toFixed(1)}${(metrics.lengthMin / 1000).toFixed(1) !== (metrics.lengthMax / 1000).toFixed(1) ? `–${(metrics.lengthMax / 1000).toFixed(1)}` : ''}`, d.rating, d.altitudeLevels, d.lapLimit, d.order === 0 ? '기록 없음' : `${campaignRankLimit(d)}위 이내`, d.features,
@@ -42,7 +46,7 @@ const documents = {
     table(['코스', '제작 버전', '위치 / 방향 / 회전 수'], courses.map(({ definition: d }) => [`${number(d.order)} ${d.name}`, d.revision, stuntDirections(d)])) +
     '\n## 추가 코스\n\n`trackCatalog.ts`에 고유 ID·선행 ID·구역·경로·고도·제한시간·특수 구간 방향을 추가합니다. 기존 ID는 보존합니다. 구역이 늘어나면 `landmarkCatalog.ts`의 대표 형태·동반 형태·발광색도 지정합니다. 문서 갱신과 접근 시야·경로 간격·기본 기체 완주 검증을 실행합니다.\n',
   'TRACK_BRANCHES.md': prefix('갈림길 카탈로그') +
-    `${courses.filter(c => c.definition.branches?.length).length}개 코스에 분기와 합류를 배치했습니다. 01 WINDOW RUN은 좌우 조향, 02 TERRACE FLOW는 진입 고도로 선택합니다. ${new Set(TRACK_CATALOG.map(track => track.district)).size}개 캠페인 구역에 모두 배치하되 같은 수나 순서를 강제하지 않습니다. 아래 길이는 분기부터 합류까지 실제 거리이며 위치 %는 두 길이 공유하는 랩 진행도입니다.\n\n` +
+    `${courses.filter(c => c.definition.branches?.length).length}개 코스에 분기와 합류를 배치했습니다. 01 WINDOW RUN은 좌우 조향, 02 TERRACE FLOW는 진입 고도로 선택합니다. ${new Set(TRACK_CATALOG.filter(track => track.branches?.length).map(track => track.district)).size}개 구역에 배치하며 같은 수나 순서를 강제하지 않습니다. 아래 길이는 분기부터 합류까지 실제 거리이며 위치 %는 두 길이 공유하는 랩 진행도입니다.\n\n` +
     table(['코스', '선택 / 분기–합류', '경로', '길이 m', '특징 / 시야'], courses.flatMap(({ definition: d, track }) => (track.branches ?? []).flatMap(f => f.routes.map((r, i) => [
       `${number(d.order)} ${d.name}`, `${f.kind === 'vertical' ? '상하 고도' : '좌우 조향'} / ${Math.round(f.start / track.length * 100)}–${Math.round(f.end / track.length * 100)}%`, `${f.kind === 'vertical' ? i ? '위' : '아래' : i ? '오른쪽' : '왼쪽'} · ${r.name}`, Math.round(r.length), `${r.features.join(' · ')}${track.jumps?.some(j => j.routeId === r.id) ? ' · [하강 점프](TRACK_JUMPS.md)' : ''} / ${r.description}`,
     ])))) +
@@ -62,11 +66,11 @@ const documents = {
     ])) + '\n제작 데이터: `src/game/track/landmarkCatalog.ts`. 배치/형상: `createTrackLandmark.ts`. 도시·거리 표시: `createDistrictScenery.ts`.\n',
   'WORLD_ENVIRONMENTS.md': prefix('월드 환경과 천체') +
     '환경은 [트랙](TRACK_CATALOG.md)과 [랜드마크](LANDMARK_CATALOG.md)에 덧입히는 독립적인 연출입니다. 시간대 때문에 물리·제한시간·해금·기록 버전은 바뀌지 않습니다.\n\n' +
-    `## 선택과 유지\n\n캠페인 ${TRACK_CATALOG.length}개 트랙은 타임어택/경쟁 레이스 모두 경기 준비 화면 진입 때 아래 ${NIGHT_ENVIRONMENTS.length}종을 같은 확률로 선택합니다. 일시정지·재도전에서는 선택된 환경을 유지하고 경기 화면을 나갔다 다시 들어올 때 새로 선택합니다. 캠페인 트랙이 없는 자유 주행은 한밤중을 사용합니다. 현재 낮 환경과 실시간 시간대 전환은 없습니다.\n\n` +
+    `## 선택과 유지\n\n네온시티 ${campaignTracksForCity('neon').length}개 트랙은 타임어택/경쟁 레이스 모두 경기 준비 화면 진입 때 아래 밤하늘 ${NIGHT_ENVIRONMENTS.length}종을 같은 확률로 선택합니다. 마린시티 ${campaignTracksForCity('marine').length}개 트랙은 소속 구역의 물속 환경만 선택합니다. 일시정지·재도전에서는 선택된 환경을 유지하고 경기 화면을 나갔다 다시 들어올 때 새로 선택합니다. 캠페인 트랙이 없는 자유 주행은 한밤중을 사용합니다. 현재 낮 환경과 실시간 시간대 전환은 없습니다.\n\n` +
     table(['환경 ID / 이름', '천체', '겉보기 지름 / 중심 고도 °', '천정 / 지평선 색', '안개 색 / 밀도', '별 강도', '날씨'], NIGHT_ENVIRONMENTS.map(e => [
       `\`${e.id}\` / ${e.label}`, e.celestial, `${Math.round(e.celestialRadius * 360 / Math.PI)} / ${Math.round(e.celestialElevation * 180 / Math.PI)}`, `\`${e.zenith}\` / \`${e.horizon}\``, `\`${e.fog}\` / ${e.fogDensity}`, e.stars, e.rain ? '비 / 번개 / 천둥' : '맑음',
     ])) +
-    '\n## 수중 도시 시험 환경\n\n`abyss` 구역은 밤하늘 대신 아래 두 물속 환경만 같은 확률로 선택합니다. `RaceEnvironment.underwater`는 `true`이며 별·천체·비·번개·천둥은 사용하지 않습니다. 개발용 비 토글도 수중 환경을 덮어쓰지 않습니다. 재도전에서는 선택을 유지합니다. 시험 트랙 TRENCH LINE은 캠페인 밖에 있고 `test=1`로만 진입합니다. 환경 데이터와 진입 계약은 [수중 도시 런타임](ABYSS_RUNTIME.md)을 참조합니다. 물속 하늘·해저 장식은 Claude의 시각 작업에서 연결합니다.\n\n' +
+    '\n## 마린시티 환경\n\n`abyss`·`kelp`·`coral`·`lagoon` 구역은 `MARINE_ZONES`의 소속 환경 배열에서만 균등 선택합니다. `RaceEnvironment.underwater`는 `true`이며 별·천체·비·번개·천둥은 사용하지 않습니다. 개발용 비 토글도 수중 환경을 덮어쓰지 않습니다. 재도전에서는 선택을 유지합니다. 시험 트랙 TRENCH LINE은 캠페인 밖에 있고 `test=1`로만 진입합니다. 환경 데이터와 진입 계약은 [수중 도시 런타임](ABYSS_RUNTIME.md)을 참조합니다. 도시·구역·해금 계약은 [도시 구조](CITY_STRUCTURE.md)를 참조합니다.\n\n' +
     table(['환경 ID / 이름', '천정 / 지평선 색', '안개 색 / 밀도'], UNDERWATER_ENVIRONMENTS.map(e => [
       `\`${e.id}\` / ${e.label}`, `\`${e.zenith}\` / \`${e.horizon}\``, `\`${e.fog}\` / ${e.fogDensity}`,
     ])) +

@@ -84,7 +84,7 @@ export function createAbyssScenery(track: Track, definition: TrackDefinition, pa
   const bounds = routeBox.clone().expandByScalar(230), size = bounds.getSize(new THREE.Vector3());
   const object = new THREE.Group(); object.name = 'district-abyss';
   const landmarks = describeTrackLandmarks(track, definition, route), landmark = landmarks[0];
-  const landmarkObjects = landmarks.map(d => createTrackLandmark(d));
+  const landmarkObjects = landmarks.map(d => createTrackLandmark(d, false, true));
   object.add(...landmarkObjects);
   const dummy = new THREE.Object3D(), up = new THREE.Vector3(0, 1, 0);
   const matrix = (x: number, y: number, z: number, sx: number, sy: number, sz: number, ry = 0) => {
@@ -257,8 +257,8 @@ export function createAbyssScenery(track: Track, definition: TrackDefinition, pa
     for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
       if (tinted.has(m)) continue; tinted.add(m);
       const std = m as THREE.MeshStandardMaterial, basic = m as THREE.MeshBasicMaterial;
-      if (std.isMeshStandardMaterial) { std.color.set(palette.rock).multiplyScalar(.8); std.emissive.copy(CYAN).multiplyScalar(.1); std.metalness = .3; }
-      else if (basic.isMeshBasicMaterial) { const lum = Math.max(basic.color.r, basic.color.g, basic.color.b, .2); basic.color.copy(tinted.size % 3 === 0 ? PINK : CYAN).multiplyScalar(lum); }
+      if (std.isMeshStandardMaterial) { std.color.set(palette.rock).multiplyScalar(.8); std.emissive.copy(CYAN).multiplyScalar(.1); std.metalness = .3; if (o.userData.landmark?.kind === 'dome') { std.transparent = true; std.opacity = .3; std.depthWrite = false; } }
+      else if (basic.isMeshBasicMaterial) { const lum = Math.min(1.1, Math.max(basic.color.r, basic.color.g, basic.color.b, .2)); basic.color.copy(tinted.size % 3 === 0 ? PINK : CYAN).multiplyScalar(lum); }
     }
   }));
 

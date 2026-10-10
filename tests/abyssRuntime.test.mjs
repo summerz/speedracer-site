@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { FEATURE_TEST_TRACKS, resolveDriveTrack, isFeatureTestTrack, featureTestTrackHref } from '../output/test/game/track/featureTestTracks.js';
 import { TRACK_CATALOG, DISTRICTS, trackDefinition, validateTrackCatalog } from '../output/test/game/track/trackCatalog.js';
 import { createCatalogTrack } from '../output/test/game/track/trackRuntime.js';
-import { selectRaceEnvironment, previewRaceEnvironment, raceEnvironmentsForDistrict, NIGHT_ENVIRONMENTS, UNDERWATER_ENVIRONMENTS } from '../output/test/game/environment/raceEnvironment.js';
+import { selectRaceEnvironment, previewRaceEnvironment, raceEnvironmentsForDistrict, NIGHT_ENVIRONMENTS, UNDERWATER_ENVIRONMENTS, ABYSS_ENVIRONMENTS } from '../output/test/game/environment/raceEnvironment.js';
 import { initialProgress, applyCommand } from '../output/test/game/progression/progress.js';
 import { createTimeAttack } from '../output/test/game/driving/createTimeAttack.js';
 import { createRaceRecords } from '../output/test/game/driving/raceRecords.js';
@@ -17,8 +17,8 @@ test('abyss recipe is opt-in and never extends campaign identities or unlocks', 
   assert.equal(definition.district, 'abyss');
   assert.equal(definition.laps, 1);
   assert.ok(DISTRICTS.abyss);
-  assert.equal(TRACK_CATALOG.length, 32);
-  assert.ok(TRACK_CATALOG.every(track => track.district !== 'abyss'));
+  assert.equal(TRACK_CATALOG.length, 48);
+  assert.ok(TRACK_CATALOG.every(track => track.id !== definition.id));
   assert.doesNotThrow(() => validateTrackCatalog(FEATURE_TEST_TRACKS));
   assert.equal(trackDefinition(definition.id), undefined);
   assert.equal(resolveDriveTrack(definition.id, false), undefined);
@@ -45,8 +45,8 @@ test('test recipe cannot be submitted as a rewarded campaign result', () => {
 });
 
 test('abyss selects only underwater profiles and surface districts retain their five choices', () => {
-  assert.equal(raceEnvironmentsForDistrict('abyss'), UNDERWATER_ENVIRONMENTS);
-  assert.deepEqual(UNDERWATER_ENVIRONMENTS.map(e => e.id), ['abyss-shallow', 'abyss-deep']);
+  assert.equal(raceEnvironmentsForDistrict('abyss'), ABYSS_ENVIRONMENTS);
+  assert.deepEqual(ABYSS_ENVIRONMENTS.map(e => e.id), ['abyss-shallow', 'abyss-deep']);
   for (const value of [-1, 0, .499, .5, .999, 1, 3, NaN, Infinity]) {
     const expected = Number.isFinite(value) && value >= .5 ? 'abyss-deep' : 'abyss-shallow';
     const environment = selectRaceEnvironment('abyss', () => value);
@@ -56,7 +56,7 @@ test('abyss selects only underwater profiles and surface districts retain their 
     assert.equal(environment.stars, 0);
     assert.equal(environment.celestial, 'none');
   }
-  for (const district of new Set(TRACK_CATALOG.map(track => track.district))) {
+  for (const district of new Set(TRACK_CATALOG.filter(track => track.order <= 32).map(track => track.district))) {
     assert.equal(raceEnvironmentsForDistrict(district), NIGHT_ENVIRONMENTS);
     assert.equal(selectRaceEnvironment(district, () => .75).id, 'afterglow');
   }
