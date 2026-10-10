@@ -224,9 +224,9 @@ export function createDistrictScenery(track: Track, definition: TrackDefinition)
   let quality: RenderQuality = 'balanced';
   const lastPosition = new THREE.Vector3(Infinity, Infinity, Infinity);
   let dirty = true;
-  const update = (position: THREE.Vector3, time = 0) => {
+  const update = (position: THREE.Vector3, time = 0, delta = 0, reduced = false) => {
     timeUniform.value = time;
-    traffic.update(time);
+    traffic.update(time, position, delta, reduced);
     if (!dirty && lastPosition.distanceToSquared(position) < 35 ** 2) return;
     dirty = false; lastPosition.copy(position);
     const ranges = quality === 'low' ? [480, 165] : quality === 'high' ? [800, 380] : [650, 280];

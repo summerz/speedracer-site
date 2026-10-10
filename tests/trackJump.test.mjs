@@ -15,8 +15,8 @@ const track = { ...authored, heightObstacles: [], corridorObstacles: [], mineFie
 const levels = track.altitudeProfile.levels;
 const pose = (distance, altitude = levels[0], offset = 0, routeId = jump.routeId) => ({ distance, altitude, offset, routeId });
 
-test('only Voltage Yard upper fork has a jump, with measured approach and landing allowance', () => {
-  assert.deepEqual(TRACK_CATALOG.filter(d => d.jumps?.length).map(d => d.id), ['voltage-yard']);
+test('Voltage Yard upper fork has a jump, with measured approach and landing allowance', () => {
+  assert.deepEqual(TRACK_CATALOG.filter(d => d.jumps?.length).map(d => d.id), ['voltage-yard', 'surface-rush']);
   assert.equal(jump.routeId, track.branches[0].routes[1].id);
   const metres = (a, b) => physicalDistance(track, jump[a], jump[b] - jump[a], jump.routeId);
   assert.ok(Math.abs(metres('approachStart', 'start') - 100) < .01);

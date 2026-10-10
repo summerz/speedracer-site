@@ -7,12 +7,12 @@ import { createRaceWeather } from '../environment/createRaceWeather';
 import { createNightSky } from '../environment/createNightSky';
 import { NIGHT_ENVIRONMENTS } from '../environment/raceEnvironment';
 import type { RaceEnvironment } from '../environment/raceEnvironment';
-import { marinePaletteFor } from '../environment/marineZones';
+import { marinePaletteFor, MARINE_ZONES } from '../environment/marineZones';
+import { createMarineGiant } from '../track/createMarineGiant';
 import { createCatalogTrack } from '../track/trackRuntime';
 import type { TrackDefinition } from '../track/trackCatalog';
 import { createDistrictScenery } from '../track/createDistrictScenery';
 import { createAbyssScenery } from '../track/createAbyssScenery';
-import { createMarineSnow } from '../environment/createMarineSnow';
 import { RENDER_QUALITIES } from '../../platform/renderQuality';
 import type { RenderQuality } from '../../platform/renderQuality';
 import { createAutomaticQuality } from '../../platform/automaticQuality';
@@ -160,11 +160,13 @@ export function createRace(
   container.dataset.rainIntensity = environment.rain ? weather.intensity : 'none';
   const scenery = course ? (palette ? createAbyssScenery(track, course, palette) : createDistrictScenery(track, course)) : undefined;
   if (scenery) scene.add(scenery.object);
-  const marineSnow = palette ? createMarineSnow(7, palette.snow) : undefined;
-  if (marineSnow) scene.add(marineSnow.object);
+  const zoneId = MARINE_ZONES.find(z => z.environments.some(e => e.id === environment.id))?.id ?? 'trench';
+  const giant = palette ? createMarineGiant(zoneId, track, palette, environment) : undefined;
+  if (giant) scene.add(giant.object);
   const trackVisual = createTrackVisual(track, config.boostStyle.pulseColor);
   scene.add(trackVisual.object);
-  if (underwater) trackVisual.object.traverse(o => { if (o instanceof THREE.GridHelper) o.visible = false; });
+  // Underwater the seabed replaces the grid and the dark ground plane (0.15 m below the seabed: it z-fights at flyover range).
+  if (underwater) trackVisual.object.traverse(o => { if (o instanceof THREE.GridHelper || o.name === 'track-ground') o.visible = false; });
   const drone = createRacingDrone({ variant: config.modelVariant, neonBoost: 1.7, thrusterIntensity: 0.35 });
   scene.add(drone);
   const thrusters = createThrusterEffect(drone, scene, config.boostStyle);
@@ -623,8 +625,8 @@ export function createRace(
       camera.up.lerpVectors(worldUp, flightUp, s).normalize(); camera.lookAt(introTarget);
       if (scene.fog instanceof THREE.FogExp2) scene.fog.density = environment.fogDensity * (.12 + .88 * introProgress(s - .35, .55));
     } else if (scene.fog instanceof THREE.FogExp2) scene.fog.density = environment.fogDensity * (replaying ? .4 : 1);
-    const far = introActive ? 9000 : 3200;
-    if (camera.far !== far) { camera.far = far; camera.updateProjectionMatrix(); }
+    const far = introActive ? 9000 : 3200, nearPlane = introActive ? 1 : 0.1; // flyover is hundreds of metres away: a larger near plane keeps depth precision
+    if (camera.far !== far || camera.near !== nearPlane) { camera.far = far; camera.near = nearPlane; camera.updateProjectionMatrix(); }
     const showcase = introActive || cinematic?.kind !== 'intro' || cinematic.reduced || cinematic.t < INTRO_SECONDS ? null : showcaseAt(cinematic.plan, cinematic.t - INTRO_SECONDS, shotAt);
     if (showcase) {
       const info = cinematic!.infos[showcase.shot], rival = info.kind === 'rival' ? rivalVisuals.entries[cinematic!.plan.shots[showcase.shot].index]?.object : undefined, u = showcase.u;
@@ -690,7 +692,7 @@ export function createRace(
     if (replaying) speedLines.update(replayClock + replayT, replayPose.speed, replayPick.shot === 1 && replayPose.mode >= 2, reducedMotion.matches, replayPose.mode === 3);
     else speedLines.update(state.elapsed, state.speed, awake || state.boosting, reducedMotion.matches, awake || state.boostStage === 2);
     views.prepareDriving();
-    scenery?.setOverview(false); scenery?.update(drone.position, reducedMotion.matches ? 0 : performance.now() / 1000); sky.update(camera.position, reducedMotion.matches ? 0 : performance.now() / 1000); marineSnow?.update(camera.position, reducedMotion.matches ? 0 : performance.now() / 1000, reducedMotion.matches);
+    scenery?.setOverview(false); scenery?.update(drone.position, reducedMotion.matches ? 0 : performance.now() / 1000, delta, reducedMotion.matches); giant?.update(camera.position, reducedMotion.matches ? 0 : performance.now() / 1000); sky.update(camera.position, reducedMotion.matches ? 0 : performance.now() / 1000);
     const weatherFrame = weather.update(camera.position, state.distance, (guidance.tutorial ? worldDelta : delta) * slow, phase === 'running' && !tutorialFrozen(), reducedMotion.matches);
     ambient.intensity = environment.ambientIntensity + weatherFrame.flash * 5;
     sun.intensity = environment.lightIntensity + weatherFrame.flash * 10;
@@ -701,7 +703,7 @@ export function createRace(
     if (layout.track) {
       const linesVisible = speedLines.object.visible;
       speedLines.object.visible = false;
-      views.prepareOverview(); scenery?.setOverview(true); marineSnow?.setOverview(true); sky.setOverview(true); weather.setOverview(true); overviewComposer.render(delta); scenery?.setOverview(false); marineSnow?.setOverview(false); sky.setOverview(false); weather.setOverview(false);
+      views.prepareOverview(); giant?.setOverview(true); scenery?.setOverview(true); sky.setOverview(true); weather.setOverview(true); overviewComposer.render(delta); scenery?.setOverview(false); giant?.setOverview(false); sky.setOverview(false); weather.setOverview(false);
       speedLines.object.visible = linesVisible;
       views.prepareDriving();
     }
@@ -729,7 +731,7 @@ export function createRace(
   renderer.domElement.addEventListener('webglcontextlost', (event) => {
     event.preventDefault(); lost = true; pause(); cancelAnimationFrame(animation); onError();
   }, listen);
-  const applyQuality = (quality: RenderQuality) => { scenery?.setQuality(quality); marineSnow?.setQuality(quality); weather.setQuality(quality); renderQuality = quality; resize(); };
+  const applyQuality = (quality: RenderQuality) => { scenery?.setQuality(quality); giant?.setQuality(quality); weather.setQuality(quality); renderQuality = quality; resize(); };
   const unsubscribeQuality = autoQuality.onChange(status => applyQuality(status.quality));
   notify(); animation = requestAnimationFrame(tick);
   return {
@@ -762,7 +764,7 @@ export function createRace(
       render.dispose(); bloom.dispose(); exhaustHaze.pass.dispose(); boostWarp.pass.dispose(); output.dispose(); composer.dispose();
       overviewRender.dispose(); overviewOutput.dispose(); overviewComposer.dispose();
       blitGeometry.dispose(); blitMaterial.dispose(); pipFrame.remove();
-      marineSnow?.dispose(); renderer.dispose(); renderer.forceContextLoss(); renderer.domElement.remove(); delete container.dataset.environment;
+      giant?.dispose(); renderer.dispose(); renderer.forceContextLoss(); renderer.domElement.remove(); delete container.dataset.environment;
     },
   };
 }

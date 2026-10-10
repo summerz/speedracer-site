@@ -4,7 +4,8 @@ import type { BoostPad, BoostRing, CorridorObstacle, HeightObstacle, MineField, 
 import { BOOSTS_PER_KM, HAZARD_GAP, HAZARD_SHARE, hazardEnabled } from './hazardCatalog.js';
 import { RING_RADIUS, ringMarks } from './arcRail.js';
 import { createMineField, MINE_CHAIN_SLOPE } from './mineField.js';
-import { EXTRA_OBSTACLES, safePlacement } from './obstacleDynamics.js';
+import { EXTRA_OBSTACLES } from './obstacleDynamics.js';
+import { safePlacement } from './obstaclePlacement.js';
 import type { RaceChallengeId } from './raceChallenge.js';
 import { physicalDistance, roadPaths } from './trackBranches.js';
 

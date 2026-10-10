@@ -66,7 +66,7 @@ function declareAttributes(m: THREE.ShaderMaterial, vertexDecl: string, vertexIn
 const tagged = (g: THREE.BufferGeometry, name: string, v: number) => { g.setAttribute(name, new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count).fill(v), 1)); return g; };
 
 /**
- * ABYSS: glass domes, tubes, kelp, rocks, jellyfish, a whale, light shafts and a caustic seabed.
+ * ABYSS: glass domes, tubes, kelp, rocks, light shafts, a caustic seabed and a per-zone mix of jellyfish, whales, mantas, sharks and fish schools.
  * Same return shape as createDistrictScenery. `hidesGround` tells the caller to hide the GridHelper
  * (the seabed plane at y=0.05 would otherwise z-fight with it at distance).
  */
@@ -262,31 +262,23 @@ export function createAbyssScenery(track: Track, definition: TrackDefinition, pa
     }
   }));
 
-  // --- Jellyfish (placed around the camera, vertex-shader pulse) ---
-  const JELLY = { low: 6, balanced: 14, high: 24 } as const, JELLY_R = 300, JELLY_MIN = 20, JELLY_MAX = routeTop + 80;
-  const jellies = Array.from({ length: JELLY.high }, () => ({ x: random() * JELLY_R, z: random() * JELLY_R, y: random() * (JELLY_MAX - JELLY_MIN), vx: range(-1.2, 1.2), vz: range(-1.2, 1.2), vy: range(.6, 1.8), s: range(3, 7) }));
+  // --- Jellyfish: fixed anchors beside the route (placed with the fauna below); bell pulse, drift and tentacle sway run in the vertex shader. No twinkle: constant glow. ---
+  const JELLY_CAP = 24;
+  for (let i = 0; i < JELLY_CAP * 7; i++) random(); // the old camera-relative field drew these numbers; keep consuming them so the shaft layout below stays put
+  const whalePhase = random() * 6.283, whaleReach = range(450, 750);
   const bell = new THREE.SphereGeometry(1, 14, 6, 0, Math.PI * 2, 0, Math.PI / 2);
   const tentacles = [0, 1, 2, 3, 4].map(i => { const g = new THREE.ConeGeometry(.05, 3, 4, 3, true); g.rotateX(Math.PI); g.translate(Math.cos(i * 1.257) * .45, -1.5, Math.sin(i * 1.257) * .45); return g; });
   const jellyMaterial = shader('abyss-jelly', `
-    float pulse=sin(uTime*1.6+vHash*40.);
-    if(pos.y>=-.01){ pos.xz*=1.+.12*pulse; pos.y*=1.-.1*pulse; }
-    else pos.xz+=vec2(sin(uTime*1.2+pos.y*2.+vHash*9.),cos(uTime*1.1+pos.y*2.+vHash*7.))*.25*(-pos.y);`, '', `
+    float pulse=sin(uTime*.9+vHash*40.);
+    if(pos.y>=-.01){ pos.xz*=1.+.07*pulse; pos.y*=1.-.05*pulse; }
+    else pos.xz+=vec2(sin(uTime*.8+pos.y*2.+vHash*9.),cos(uTime*.75+pos.y*2.+vHash*7.))*.25*(-pos.y);`, `
+    w.xyz+=vec3(sin(uTime*.13+vHash*60.)*7.,sin(uTime*.2+vHash*30.)*3.5,cos(uTime*.11+vHash*80.)*7.);`, `
     vec3 n=normalize(vN), v=normalize(-vView);
-    float fres=pow(1.-abs(dot(n,v)),1.8), pulse=.6+.4*sin(uTime*1.6+vHash*40.);
+    float fres=pow(max(1.-abs(dot(n,v)),0.),1.8);
     vec3 base=mix(${accent()},${glow()},step(.5,fract(vHash*7.)));
     float tent=step(vY,-.01);
-    gl_FragColor=fogOut(base*(.5+pulse*1.1)*(tent*.8+(1.-tent)*(.6+fres)), tent*.55+(1.-tent)*(.2+fres*.55));`, { additive: true });
-  const jellyMesh = add(new THREE.InstancedMesh(mergeGeometries([bell, ...tentacles]), jellyMaterial, JELLY.high), 'abyss-jellyfish');
-
-  // --- Whale ---
-  const parts: THREE.BufferGeometry[] = [];
-  const body = new THREE.SphereGeometry(1, 10, 7); body.scale(7, 7, 30); parts.push(body);
-  const tail = new THREE.ConeGeometry(5, 26, 6); tail.rotateX(-Math.PI / 2); tail.translate(0, 0, -36); parts.push(tail);
-  const fluke = new THREE.BoxGeometry(26, .8, 7); fluke.translate(0, 0, -52); parts.push(fluke);
-  for (const s of [-1, 1]) { const f = new THREE.BoxGeometry(14, .6, 5); f.rotateZ(s * .3); f.translate(s * 9, -4, 8); parts.push(f); }
-  const whale = new THREE.Mesh(mergeGeometries(parts.map(p => p.toNonIndexed())), new THREE.MeshBasicMaterial({ color: palette.whale, toneMapped: false }));
-  whale.name = 'abyss-whale'; whale.scale.setScalar(1.5); whale.frustumCulled = false; object.add(whale);
-  const whaleAngle = random() * 6.283, whaleDistance = range(450, 750);
+    gl_FragColor=fogOut(base*.85*(tent*.8+(1.-tent)*(.6+fres)), tent*.5+(1.-tent)*(.2+fres*.5));`, { additive: true });
+  const jellyMesh = add(new THREE.InstancedMesh(mergeGeometries([bell, ...tentacles]), jellyMaterial, JELLY_CAP), 'abyss-jellyfish');
 
   // --- Light shafts ---
   const SHAFTS = { low: 4, balanced: 6, high: 8 } as const, SHAFT_TOP = routeTop + 250, SHAFT_LENGTH = SHAFT_TOP + 20;
@@ -328,7 +320,9 @@ export function createAbyssScenery(track: Track, definition: TrackDefinition, pa
   const hw = track.halfWidth;
   /** A point beside the route on a random side, `reach..reach+spread` m from the road edge. */
   const beside = (reach: number, spread: number) => { const p = route[Math.floor(frand() * route.length)], ang = frand() * 6.283, d = hw + reach + frand() * spread; return { x: p.x + Math.cos(ang) * d, z: p.z + Math.sin(ang) * d, y: p.y }; };
-  const KELP_N = { low: 40, balanced: 80, high: 140 } as const, CORAL_N = { low: 60, balanced: 120, high: 200 } as const, SCHOOL_N = { low: 4, balanced: 8, high: 12 } as const;
+  const KELP_N = { low: 40, balanced: 80, high: 140 } as const, CORAL_N = { low: 60, balanced: 120, high: 200 } as const;
+  const SHARE = { low: .34, balanced: .67, high: 1 } as const, scaled = (n: number, q: RenderQuality) => n <= 0 ? 0 : Math.max(1, Math.round(n * SHARE[q]));
+  const fauna = palette.fauna;
   const featureMeshes: { mesh: THREE.InstancedMesh; count: (q: RenderQuality) => number }[] = [];
   const scatter = (total: number, spread: number, reach: number, gap: number, place: (x: number, z: number, y: number) => void, group: [number, number]) => {
     let cx = 0, cz = 0, left = 0, placed = 0;
@@ -398,18 +392,18 @@ export function createAbyssScenery(track: Track, definition: TrackDefinition, pa
     featureMeshes.push({ mesh: reef, count: q => Math.min(n, CORAL_N[q]) });
   }
 
-  if (palette.feature === 'fish-school') {
+  if (fauna.fish > 0) {
     // Schools loop on ellipses beside the road; the whole swim (path, heading, tail wiggle) is computed in the vertex shader from uTime.
     const body = new THREE.OctahedronGeometry(1, 0).scale(.45, .7, 1.8), tail = new THREE.OctahedronGeometry(1, 0).scale(.08, .8, .7).translate(0, 0, -2);
     const fishGeometry = mergeGeometries([body, tail])!;
     const schools: { x: number; y: number; z: number; rx: number; rz: number; w: number; phase: number; fish: number }[] = [];
-    for (let a = 0; schools.length < SCHOOL_N.high && a < 400; a++) {
+    for (let a = 0; schools.length < fauna.fish && a < 400; a++) {
       const rx = frange(14, 28), rz = frange(10, 20), reach = Math.max(rx, rz) * 1.3 + 10, p = route[Math.floor(frand() * route.length)], ang = frand() * 6.283, d = hw + reach + 4 + frand() * 18;
       const x = p.x + Math.cos(ang) * d, z = p.z + Math.sin(ang) * d;
       if (nearRoute(x, z, hw + reach, route) || schools.some(s => Math.hypot(s.x - x, s.z - z) < 70)) continue;
       schools.push({ x, y: p.y + frange(6, 30), z, rx, rz, w: (frand() < .5 ? -1 : 1) * frange(.25, .5), phase: frand() * 6.283, fish: 30 + Math.floor(frand() * 31) });
     }
-    const total = schools.reduce((n, s) => n + s.fish, 0), perQuality = (q: RenderQuality) => schools.slice(0, SCHOOL_N[q]).reduce((n, s) => n + s.fish, 0);
+    const total = schools.reduce((n, s) => n + s.fish, 0), perQuality = (q: RenderQuality) => schools.slice(0, scaled(fauna.fish, q)).reduce((n, s) => n + s.fish, 0);
     const aFish = new THREE.InstancedBufferAttribute(new Float32Array(Math.max(1, total) * 4), 4), aSchool = new THREE.InstancedBufferAttribute(new Float32Array(Math.max(1, total) * 4), 4);
     fishGeometry.setAttribute('aFish', aFish); fishGeometry.setAttribute('aSchool', aSchool);
     const fishMaterial = shader('marine-fish-school', `
@@ -435,6 +429,108 @@ export function createAbyssScenery(track: Track, definition: TrackDefinition, pa
     }
     fish.instanceMatrix.needsUpdate = aFish.needsUpdate = aSchool.needsUpdate = true;
     featureMeshes.push({ mesh: fish, count: q => perQuality(q) });
+  }
+
+  // --- Fauna: jellyfish anchors, sharks, mantas, whales (own seeded LCG; one instanced draw each, added last) ---
+  // Path, heading and body motion are computed in the vertex shader from uTime, so reduced motion (time 0) is a still pose.
+  let gseed = (scenerySeed(definition.id) ^ 0xfa11a5) >>> 0;
+  const grand = () => { gseed = (Math.imul(gseed, 1664525) + 1013904223) >>> 0; return gseed / 4294967296; };
+  const grange = (a: number, b: number) => a + grand() * (b - a);
+  const hexMix = (a: string, b: string, t: number) => '#' + new THREE.Color(a).lerp(new THREE.Color(b), t).getHexString();
+  const bodyColor = sceneryV3(palette.whale), bellyColor = sceneryV3(hexMix(palette.whale, palette.caustic, .2)), rimColor = glow(Math.max(fauna.glow, 0) * 1.2);
+  const goldenRoute = (k: number) => Math.floor((((k * .618034 + grand() * .12) % 1) + 1) % 1 * route.length) % route.length;
+  const sideOf = (i: number) => {
+    const p = route[i], q = route[(i + 1) % route.length], o = route[(i + route.length - 1) % route.length], tx = q.x - o.x, tz = q.z - o.z, tl = Math.max(Math.hypot(tx, tz), 1e-3);
+    return { p, nx: tz / tl, nz: -tx / tl };
+  };
+
+  // Jellyfish: a few close passes, the rest 25-60 m off the road edge and up to ~30 m above it.
+  const jellyCount = Math.min(JELLY_CAP, fauna.jellyfish);
+  const jellyPlaced: THREE.Matrix4[] = [];
+  for (let k = 0; k < jellyCount; k++) {
+    const { p, nx, nz } = sideOf(goldenRoute(k)), close = k % 3 === 0, side = k % 2 ? 1 : -1, d = hw + (close ? grange(11, 18) : grange(25, 60)), s = close ? grange(2.5, 4) : grange(3.5, 7);
+    jellyPlaced.push(matrix(p.x + nx * d * side, Math.max(5, p.y + (close ? grange(1, 9) : grange(6, 32))), p.z + nz * d * side, s, s, s));
+  }
+  jellyPlaced.forEach((m, i) => jellyMesh.setMatrixAt(i, m)); jellyMesh.instanceMatrix.needsUpdate = true;
+  featureMeshes.push({ mesh: jellyMesh, count: q => Math.min(jellyPlaced.length, scaled(jellyCount, q)) });
+
+  /** Loops an ellipse around a centre beside the road; `clear` keeps the whole loop off the road, otherwise only the centre is placed. */
+  interface Swimmer { x: number; y: number; z: number; rx: number; rz: number; w: number; phase: number; s: number }
+  const placeSwimmers = (n: number, o: { rx: [number, number]; rz: [number, number]; speed: [number, number]; scale: [number, number]; lift: [number, number]; gap: [number, number]; clear: boolean; top?: boolean }) => {
+    const out: Swimmer[] = [];
+    for (let a = 0; out.length < n && a < n * 80; a++) {
+      const rx = grange(...o.rx), rz = grange(...o.rz), R = Math.max(rx, rz), p = route[goldenRoute(out.length + (a % 7))], ang = grand() * 6.283, d = hw + (o.clear ? R : 0) + grange(...o.gap);
+      const x = p.x + Math.cos(ang) * d, z = p.z + Math.sin(ang) * d;
+      if (o.clear && nearRoute(x, z, hw + R + 4, route)) continue;
+      if (domes.some(dm => Math.hypot(dm.center.x - x, dm.center.z - z) < dm.radius + 4)) continue;
+      out.push({ x, y: Math.max(4, (o.top ? routeTop : p.y) + grange(...o.lift)), z, rx, rz, w: (grand() < .5 ? -1 : 1) * grange(...o.speed) / ((rx + rz) / 2), phase: grand() * 6.283, s: grange(...o.scale) });
+    }
+    return out;
+  };
+  /** One merged-geometry InstancedMesh of swimmers. `wiggle` bends the body in model space (z is forward); `belly` is a GLSL float 0 (back) .. 1 (belly). */
+  const creature = (name: string, geometry: THREE.BufferGeometry, swimmers: Swimmer[], wiggle: string, belly: string, tagBelly = false) => {
+    const n = Math.max(1, swimmers.length), aSwim = new THREE.InstancedBufferAttribute(new Float32Array(n * 4), 4);
+    geometry.setAttribute('aSwim', aSwim);
+    const material = shader(name, `
+      float th=aSwim.z*uTime+aSwim.w;
+      vec3 vel=vec3(-aSwim.x*sin(th)*aSwim.z,0.,aSwim.y*cos(th)*aSwim.z);
+      vec3 fw=vel/max(length(vel),1e-4), rt=cross(vec3(0.,1.,0.),fw); rt/=max(length(rt),1e-4);
+      ${wiggle}
+      pos=rt*pos.x+vec3(0.,pos.y,0.)+fw*pos.z;`, `
+      w.xyz+=vec3(aSwim.x*cos(th),sin(uTime*.35+aSwim.w)*1.6,aSwim.y*sin(th));`, `
+      vec3 cn=cross(dFdx(vWorld),dFdy(vWorld)); cn/=max(length(cn),1e-6);
+      float sh=.55+.45*abs(cn.y), fres=pow(max(1.-abs(dot(cn,normalize(-vView))),0.),2.);
+      vec3 c=mix(${bodyColor},${bellyColor},clamp(${belly},0.,1.))*sh+${rimColor}*fres;
+      gl_FragColor=fogOut(c,1.);`);
+    declareAttributes(material, `attribute vec4 aSwim;${tagBelly ? ' attribute float aBelly; varying float vBelly;' : ''}`, tagBelly ? 'vBelly=aBelly;' : '', tagBelly ? 'varying float vBelly;' : '');
+    const mesh = add(new THREE.InstancedMesh(geometry, material, n), name);
+    swimmers.forEach((sw, i) => { mesh.setMatrixAt(i, matrix(sw.x, sw.y, sw.z, sw.s, sw.s, sw.s)); aSwim.setXYZW(i, sw.rx, sw.rz, sw.w, sw.phase); });
+    mesh.instanceMatrix.needsUpdate = aSwim.needsUpdate = true;
+    featureMeshes.push({ mesh, count: q => Math.min(swimmers.length, scaled(swimmers.length, q)) });
+    return mesh;
+  };
+  const flat = (g: THREE.BufferGeometry) => { const n = g.toNonIndexed(); n.deleteAttribute('uv'); n.deleteAttribute('normal'); return n; };
+
+  // Sharks: slow patrol loops between the kelp, 10-16 m long.
+  const sharks = placeSwimmers(fauna.shark, { rx: [28, 55], rz: [20, 40], speed: [4, 6], scale: [.9, 1.4], lift: [2, 16], gap: [6, 45], clear: true });
+  if (sharks.length) {
+    const parts = [
+      new THREE.SphereGeometry(1, 10, 7).scale(1.3, 1.4, 5),
+      new THREE.ConeGeometry(1.3, 7, 6).rotateX(-Math.PI / 2).translate(0, 0, -8),
+      new THREE.ConeGeometry(.9, 2.6, 3).rotateX(-.35).translate(0, 2.1, .6),
+      new THREE.BoxGeometry(.14, 4.4, 1.7).translate(0, .2, -11.4),
+      ...[-1, 1].map(sd => new THREE.BoxGeometry(5, .12, 1.8).rotateZ(sd * .3).translate(sd * 2.5, -1, 1.6)),
+    ].map(flat);
+    creature('marine-sharks', mergeGeometries(parts)!, sharks, 'pos.x+=sin(uTime*2.2+vHash*30.-pos.z*.6)*.5*smoothstep(1.5,-11.,pos.z);', 'smoothstep(.2,-1.3,vY)');
+  }
+
+  // Mantas: broad wings flap in the vertex shader (phase lags toward the tips), gliding over the reef 4-22 m above the road.
+  const mantas = placeSwimmers(fauna.manta, { rx: [25, 55], rz: [20, 40], speed: [6, 8], scale: [.9, 1.5], lift: [4, 22], gap: [4, 40], clear: true });
+  if (mantas.length) {
+    const N = 12, W = 8, pts: number[] = [], bel: number[] = [];
+    const vert = (i: number, j: number, side: number) => {
+      const u = -1 + 2 * i / N, a = Math.abs(u), zf = -.5 + 4 * Math.pow(1 - a, 1.2), zb = -.5 - 2.5 * Math.pow(1 - a, .9), t = Math.pow(1 - a, 1.4) * [.3, 1, .3][j];
+      return [u * W, side ? -t * .45 : t * .9, zf + (zb - zf) * j / 2];
+    };
+    for (let side = 0; side < 2; side++) for (let i = 0; i < N; i++) for (let j = 0; j < 2; j++) {
+      const q = [vert(i, j, side), vert(i + 1, j, side), vert(i, j + 1, side), vert(i + 1, j + 1, side)];
+      for (const t of [[0, 1, 2], [1, 3, 2]]) for (const k of t) { pts.push(...q[k]); bel.push(side); }
+    }
+    const wing = new THREE.BufferGeometry(); wing.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3)); wing.setAttribute('aBelly', new THREE.Float32BufferAttribute(bel, 1));
+    const tail = flat(new THREE.ConeGeometry(.2, 8, 4).rotateX(-Math.PI / 2).translate(0, 0, -6.5)); tagged(tail, 'aBelly', .5);
+    creature('marine-mantas', mergeGeometries([wing, tail])!, mantas, 'float ax=abs(pos.x); pos.y+=sin(uTime*1.5+vHash*30.-ax*.32)*ax*.2;', 'vBelly', true);
+  }
+
+  // Whales: big slow loops high above the road (trench: far away, lagoon: mid distance), fluke beats in the vertex shader.
+  const farWhale = fauna.whale < 2;
+  const whales = placeSwimmers(fauna.whale, { rx: [100, 170], rz: [70, 120], speed: [6, 8], scale: [.85, 1.2], lift: [14, 42], gap: farWhale ? [whaleReach * .45, whaleReach * .6] : [45, 110], clear: false, top: true });
+  if (whales.length) {
+    if (farWhale) whales[0].phase = whalePhase;
+    const parts: THREE.BufferGeometry[] = [new THREE.SphereGeometry(1, 10, 7).scale(7, 7, 30)];
+    parts.push(new THREE.ConeGeometry(5, 26, 6).rotateX(-Math.PI / 2).translate(0, 0, -36), new THREE.BoxGeometry(26, .8, 7).translate(0, 0, -52));
+    for (const sd of [-1, 1]) parts.push(new THREE.BoxGeometry(14, .6, 5).rotateZ(sd * .3).translate(sd * 9, -4, 8));
+    creature('marine-whales', mergeGeometries(parts.map(flat))!, whales,
+      'float tb=smoothstep(0.,-50.,pos.z); pos.y+=sin(uTime*.9+vHash*40.-pos.z*.045)*3.2*tb; pos.x+=sin(uTime*.45+vHash*20.-pos.z*.03)*1.2*tb;', 'smoothstep(.5,-5.,vY)');
   }
 
   // --- Update / repack ---
@@ -467,14 +563,7 @@ export function createAbyssScenery(track: Track, definition: TrackDefinition, pa
     landmarkObjects.forEach((o, i) => { o.visible = landmarks[i].position.distanceTo(position) - landmarks[i].height < (quality === 'low' ? 1400 : 2200); });
   };
   const wrap = (v: number, s: number) => ((v % s) + s) % s;
-  const animate = (position: THREE.Vector3, time: number) => {
-    const count = JELLY[quality];
-    for (let i = 0; i < count; i++) {
-      const j = jellies[i];
-      dummy.position.set(position.x + wrap(j.x + j.vx * time - position.x, JELLY_R * 2) - JELLY_R, JELLY_MIN + wrap(j.y + j.vy * time, JELLY_MAX - JELLY_MIN), position.z + wrap(j.z + j.vz * time - position.z, JELLY_R * 2) - JELLY_R);
-      dummy.scale.setScalar(j.s); dummy.rotation.set(0, 0, 0); dummy.updateMatrix(); jellyMesh.setMatrixAt(i, dummy.matrix);
-    }
-    jellyMesh.count = count; jellyMesh.instanceMatrix.needsUpdate = true;
+  const animate = (time: number) => {
     const n = SHAFTS[quality];
     for (let i = 0; i < n; i++) {
       const s = shafts[i];
@@ -483,13 +572,10 @@ export function createAbyssScenery(track: Track, definition: TrackDefinition, pa
       dummy.scale.set(s.width, SHAFT_LENGTH, s.width); dummy.updateMatrix(); shaftMesh.setMatrixAt(i, dummy.matrix);
     }
     shaftMesh.count = n; shaftMesh.instanceMatrix.needsUpdate = true;
-    const angle = whaleAngle + time * .012;
-    whale.position.set(position.x + Math.cos(angle) * whaleDistance, 90, position.z + Math.sin(angle) * whaleDistance);
-    whale.rotation.set(0, Math.atan2(-Math.sin(angle), Math.cos(angle)), 0);
   };
   const update = (position: THREE.Vector3, time = 0) => {
     timeUniform.value = time;
-    animate(position, time);
+    animate(time);
     if (!dirty && lastPosition.distanceToSquared(position) < 35 ** 2) return;
     dirty = false; lastPosition.copy(position); repack(position);
   };

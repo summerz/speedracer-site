@@ -9,10 +9,10 @@ import { aiDrivingInput } from '../output/test/game/driving/createRaceSession.js
 import { DRONE_CATALOG } from '../output/test/game/drone/droneCatalog.js';
 import { createArcRails, arcGap } from '../output/test/game/track/arcRail.js';
 
-for (const holdAfterLock of [.2, 1.5]) test(`all 39 fork choices accept sustained input with all five craft (${holdAfterLock}s reaction)`, () => {
+for (const holdAfterLock of [.2, 1.5]) test(`all 55 fork choices accept sustained input with all five craft (${holdAfterLock}s reaction)`, () => {
   const rows = auditForks({ allCraft: true, holdAfterLock });
-  assert.equal(rows.length, 39);
-  assert.equal(new Set(rows.map(r => r.trackId)).size, 19);
+  assert.equal(rows.length, 55);
+  assert.equal(new Set(rows.map(r => r.trackId)).size, 26);
   for (const row of rows) {
     assert.equal(row.runs.length, 30);
     assert.deepEqual(row.failures, [], `${row.routeId}: ${JSON.stringify(row.failures)}`);

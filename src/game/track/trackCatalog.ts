@@ -96,6 +96,7 @@ export function validateTrackCatalog(catalog: readonly TrackDefinition[]) {
         || !['city','reactor','arena','sky','prism','orbit'].includes(b.experience)
         || (b.direction !== undefined && b.direction !== 1 && b.direction !== -1)
         || (b.variety !== undefined && (b.intertwined || !(b.variety === 'arena-three' && b.kind === 'horizontal' && b.experience === 'arena' || b.variety === 'terrace-height' && b.kind === 'vertical' && b.experience === 'city')))
+        || (b.routeNames !== undefined && (b.routeNames.length !== (b.variety === 'arena-three' ? 3 : 2) || b.routeNames.some(name => !name.trim())))
         || (b.groundClearance !== undefined && (!Number.isFinite(b.groundClearance) || b.groundClearance < 0))) throw new Error('Invalid course branch');
       branchIds.add(b.id);
     }
@@ -108,7 +109,7 @@ export function validateTrackCatalog(catalog: readonly TrackDefinition[]) {
     if (!/^[a-z][a-z0-9-]*$/.test(t.id) || !t.name || !Number.isInteger(t.revision) || t.revision < 1 || !Number.isInteger(t.laps) || t.laps < 1 || t.laps > 10 || !Number.isInteger(t.rating) || t.rating < 1 || t.rating > 6 || !Number.isFinite(t.halfWidth) || t.halfWidth <= 4 || !Number.isFinite(t.lapLimit) || t.lapLimit <= 0 || ![2,3,4].includes(t.altitudeLevels) || t.obstacleLevels.some(n => !Number.isInteger(n) || n < 0 || n >= t.altitudeLevels)) throw new Error('Invalid track definition');
     if (t.layout) {
       const l = t.layout;
-      if (!['ring','kidney','thumb','eight','clover','triangle','horseshoe','star','knot'].includes(l.shape) || ![l.radiusX,l.radiusZ,l.elevation,l.waves,l.rotation,l.bank].every(Number.isFinite) || l.radiusX < 100 || l.radiusZ < 100 || l.elevation < 0 || !Number.isInteger(l.waves) || l.waves < 1 || !l.stunts.length) throw new Error('Invalid course layout');
+      if (!['ring','kidney','thumb','eight','clover','triangle','horseshoe','star','knot','crescent','slalom','diamond'].includes(l.shape) || ![l.radiusX,l.radiusZ,l.elevation,l.waves,l.rotation,l.bank].every(Number.isFinite) || l.radiusX < 100 || l.radiusZ < 100 || l.elevation < 0 || !Number.isInteger(l.waves) || l.waves < 1 || !l.stunts.length) throw new Error('Invalid course layout');
       let end = 0;
       for (const s of [...l.stunts].sort((a,b) => a.start-b.start)) {
         if (!['loop','helix','roll'].includes(s.kind) || ![s.start,s.span,s.radius,s.turns].every(Number.isFinite) || (s.direction !== undefined && s.direction !== 1 && s.direction !== -1) || s.start < end || s.start < 0 || s.span <= 0 || s.start+s.span >= 1 || s.radius < 0 || !Number.isInteger(s.turns) || s.turns < 1) throw new Error('Invalid course stunt');
