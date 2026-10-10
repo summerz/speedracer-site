@@ -11,6 +11,7 @@ import { createBoostPadVisual } from './createBoostPadVisual.js';
 import { createMineFieldVisual } from './createMineFieldVisual.js';
 import { createArcRailVisual } from './createArcRailVisual.js';
 import { createBoostRingVisual } from './createBoostRingVisual.js';
+import { createTrackJumpVisual } from './createTrackJumpVisual.js';
 import { roadBoundary, roadPaths, routeDistanceScale, verticalThreshold, type TrackFork } from './trackBranches.js';
 
 export interface TrackFrame {
@@ -263,6 +264,11 @@ export function createTrackVisual(track: Track, lineColor?: string) {
   const group = new THREE.Group();
   group.name = 'neonLoop';
   const paths = roadPaths(track);
+  const inGap = (distance: number, routeId?: string | null) => (track.jumps ?? []).some(j => j.routeId === routeId && distance > j.start + 1e-6 && distance < j.end - 1e-6);
+  const snap = (distance: number, routeId?: string | null) => {
+    for (const j of track.jumps ?? []) if (j.routeId === routeId) for (const edge of [j.start, j.end]) if (Math.abs(distance - edge) < .6) return edge;
+    return distance;
+  };
   const vertices: number[] = [], indices: number[] = [];
   const left: THREE.Vector3[] = [], right: THREE.Vector3[] = [];
   const frame = createTrackFrame();
@@ -272,19 +278,20 @@ export function createTrackVisual(track: Track, lineColor?: string) {
   for (const path of paths) {
     const count = Math.ceil((path.end - path.start) / 1.2);
     const edges: THREE.Vector3[][][] = [[[]], [[]]];
-    const first = vertices.length / 3;
+    const first = vertices.length / 3, distances: number[] = [];
     for (let i = 0; i <= count; i++) {
-      const distance = path.start + i / count * (path.end - path.start);
+      const distance = snap(path.start + i / count * (path.end - path.start), path.routeId);
       track.sample(distance, frame, path.routeId);
+      distances.push(distance);
       const boundary = roadBoundary(track, distance, frame, path.routeId);
       vertices.push(...boundary.edges[0].toArray(), ...boundary.edges[1].toArray());
       left.push(boundary.edges[0]); right.push(boundary.edges[1]);
       for (let side = 0; side < 2; side++) {
         const runs = edges[side], run = runs[runs.length - 1];
-        if (boundary.visible[side]) run.push(boundary.edges[side].clone().addScaledVector(frame.up, .12));
+        if (boundary.visible[side] && !inGap(distance, path.routeId)) run.push(boundary.edges[side].clone().addScaledVector(frame.up, .12));
         else if (run.length) runs.push([]);
       }
-      if (i < count) { const n = first + i * 2; indices.push(n, n + 2, n + 1, n + 1, n + 2, n + 3); }
+      if (i > 0 && !inGap((distances[i - 1] + distance) / 2, path.routeId)) { const n = first + (i - 1) * 2; indices.push(n, n + 2, n + 1, n + 1, n + 2, n + 3); }
     }
     const closed = paths.length === 1;
     for (const edge of edges.flat()) {
@@ -303,6 +310,7 @@ export function createTrackVisual(track: Track, lineColor?: string) {
       const result: { distance: number; routeId: string | null; side: number | null }[] = [];
       const route = track.branches?.flatMap(f => f.routes).find(r => r.id === path.routeId);
       for (let d = path.start; d < path.end; d += spacing) {
+        if (inGap(d, path.routeId)) continue;
         track.sample(d, frame, path.routeId);
         if (sides) {
           const boundary = roadBoundary(track, d, frame, path.routeId);
@@ -384,6 +392,7 @@ export function createTrackVisual(track: Track, lineColor?: string) {
   let rails = makeRails();
   const makeRings = () => { const visual = createBoostRingVisual(track); group.add(visual.object); return visual; };
   let rings = makeRings();
+  const jumpVisual = createTrackJumpVisual(track); group.add(jumpVisual.object);
   const refreshObstacles = () => {
     const geometries = new Set<THREE.BufferGeometry>(), materials = new Set<THREE.Material>();
     for (const barrier of [...barriers, ...corridors]) {
@@ -423,7 +432,7 @@ export function createTrackVisual(track: Track, lineColor?: string) {
     /** Flashes the boost ring nearest to `distance`. */
     hitRing(distance: number, routeId?: string | null) { rings.hit(distance, routeId); },
     update(time: number, reducedMotion: boolean, distance = 0, altitude = 1.8, speed = 0, offset = 0, routeId?: string | null) {
-      pads.update(time, reducedMotion); mines.update(time, reducedMotion); rails.update(time, reducedMotion); rings.update(time, reducedMotion);
+      pads.update(time, reducedMotion); mines.update(time, reducedMotion); rails.update(time, reducedMotion); rings.update(time, reducedMotion); jumpVisual.update(time, reducedMotion);
       const lap = Math.floor(distance / track.length);
       barriers.forEach((barrier, index) => {
         const obstacle = track.heightObstacles[index];
