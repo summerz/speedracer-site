@@ -46,6 +46,7 @@ export interface RaceAnalyticsContext {
   track_id: string; race_mode: string; difficulty: string; ship_id: string;
   control_type: 'touch' | 'desktop';
   tutorial_mode?: 'off' | 'first-run' | 'practice'; practice?: boolean;
+  tutorial_history?: 'unseen' | 'completed' | 'skipped';
 }
 export interface RaceAnalyticsSnapshot {
   id: string; phase: 'ready' | 'countdown' | 'running' | 'paused' | 'finished';
@@ -82,10 +83,17 @@ export function createRaceAnalytics(send: (event: AnalyticsEvent, params: Analyt
         safeSend('level_start', { ...context, level_name: context.track_id, is_retry: attempts++ > 0 });
       }
       active.state = { ...state };
-      if (state.tutorialStatus && (state.phase === 'running' || active.tutorialStarted)) {
+      if (state.tutorialStatus && (state.phase === 'running' || active.tutorialStarted || state.phase === 'finished' && state.tutorialStatus.outcome)) {
         if (!active.tutorialStarted) {
           active.tutorialStarted = true;
           safeSend('tutorial_begin', { ...active.context, level_name: context.track_id });
+        }
+        // Summaries also cover a skipped guide or a last step observed only after finish.
+        for (const [index, step] of (state.tutorialStatus.steps ?? []).entries()) {
+          if (step.result === 'pending' || active.steps.has(index)) continue;
+          active.steps.add(index);
+          safeSend('tutorial_step', { ...active.context, tutorial_step: step.id,
+            tutorial_step_index: index, skipped: step.result === 'skipped' });
         }
         const tutorial = state.tutorial;
         if (tutorial?.phase === 'done' && !active.steps.has(tutorial.index)) {

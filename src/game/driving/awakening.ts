@@ -10,6 +10,7 @@ const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v
 
 /** Put cores on shared, clear road so neither fork choice loses access to the item. */
 export function createAwakeningCores(track: Track): AwakeningCore[] {
+  if (track.awakeningCoresEnabled === false) return [];
   const clear = (d: number) => !forkAt(track, d - 35) && !forkAt(track, d + 35)
     && !track.heightObstacles.some(o => Math.abs(o.distance - d) < o.depth / 2 + 45)
     && !track.corridorObstacles?.some(o => Math.abs(o.distance - d) < o.depth / 2 + 45)

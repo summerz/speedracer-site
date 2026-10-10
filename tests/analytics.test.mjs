@@ -89,8 +89,8 @@ test('quit is emitted once; no failure in analytics can break observation', () =
 
 const tutorialStatus = changes => ({ mode: 'first-run', outcome: null, completedSteps: 0, skippedSteps: 0, ...changes });
 const tutorialStep = changes => ({ step: 'throttle', stepId: 'throttle', index: 0, total: 7,
-  phase: 'show', checks: [{ id: 'auto', done: false }], progress: 0, ...changes });
-const guidedContext = { ...context, tutorial_mode: 'first-run', practice: false };
+  phase: 'intro', frozen: true, inputLocked: true, checks: [{ id: 'auto', done: false }], progress: 0, ...changes });
+const guidedContext = { ...context, tutorial_mode: 'first-run', practice: true };
 
 test('tutorial begins only on driving, records each step once, and includes the cohort in race completion', () => {
   const { events, race } = raceFixture();
@@ -133,4 +133,33 @@ test('abandoned tutorial remains incomplete and practice restart has its own fun
   assert.equal(events[3].params.practice, true); assert.equal(events[4].params.tutorial_mode, 'practice');
   race.observe(state({ ...practice, phase: 'finished', tutorialStatus: tutorialStatus({ mode: 'practice', outcome: 'completed', completedSteps: 7 }) }), practiceContext);
   assert.equal(events[5].event, 'tutorial_complete'); assert.equal(events[6].event, 'level_end');
+});
+
+test('terminal summary reports every skipped or completed lesson once, even without intermediate frames', () => {
+  const { events, race } = raceFixture();
+  race.observe(state({ phase: 'countdown', tutorial: tutorialStep(), tutorialStatus: tutorialStatus() }), guidedContext);
+  const ids = ['throttle', 'steer', 'altitude', 'boost', 'brake', 'hazard', 'near-miss'];
+  const result = state({ phase: 'finished', tutorial: null, tutorialStatus: tutorialStatus({
+    outcome: 'skipped', completedSteps: 1, skippedSteps: 6,
+    steps: ids.map((id, index) => ({ id, result: index === 0 ? 'completed' : 'skipped' })),
+  }) });
+  race.observe(result, guidedContext); race.observe(result, guidedContext); race.quit('navigation');
+  assert.equal(events.filter(e => e.event === 'tutorial_begin').length, 1);
+  const steps = events.filter(e => e.event === 'tutorial_step');
+  assert.deepEqual(steps.map(e => e.params.tutorial_step), ids);
+  assert.deepEqual(steps.map(e => e.params.skipped), [false, true, true, true, true, true, true]);
+  assert.equal(events.filter(e => e.event === 'tutorial_complete').length, 1);
+  assert.equal(events.filter(e => e.event === 'level_end').length, 1);
+  assert.equal(events.at(-1).params.practice, true);
+});
+
+test('ordinary course completion carries prior tutorial outcome separately from the practice funnel', () => {
+  const { events, race } = raceFixture();
+  const actualCourse = { ...context, tutorial_mode: 'off', practice: false, tutorial_history: 'completed' };
+  race.observe(state(), actualCourse);
+  race.observe(state({ phase: 'finished', success: true }), actualCourse);
+  assert.deepEqual(events.map(e => e.event), ['level_start', 'level_end']);
+  assert.equal(events[1].params.tutorial_history, 'completed');
+  assert.equal(events[1].params.practice, false);
+  assert.equal('tutorial_outcome' in events[1].params, false);
 });

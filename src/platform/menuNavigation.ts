@@ -82,7 +82,7 @@ export function mountMenuNavigation(root: HTMLElement): () => void {
     Object.assign(gamepadDriving, result.snapshot);
     root.dataset.gamepad = result.snapshot.connected ? 'connected' : 'disconnected';
     for (const action of result.actions) {
-      if (action === 'pause' || (driving && ['cockpit','track','focus','up','down'].includes(action))) window.dispatchEvent(new CustomEvent('speedracer:pad-action', { detail: action }));
+      if (action === 'pause' || (driving && ['cockpit','track','focus','up','down','confirm'].includes(action))) window.dispatchEvent(new CustomEvent('speedracer:pad-action', { detail: action }));
       else if (!driving) {
         lastInput = 'keys';
         const active = document.activeElement;

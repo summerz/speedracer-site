@@ -15,7 +15,7 @@ import { AWAKENING_SECONDS, AWAKENING_SPEED_SCALE, AWAKENING_CAPACITY, CORE_REAC
 export { OFF_TRACK_PENALTY_POINTS, COLLISION_PENALTY_POINTS, OBSTACLE_COLLISION_PENALTY_POINTS } from './raceScoring.js';
 
 /** lift is a single tap impulse (-1 / 0 / 1), never a held key. */
-export interface DrivingInput { throttle: boolean; brake: boolean; steer: number; lift: number; boost: boolean; targetAltitudeLevel?: number; targetSpeedScale?: number; guidedSpeedScale?: number }
+export interface DrivingInput { throttle: boolean; brake: boolean; steer: number; lift: number; boost: boolean; targetAltitudeLevel?: number; targetSpeedScale?: number; guidedSpeedScale?: number; guidedOffset?: number; guidedStopDistance?: number }
 export interface DrivingState {
   routeId?: string | null;
   distance: number;
@@ -302,10 +302,15 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
           state.altitudeLevel = target.level; state.targetAltitude = target.altitude;
           heightSwitchSpeed = 30;
         }
+        if (Number.isFinite(input.guidedOffset)) {
+          state.offset = offsetFrom + clamp((input.guidedOffset! - offsetFrom) * (1 - Math.exp(-10 * dt)), -24 * dt, 24 * dt);
+          state.heading = 0;
+        }
         // Hands-off, the craft is also eased back to the trunk centre as the fork nears (steering overrides it).
-        if (Math.abs(steer) < .15) state.offset *= Math.exp(-6 * (1 - fade) * dt);
+        if (!Number.isFinite(input.guidedOffset) && Math.abs(steer) < .15) state.offset *= Math.exp(-6 * (1 - fade) * dt);
         const oldDistance = state.distance;
         state.distance = advanceTrackDistance(track, state.distance, travel * dt, state.routeId);
+        if (Number.isFinite(input.guidedStopDistance)) state.distance = Math.max(oldDistance, Math.min(state.distance, input.guidedStopDistance!));
         // Commit the choice in the same tick that crosses the entrance, before
         // any renderer, obstacle or rival can observe an unselected route.
         const enteredFork = forkAt(track, state.distance);

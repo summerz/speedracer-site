@@ -9,6 +9,7 @@
   "include": [
     "src/platform/analytics.ts",
     "src/game/driving/drivingTutorial.ts",
+    "src/game/driving/scriptedTutorial.ts",
     "src/game/driving/tutorialProgress.ts",
     "src/platform/automaticQuality.ts",
     "src/platform/gamepadInput.ts",

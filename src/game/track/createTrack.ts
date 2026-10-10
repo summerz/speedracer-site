@@ -85,6 +85,8 @@ export interface BoostRing {
 }
 
 export interface Track {
+  /** Scripted training has no randomly placed awakening pickups. */
+  readonly awakeningCoresEnabled?: boolean;
   readonly altitudeProfile: AltitudeProfile;
   readonly sections: readonly { kind: TrackFrame['section']; start: number; end: number }[];
   readonly length: number;

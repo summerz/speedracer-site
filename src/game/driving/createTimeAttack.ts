@@ -70,6 +70,13 @@ export function createTimeAttack(track: Track, performance: DronePerformance, re
       if (phase !== 'running' || !model.useAwakening()) return false;
       focusRemaining = 0; return true;
     },
+    /** Training ends at the last lesson, without crossing a finish gate or saving a record. */
+    finishPractice() {
+      if (!rules.practice || phase !== 'running') return false;
+      finishSpeed = model.state.speed;
+      model.endAwakening(); model.state.speed = 0; model.interruptBoost(); phase = 'finished';
+      return true;
+    },
     useFocus() {
       if (phase !== 'running' || model.state.awakeningRemaining > 0 || focusUsed >= focusSlots || focusCooldown > 0) return false;
       focusUsed++; focusRemaining = 2; focusCooldown = 3; return true;
