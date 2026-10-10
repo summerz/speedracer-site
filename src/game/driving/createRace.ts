@@ -37,6 +37,7 @@ import { createTrack, createTrackFrame, createTrackVisual, upcomingHeightObstacl
 import { createSpeedLines } from './createSpeedLines';
 import { createTouchControls } from './createTouchControls';
 import { createBoostPulse } from './createBoostPulse';
+import { createDriftEffect } from '../drone/createDriftEffect';
 import { createRaceAudio } from './createRaceAudio';
 import { RACE_EFFECT_FILES } from '../audio/raceEffectFiles';
 import { createRaceFeedback } from './createRaceFeedback';
@@ -174,6 +175,7 @@ export function createRace(
   overdrive.setStrength(0); overdrive.update(0);
   let awakeningStrength = 0;
   const boostPulse = createBoostPulse(drone, config.boostStyle.pulseColor);
+  const driftEffect = createDriftEffect(drone, scene);
   const raceAudio = createRaceAudio(RACE_EFFECT_FILES);
   raceAudio.setRainIntensity(environment.rain ? weather.intensity : null);
   const feedback = createRaceFeedback();
@@ -185,7 +187,7 @@ export function createRace(
   const trackId = course ? `${course.id}:v${course.revision}` : `neon-circuit-v1:${difficulty?.id ?? 'beginner'}`;
   const records = createRaceRecords({ laps: course?.laps, trackId, configurationId: JSON.stringify({ ...(challenge !== 'normal' ? { challenge } : {}), performance: config.performance, altitude: track.altitudeProfile, ...(focusSlots || rivalSlots.length ? { assisted: true } : {}), ...(mode === 'competition' ? { mode } : {}) }) }, storage);
   const training = !!guidance.practice || !!guidance.tutorial;
-  const timeAttack = createRaceSession(track, config, records, focusSlots, mode, Math.random, coarsePointer.matches ? 'touch' : 'desktop', { practice: training, ...(course ? { laps: course.laps, ...(mode === 'time-attack' ? { lapLimit: challengeLapLimit(course, challenge) } : {}) } : {}) }, course?.rating, rivalSlots, challenge);
+  const timeAttack = createRaceSession(track, config, records, focusSlots, mode, Math.random, coarsePointer.matches ? 'touch' : 'desktop', { practice: training, drift: !guidance.tutorial, ...(course ? { laps: course.laps, ...(mode === 'time-attack' ? { lapLimit: challengeLapLimit(course, challenge) } : {}) } : {}) }, course?.rating, rivalSlots, challenge);
   const rivalVisuals = createRivalVisuals(scene, track, timeAttack.rivals);
   const ghostStorageKey = ghostKey(trackId, challenge);
   const ghost = mode === 'time-attack' && !guidance.tutorial ? loadGhost(storage, ghostStorageKey) : null;
@@ -336,7 +338,7 @@ export function createRace(
   });
   const clearInput = () => { keys.clear(); heightRequests.length = 0; touchControls.reset(); };
   const pause = () => {
-    clearInput(); model.interruptBoost(); raceAudio.pause(); boostHaptics.stop(); boostPulse.reset(); boostWarp.reset(); boostEntryAge = 1;
+    clearInput(); model.interruptBoost(); raceAudio.pause(); boostHaptics.stop(); boostPulse.reset(); driftEffect.reset(); boostWarp.reset(); boostEntryAge = 1;
     timeAttack.pause(); touchControls.setRunning(false); notify();
   };
   const finishGhost = () => {
@@ -359,12 +361,12 @@ export function createRace(
   };
   const restart = () => {
     if (lost || disposed) return;
-    clearInput(); feedback.reset(); soundFeedback.reset(); raceAudio.activate(); raceAudio.reset(); timeAttack.restart(); hapticCollisions = 0; hapticNearMisses = 0; ghostRecorder.reset(); replayBuffer.reset(); replayClock = 0; replayT = 0; armStart(); trackVisual.refreshObstacles(); raceGates.refresh(); weather.reset(); boostPulse.reset(); boostWarp.reset(); boostHaptics.stop(); boostEntryAge = 1; bank = 0; craftShake = 0; cameraSnap = true; touchControls.setRunning(false); previous = performance.now(); notify();
+    clearInput(); feedback.reset(); soundFeedback.reset(); raceAudio.activate(); raceAudio.reset(); timeAttack.restart(); hapticCollisions = 0; hapticNearMisses = 0; ghostRecorder.reset(); replayBuffer.reset(); replayClock = 0; replayT = 0; armStart(); trackVisual.refreshObstacles(); raceGates.refresh(); weather.reset(); boostPulse.reset(); driftEffect.reset(); boostWarp.reset(); boostHaptics.stop(); boostEntryAge = 1; bank = 0; craftShake = 0; cameraSnap = true; touchControls.setRunning(false); previous = performance.now(); notify();
   };
   const recover = () => {
     if (lost || disposed || guidance.tutorial?.snapshot()) return;
     const recoveries = model.state.recoveries;
-    clearInput(); timeAttack.recover(); boostPulse.reset(); boostWarp.reset(); boostHaptics.stop(); boostEntryAge = 1;
+    clearInput(); timeAttack.recover(); boostPulse.reset(); driftEffect.reset(); boostWarp.reset(); boostHaptics.stop(); boostEntryAge = 1;
     if (timeAttack.phase === 'running' && model.state.recoveries > recoveries) raceAudio.play('recovery');
     cameraSnap = true; notify();
   };
@@ -544,11 +546,11 @@ export function createRace(
     if (model.state.recoveries > oldRecoveries) raceAudio.play('recovery');
     if (phase !== oldPhase) {
       touchControls.setRunning(phase === 'running');
-      if (phase === 'finished') { clearInput(); boostHaptics.stop(); boostPulse.reset(); boostWarp.reset(); cinematic = guidance.tutorial ? null : newCinematic('finish'); finishGhost(); }
+      if (phase === 'finished') { clearInput(); boostHaptics.stop(); boostPulse.reset(); driftEffect.reset(); boostWarp.reset(); cinematic = guidance.tutorial ? null : newCinematic('finish'); finishGhost(); }
       notify();
     }
     if (cinematic && (cinematic.t += delta) >= cinematic.duration) endCinematic();
-    if (oldRecoveries !== model.state.recoveries) { cameraSnap = true; boostPulse.reset(); boostWarp.reset(); boostEntryAge = 1; }
+    if (oldRecoveries !== model.state.recoveries) { cameraSnap = true; boostPulse.reset(); driftEffect.reset(); boostWarp.reset(); boostEntryAge = 1; }
     const state = model.state;
     const awake = state.awakeningRemaining > 0;
     const simulationDelta = phase === 'running' ? worldDelta : 0;
@@ -675,6 +677,7 @@ export function createRace(
     thrusters.setBoostCharge(replaying ? replayPose.mode / 3 : awake ? 1 : state.boostStageProgress);
     thrusters.update(replaying ? delta : simulationDelta, reducedMotion.matches);
     boostPulse.update(simulationDelta, reducedMotion.matches);
+    driftEffect.update(replaying || cinematic ? undefined : state.drift, simulationDelta, reducedMotion.matches);
     boostWarp.update(simulationDelta, awake || state.boostStage === 2, entry, reducedMotion.matches);
     awakeningStrength = THREE.MathUtils.lerp(awakeningStrength, awake ? 1 : 0, 1 - Math.exp(-delta * 12));
     if (awakeningStrength < .001) awakeningStrength = 0;
@@ -745,7 +748,7 @@ export function createRace(
     setHapticsEnabled(enabled) { boostHaptics.setEnabled(enabled); },
     dispose() {
       disposed = true; unsubscribeQuality(); cancelAnimationFrame(animation); events.abort(); observer.disconnect();
-      touchControls.dispose(); rivalVisuals.dispose(); thrusters.dispose(); overdrive.dispose(); coreVisual.dispose(); boostPulse.dispose(); raceAudio.dispose(); boostHaptics.dispose();
+      touchControls.dispose(); rivalVisuals.dispose(); thrusters.dispose(); overdrive.dispose(); coreVisual.dispose(); boostPulse.dispose(); driftEffect.dispose(); raceAudio.dispose(); boostHaptics.dispose();
       const geometries = new Set<THREE.BufferGeometry>();
       const materials = new Set<THREE.Material>();
       const signTextures = new Set<THREE.Texture>();

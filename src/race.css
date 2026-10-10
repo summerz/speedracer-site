@@ -582,3 +582,18 @@ button:focus-visible { outline:2px solid #c9f9f2; outline-offset:3px; }
   .fork-height small { font-size:11px; } .fork-bars { height:16px; } .fork-bars i { width:5px; }
   .fork-chips { font-size:14px; } .fork-chips small { font-size:10px; } .fork-slot em { font-size:11px; }
 }
+/* Drift indicator: three pips in the drift palette, shown only while drifting or briefly after a reward. */
+.drift-hud { --d0:#cfeff5; --d1:#7cf3ff; --d2:#ffb347; --d3:#ff5fd2; display:flex; align-items:center; gap:8px; min-height:14px; margin-top:6px; font-size:10px; color:#adc2cc; white-space:nowrap; }
+.drift-hud[hidden] { display:none; }
+.drift-pips { display:flex; gap:3px; flex:none; }
+.drift-pips i { display:block; width:14px; height:4px; --f:0; background:linear-gradient(90deg,var(--c) calc(var(--f) * 100%),#28414c calc(var(--f) * 100%)); }
+.drift-pips i:nth-child(1) { --c:var(--d1); } .drift-pips i:nth-child(2) { --c:var(--d2); } .drift-pips i:nth-child(3) { --c:var(--d3); }
+.drift-hud[data-stage='0'] .drift-pips i:first-child { --c:var(--d0); }
+.drift-label { color:var(--d1); }
+.drift-hud[data-stage='2'] .drift-label { color:var(--d2); } .drift-hud[data-stage='3'] .drift-label { color:var(--d3); }
+.drift-hud[data-stage='0'] .drift-label { color:var(--d0); }
+.drift-hud.is-ending .drift-pips, .drift-hud.is-ending .drift-label { display:none; }
+.drift-end { font-weight:700; color:#8a9aa3; animation:drift-pop .25s ease-out; }
+.drift-end[data-tone='1'] { color:var(--d1); } .drift-end[data-tone='2'] { color:var(--d2); } .drift-end[data-tone='3'] { color:var(--d3); }
+@keyframes drift-pop { from { transform:scale(1.35); opacity:.4; } to { transform:none; opacity:1; } }
+@media (prefers-reduced-motion:reduce) { .drift-end { animation:none; } }

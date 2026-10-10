@@ -70,7 +70,7 @@ test('platform changes driver decisions while names, colors, models and retries 
 test('the same named driver actually completes the mobile race more slowly', () => {
   const pilot = AI_RACERS.find(p => p.id === 'aegis');
   const times = ['desktop', 'touch'].map(platform => {
-    const racer = createTimeAttack(straight, config.performance, createRaceRecords({ trackId: 'platform-pace', configurationId: platform }));
+    const racer = createTimeAttack(straight, config.performance, createRaceRecords({ trackId: 'platform-pace', configurationId: platform }), 0, { drift: false });
     racer.start();
     for (let tick = 0; tick < 12000 && racer.phase !== 'finished'; tick++) {
       racer.step(1 / 120, aiDrivingInput(straight, config, racer.model.state, 1, [], aiDrivingProfile(pilot, platform)));
@@ -104,7 +104,7 @@ test('all racer styles run more slowly on both platforms while retaining safe co
     const craft = DRONE_CATALOG.find(p => p.configuration.modelVariant === pilot.modelVariant).configuration;
     const run = profile => {
       const racer = createTimeAttack(straight, craft.performance,
-        createRaceRecords({ trackId: 'balance-comparison', configurationId: pilot.id }), 0, { laps: 3 });
+        createRaceRecords({ trackId: 'balance-comparison', configurationId: pilot.id }), 0, { laps: 3, drift: false });
       racer.start();
       for (let tick = 0; tick < 9000 && racer.phase !== 'finished'; tick++)
         racer.step(1 / 60, aiDrivingInput(straight, craft, racer.model.state, 1, [], profile));
@@ -262,7 +262,7 @@ for (const difficulty of Object.values(DIFFICULTIES)) test(`all five models sust
   const budget = { beginner: 134, intermediate: 155, advanced: 190 }[difficulty.id];
   for (const craft of DRONE_CATALOG) {
     const racer = createTimeAttack(track, craft.configuration.performance,
-      createRaceRecords({ trackId: 'ai-pace', configurationId: craft.name }));
+      createRaceRecords({ trackId: 'ai-pace', configurationId: craft.name }), 0, { drift: false });
     racer.start(); let stage2 = 0;
     for (let tick = 0; tick < 120 * (budget + 4) && racer.phase !== 'finished'; tick++) {
       racer.step(1 / 120, aiDrivingInput(track, craft.configuration, racer.model.state, 1, []));
@@ -282,7 +282,7 @@ for (const difficulty of Object.values(DIFFICULTIES)) for (const platform of ['d
     for (const pilot of AI_RACERS) {
       const craft = DRONE_CATALOG.find(p => p.configuration.modelVariant === pilot.modelVariant);
       const racer = createTimeAttack(track, craft.configuration.performance,
-        createRaceRecords({ trackId: 'roster', configurationId: pilot.id }));
+        createRaceRecords({ trackId: 'roster', configurationId: pilot.id }), 0, { drift: false });
       const profile = aiDrivingProfile(pilot, platform);
       racer.start();
       for (let tick = 0; tick < 9000 && racer.phase !== 'finished'; tick++) {
@@ -325,7 +325,7 @@ test('every grid has seven distinct identities, skilled leaders and safe three-c
 
 test('a headless rival steers onto a free boost pad ahead', () => {
   const track = { ...straight, boostPads: [{ distance: 250, lane: 'right', center: 14 * .58, width: 7, length: 14 }] };
-  const racer = createTimeAttack(track, config.performance, createRaceRecords({ trackId: 'pad', configurationId: 'rival' }));
+  const racer = createTimeAttack(track, config.performance, createRaceRecords({ trackId: 'pad', configurationId: 'rival' }), 0, { drift: false });
   racer.start();
   for (let tick = 0; tick < 6000 && racer.model.state.distance < 280; tick++) racer.step(1 / 120, aiDrivingInput(track, config, racer.model.state, 1, []));
   assert.equal(racer.model.state.boostPads, 1);

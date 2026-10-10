@@ -10,7 +10,7 @@ import { createCleanHalfLaps } from './raceScoring.js';
 
 export type RacePhase = 'ready' | 'countdown' | 'running' | 'paused' | 'finished';
 
-export interface RaceRules { laps?: number; lapLimit?: number; practice?: boolean }
+export interface RaceRules { laps?: number; lapLimit?: number; practice?: boolean; drift?: boolean }
 
 /** Owns race timing and transitions; the renderer only steps and displays it. */
 export function createTimeAttack(track: Track, performance: DronePerformance, records: ReturnType<typeof createRaceRecords>, focusSlots = 0, rules: RaceRules = {}) {
@@ -19,7 +19,7 @@ export function createTimeAttack(track: Track, performance: DronePerformance, re
   const lapLimit = rules.practice ? null : rules.lapLimit ?? null;
   if (lapLimit !== null && (!Number.isFinite(lapLimit) || lapLimit <= 0)) throw new Error('Invalid lap deadline');
   let disqualified = false;
-  const model = createDrivingModel(track, performance);
+  const model = createDrivingModel(track, performance, { drift: rules.drift ?? !rules.practice });
   const progress = createRaceProgress(track.length, Math.ceil(track.length / track.checkpointSpacing), track.halfWidth, totalLaps);
   const clean = createCleanHalfLaps(track.length, totalLaps);
   let phase: RacePhase = 'ready';
@@ -74,7 +74,7 @@ export function createTimeAttack(track: Track, performance: DronePerformance, re
     finishPractice() {
       if (!rules.practice || phase !== 'running') return false;
       finishSpeed = model.state.speed;
-      model.endAwakening(); model.state.speed = 0; model.interruptBoost(); phase = 'finished';
+      model.cancelDrift(); model.endAwakening(); model.state.speed = 0; model.interruptBoost(); phase = 'finished';
       return true;
     },
     useFocus() {
@@ -115,7 +115,7 @@ export function createTimeAttack(track: Track, performance: DronePerformance, re
             const distance = segment.from + (segment.to - segment.from) * fraction;
             progress.cross({ ...segment, to: distance, timeTo: deadline });
             clean.cross(distance, model.state);
-            model.state.distance = distance; model.state.elapsed = deadline;
+            model.cancelDrift(); model.state.distance = distance; model.state.elapsed = deadline;
             model.endAwakening(); model.state.speed = 0; model.interruptBoost(); phase = 'finished'; disqualified = true;
             return true;
           }
@@ -126,7 +126,7 @@ export function createTimeAttack(track: Track, performance: DronePerformance, re
         if (finish === null) return false;
         // Interpolate the final gate within the physics step; no extra frame is charged.
         model.state.distance = track.length * totalLaps;
-        model.state.elapsed = finish;
+        model.cancelDrift(); model.state.elapsed = finish;
         finishSpeed = model.state.speed;
         model.endAwakening(); model.state.speed = 0; model.interruptBoost(); phase = 'finished';
         const completed = progress.snapshot();

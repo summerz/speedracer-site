@@ -220,7 +220,7 @@ export function createRaceSession(track: Track, configuration: DroneConfiguratio
       id: `ai-${racer.id}`, name: racer.name, craftName: entry.name, color, racer, effects: { freeze: 0, jam: 0 },
       style: AI_STYLE_LABELS[racer.style], rating: racer.rating, profile, configuration: rivalConfiguration,
       controller: createTimeAttack(track, rivalConfiguration.performance,
-        createRaceRecords({ trackId: 'ai-memory', laps: rules.laps, configurationId: racer.id }), focusSlots, { laps: rules.laps }),
+        createRaceRecords({ trackId: 'ai-memory', laps: rules.laps, configurationId: racer.id }), focusSlots, { laps: rules.laps, drift: false }),
     };
   });
   const chasers = new Set([...rivals].sort((a, b) => b.rating - a.rating).slice(0, 3));
