@@ -379,3 +379,23 @@
 }
 @media (max-width:480px) { .course-routes > div { grid-template-columns:1fr; gap:10px; } .campaign-modes button { flex-wrap:wrap; } }
 @media (max-width:360px) { .campaign-craft-copy { display:none; } }
+
+.campaign-tools { grid-area:modes; display:flex; align-items:center; gap:8px; }
+.unlock-toggle { appearance:none; display:flex; align-items:center; gap:8px; min-height:38px; padding:6px 12px; color:#99adb9; background:#0b1c28; border:1px solid #58717d70; border-radius:7px; cursor:pointer; font:inherit; font-size:13px; white-space:nowrap; }
+.unlock-toggle[hidden] { display:none; }
+.unlock-toggle:disabled { opacity:.6; cursor:progress; }
+.unlock-state { font:600 11px 'IBM Plex Mono',monospace; padding:2px 7px; border-radius:99px; background:#58717d40; color:#c9dadf; }
+.unlock-toggle[data-on=true] { color:#ffe3a3; background:#3a2a0a; border-color:#ffb84d; box-shadow:inset 0 0 0 1px #ffb84d66; }
+.unlock-toggle[data-on=true] .unlock-state { background:#ffb84d; color:#2a1c00; }
+.unlock-confirm { position:fixed; inset:0; width:100%; height:100%; max-width:none; max-height:none; margin:0; padding:0; border:0; background:#050a10c8; color:inherit; }
+.unlock-confirm[open] { display:grid; place-items:center; }
+.unlock-confirm::backdrop { background:transparent; }
+.unlock-card { width:min(440px,calc(100% - 32px)); padding:24px; border-radius:12px; background:#081620f2; border:1px solid #ffb84d88; color:#e9f2f4; }
+.unlock-card h2 { margin:0 0 10px; font:700 28px/1.1 'Barlow Condensed',sans-serif; }
+.unlock-card p { margin:0 0 10px; font-size:14px; line-height:1.55; color:#c9dadf; }
+.unlock-card .unlock-detail { font-size:12px; color:#ffe3a3; }
+.unlock-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:16px; }
+.unlock-actions button { appearance:none; min-height:40px; padding:8px 16px; font:inherit; font-size:14px; color:#e0f5ef; background:#0b1c28; border:1px solid #58717d99; border-radius:6px; cursor:pointer; }
+.unlock-actions .danger { color:#2a1c00; background:#ffb84d; border-color:#ffb84d; font-weight:600; }
+.unlock-actions button:focus-visible, .unlock-toggle:focus-visible { outline:2px solid #80ffe0; outline-offset:2px; }
+@media (max-width:760px) and (orientation:portrait), (max-width:639px) { .campaign-tools { flex-wrap:wrap; } }

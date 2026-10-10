@@ -5,6 +5,7 @@ import { menuHeader } from './menuHeader';
 import { DRONE_CATALOG } from './game/drone/droneCatalog';
 import { TRACK_CATALOG, DISTRICTS, campaignRankLimit, type DistrictId, type TrackDefinition } from './game/track/trackCatalog';
 import { createCatalogTrack, trackMetrics } from './game/track/trackRuntime';
+import { isCampaignUnlockAll } from './game/progression/progress';
 import { campaignStatus, nextCampaignTrack, campaignClearRecord, campaignDifficultyProgress, campaignStars, type CampaignProgress } from './game/progression/campaign';
 import type { ProgressStore } from './game/progression/progressStore';
 import type { RaceMode } from './game/driving/createRaceSession';
@@ -28,7 +29,7 @@ const MARINE_DISTRICTS: readonly string[] = ['abyss', 'kelp', 'coral', 'lagoon']
 const cityOf = (district: string): CityKey => MARINE_DISTRICTS.includes(district) ? 'marine' : 'neon';
 const MARINE_BLURB = ['해구 돔과 생물 발광', '흔들리는 거대 해초', '발광 산호 군락', '수면 빛과 물고기 떼'];
 
-export function mountCampaign(root: HTMLDivElement, store: ProgressStore, context?: { mode: RaceMode; trackId?: string; challenge?: RaceChallengeId }) {
+export function mountCampaign(root: HTMLDivElement, store: ProgressStore, context?: { mode: RaceMode; trackId?: string; challenge?: RaceChallengeId }, testToggle = false) {
   document.title = 'Speedracer · 캠페인';
   const initial = store.snapshot().campaign;
   let mode: RaceMode = context?.mode ?? initial.last.mode;
@@ -57,7 +58,7 @@ export function mountCampaign(root: HTMLDivElement, store: ProgressStore, contex
     <nav class="campaign-bar" aria-label="캠페인 탐색">
       <button id="campaign-back" class="campaign-back" type="button" aria-label="이전 단계로" hidden>←</button>
       <ol id="campaign-crumbs" class="campaign-crumbs"></ol>
-      <div class="campaign-modes" role="group" aria-label="캠페인 방식"><button type="button" data-mode="time-attack" aria-keyshortcuts="T"><span>타임어택</span><span class="campaign-mode-count mono"></span><kbd class="key-badge">T</kbd></button><button type="button" data-mode="competition" aria-keyshortcuts="R"><span>경쟁 레이스</span><span class="campaign-mode-count mono"></span><kbd class="key-badge">R</kbd></button></div>
+      <div class="campaign-tools"><div class="campaign-modes" role="group" aria-label="캠페인 방식"><button type="button" data-mode="time-attack" aria-keyshortcuts="T"><span>타임어택</span><span class="campaign-mode-count mono"></span><kbd class="key-badge">T</kbd></button><button type="button" data-mode="competition" aria-keyshortcuts="R"><span>경쟁 레이스</span><span class="campaign-mode-count mono"></span><kbd class="key-badge">R</kbd></button></div><button id="unlock-toggle" class="unlock-toggle" type="button" role="switch" aria-checked="false" hidden><span>테스트 · 모두 해금</span><b class="unlock-state">꺼짐</b></button></div>
       <a id="campaign-craft" class="campaign-craft" href="#" aria-label="격납고에서 출전 기체 변경"><img id="campaign-craft-image" width="480" height="240" alt=""><span class="campaign-craft-copy"><span class="campaign-craft-caption">출전 기체</span><strong id="campaign-craft-name"></strong><span id="campaign-craft-role"></span></span></a>
     </nav>
     <div class="campaign-body">
@@ -92,6 +93,7 @@ export function mountCampaign(root: HTMLDivElement, store: ProgressStore, contex
     if (preview && key !== previewKey) { previewKey = key; preview.setTrack(createCatalogTrack(selected, challenge), DISTRICTS[selected.district].color, selected); }
   };
 
+  let unlockPending = false;
   const paintChrome = (campaign: CampaignProgress, profile: ReturnType<ProgressStore['snapshot']>) => {
     const craft = DRONE_CATALOG.find(entry => entry.configuration.id === profile.equipped) ?? DRONE_CATALOG[0];
     const craftLink = get('campaign-craft');
@@ -109,6 +111,13 @@ export function mountCampaign(root: HTMLDivElement, store: ProgressStore, contex
       button.setAttribute('aria-pressed', String(buttonMode === mode));
       button.querySelector('.campaign-mode-count')!.textContent = `${cleared}/${TRACK_CATALOG.length}`;
     }
+    const unlockOn = isCampaignUnlockAll(profile);
+    const unlockToggle = get('unlock-toggle') as HTMLButtonElement;
+    unlockToggle.hidden = !(testToggle || unlockOn);
+    unlockToggle.setAttribute('aria-checked', String(unlockOn));
+    unlockToggle.dataset.on = String(unlockOn);
+    unlockToggle.disabled = unlockPending;
+    get('unlock-toggle').querySelector('.unlock-state')!.textContent = unlockOn ? '켜짐' : '꺼짐';
     screen.dataset.view = view;
     (get('campaign-back') as HTMLButtonElement).hidden = view === 'districts';
     const crumbs = [`<li>${view === 'districts' ? '<span aria-current="page">캠페인</span>' : '<button type="button" data-crumb="districts">캠페인</button>'}</li>`];
@@ -332,6 +341,35 @@ export function mountCampaign(root: HTMLDivElement, store: ProgressStore, contex
     const chosenMode = mode, chosenTrack = selected.id, chosenChallenge = challenge;
     try { await store.command({ kind: 'campaign-select', mode: chosenMode, trackId: chosenTrack, challenge: chosenChallenge }); if (!disposed) location.hash = `drive?track=${chosenTrack}&mode=${chosenMode}&challenge=${chosenChallenge}`; }
     catch { if (!disposed) get('campaign-warning').textContent = store.issue; }
+  }, listen);
+  const confirmRelock = (groups: ReturnType<ProgressStore['previewRelock']>, total: number) => new Promise<boolean>(resolve => {
+    const opener = document.activeElement as HTMLElement | null;
+    const detail = groups.filter(g => g.trackIds.length).map(g => `${g.mode === 'time-attack' ? '타임어택' : '경쟁 레이스'} ${g.trackIds.length}개`).join(' · ');
+    const el = document.createElement('dialog');
+    el.className = 'unlock-confirm'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); el.setAttribute('aria-labelledby', 'unlock-confirm-title');
+    el.innerHTML = `<div class="unlock-card"><h2 id="unlock-confirm-title">다시 잠글까요?</h2><p>건너뛰어 연 ${total}개 트랙의 진행 정보(통과·별·기록·고스트)가 지워져요. 포인트와 구매한 것은 그대로예요.</p>${detail ? `<p class="unlock-detail mono">${detail}</p>` : ''}<div class="unlock-actions"><button type="button" data-cancel autofocus>취소</button><button type="button" data-ok class="danger">다시 잠그기</button></div></div>`;
+    // Esc is routed through menuNavigation (dialog.close()), so the close event is the single exit.
+    el.addEventListener('close', () => { const ok = el.returnValue === 'ok'; el.remove(); opener?.focus(); resolve(ok); });
+    el.querySelector('[data-cancel]')!.addEventListener('click', () => el.close('cancel'));
+    el.querySelector('[data-ok]')!.addEventListener('click', () => el.close('ok'));
+    el.addEventListener('click', event => { if (event.target === el) el.close('cancel'); });
+    screen.append(el);
+    el.showModal();
+    el.querySelector<HTMLButtonElement>('[data-cancel]')!.focus();
+  });
+  get('unlock-toggle').addEventListener('click', async () => {
+    if (unlockPending) return;
+    const turnOn = !isCampaignUnlockAll(store.snapshot());
+    if (!turnOn) {
+      const groups = store.previewRelock();
+      const total = new Set(groups.flatMap(g => g.trackIds)).size;
+      if (total > 0 && !(await confirmRelock(groups, total))) return;
+    }
+    if (disposed) return;
+    unlockPending = true; (get('unlock-toggle') as HTMLButtonElement).disabled = true;
+    try { await store.command({ kind: 'campaign-unlock-all', on: turnOn }); get('campaign-warning').textContent = ''; }
+    catch (error) { if (!disposed) get('campaign-warning').textContent = store.issue || (error instanceof Error ? error.message : '해금 상태를 바꾸지 못했어요.'); }
+    finally { unlockPending = false; if (!disposed) paint(); }
   }, listen);
   get('shop-back').addEventListener('click', () => { location.hash = ''; }, listen);
   get('open-shop').addEventListener('click', () => { location.hash = 'shop'; }, listen);
