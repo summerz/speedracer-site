@@ -123,7 +123,7 @@ for (const definition of TRACK_CATALOG) test(`${definition.name}: five stock cra
   const start = track.sample(0), seam = track.sample(track.length-.001);
   assert.ok(start.position.distanceTo(seam.position) < .01); assert.ok(start.tangent.dot(seam.tangent) > .999);
   for (const craft of DRONE_CATALOG) {
-    const racer = createTimeAttack(track, craft.configuration.performance, createRaceRecords({ trackId: definition.id, configurationId: craft.name }), 0, { lapLimit: limit });
+    const racer = createTimeAttack(track, craft.configuration.performance, createRaceRecords({ trackId: definition.id, configurationId: craft.name }), 0, { lapLimit: limit, drift: false });
     racer.start();
     for(let tick=0;tick<30*(limit*3+4) && racer.phase !== 'finished';tick++) racer.step(1/30, aiDrivingInput(track, craft.configuration, racer.model.state, 1, []));
     assert.equal(racer.snapshot().disqualified, false, `${craft.name}: ${racer.model.state.distance}/${track.length} at ${limit}s`);

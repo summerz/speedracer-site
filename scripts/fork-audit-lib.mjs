@@ -8,7 +8,7 @@ export const challenges = ['easy', 'normal', 'hard'];
 export function humanForkRun(track, fork, route, craft, boost = false, holdAfterLock = .2) {
   // Isolate road handling from intentional height/corridor hazards and pickups.
   const road = { ...track, heightObstacles: [], corridorObstacles: [], mineFields: [], arcRails: [], boostPads: [], boostRings: [], awakeningCores: [], jumps: [] };
-  const model = createDrivingModel(road, craft.configuration.performance), s = model.state;
+  const model = createDrivingModel(road, craft.configuration.performance, { drift: true }), s = model.state;
   const side = fork.routes.indexOf(route);
   const direction = fork.kind === 'vertical' ? 0 : fork.routes.length === 3 ? [-1, 0, 1][side] : side ? 1 : -1;
   const lap = fork.start < 180 ? track.length : 0;

@@ -1,3 +1,5 @@
+import { createDriftController, DRIFT_TUNING } from './drift.js';
+import type { DriftSnapshot } from './drift.js';
 import { createJumpTracker } from './jumpPassage.js';
 import { DEFAULT_DRONE_CONFIGURATION } from '../drone/droneConfiguration.js';
 import type { DronePerformance } from '../drone/droneConfiguration.js';
@@ -18,6 +20,7 @@ export { OFF_TRACK_PENALTY_POINTS, COLLISION_PENALTY_POINTS, OBSTACLE_COLLISION_
 /** lift is a single tap impulse (-1 / 0 / 1), never a held key. */
 export interface DrivingInput { throttle: boolean; brake: boolean; steer: number; lift: number; boost: boolean; targetAltitudeLevel?: number; targetSpeedScale?: number; guidedSpeedScale?: number; guidedOffset?: number; guidedStopDistance?: number }
 export interface DrivingState {
+  drift: DriftSnapshot;
   routeId?: string | null;
   distance: number;
   offset: number;
@@ -79,12 +82,13 @@ export function steeringYawRate(speed: number, performance: DronePerformance = D
 }
 
 /** Track coordinates are the simulation; Three.js objects only display the resulting pose. */
-export function createDrivingModel(track: Track, performance: DronePerformance = DEFAULT_DRONE_CONFIGURATION.performance) {
+export function createDrivingModel(track: Track, performance: DronePerformance = DEFAULT_DRONE_CONFIGURATION.performance, options: { drift?: boolean } = {}) {
+  const driftController = createDriftController();
   const altitudeProfile = resolveAltitudeProfile(track.altitudeProfile);
   const { levels, initialLevel, transitionSeconds } = altitudeProfile;
   const initialAltitude = levels[initialLevel];
   const state: DrivingState = {
-    routeId: null,
+    drift: driftController.snapshot(), routeId: null,
     distance: 0, offset: 0, heading: 0, altitude: initialAltitude, targetAltitude: initialAltitude, altitudeLevel: initialLevel,
     speed: 0, charge: 1, awakeningCores: 0, coresCollected: 0, awakeningRemaining: 0, awakeningsUsed: 0,
     boostUses: 0, jumpsPassed: 0, jumpsMissed: 0, boosting: false, boostStage: 0, boostElapsed: 0, boostStageProgress: 0, boostNeedsRelease: false, checkpoint: 0, elapsed: 0,
@@ -116,6 +120,19 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
   const margins = new Map<string, number>(), lateCalls = new Map<string, boolean>(), safeSince = new Map<string, number>();
   const tuning = { ...DRIVING_TUNING, ...performance };
   const boostStage2Seconds = tuning.boostStage2Threshold / tuning.boostDrain;
+  let settledAt = -Infinity;
+  const publishDrift = () => { state.drift = driftController.snapshot(); };
+  const finishDrift = () => {
+    if (!state.drift.active) return;
+    state.charge += driftController.finish(state.charge, BOOST_CAPACITY);
+    settledAt = state.elapsed; publishDrift();
+  };
+  const cancelDrift = () => {
+    if (state.drift.active) driftController.finish(state.charge, BOOST_CAPACITY, true);
+    else if (Math.abs(settledAt - state.elapsed) < 1e-8) state.charge = Math.max(0, state.charge - driftController.revoke());
+    publishDrift();
+  };
+
   const interruptBoost = () => {
     state.boosting = false; state.boostStage = 0; state.boostElapsed = 0; state.boostStageProgress = 0;
   };
@@ -127,6 +144,7 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
     if (state.charge === 0) { state.boostNeedsRelease = true; interruptBoost(); }
   };
   const recover = () => {
+    cancelDrift(); state.cleanStreak = 0;
     state.awakeningRemaining = 0;
     state.distance = state.checkpoint;
     state.offset = 0; state.heading = 0; state.altitude = initialAltitude; state.targetAltitude = initialAltitude;
@@ -137,6 +155,7 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
   };
   const fieldImpact = (retention: number, notice: 'height-collision' | 'corridor-collision' | 'jump-missed') => {
     if (state.awakeningRemaining > 0) return;
+    cancelDrift();
     const severity = (1 - retention) / DEFAULT_DRONE_CONFIGURATION.performance.collisionSpeedLoss;
     state.speed *= impactSpeedRetention(tuning.collisionSpeedLoss, severity);
     impairAcceleration(1.6); damageBoost(.18); state.collisions++;
@@ -169,10 +188,12 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
     boostStage2Seconds,
     interruptBoost,
     endAwakening,
+    cancelDrift,
     get cores() { return cores; },
     coreAvailable(index: number, lap: number) { return collectedCores.get(index) !== lap; },
     useAwakening() {
       if (state.awakeningCores <= 0 || state.awakeningRemaining > 0) return false;
+      finishDrift();
       state.awakeningCores--; state.awakeningsUsed++; state.awakeningRemaining = AWAKENING_SECONDS;
       interruptBoost(); boostSpent = 0; state.boostNeedsRelease = true;
       accelerationRecovery = 0; impactCooldown = 0; offTrackEpisode = false; handoffRemaining = 0;
@@ -181,6 +202,7 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
     },
     contact() {
       if (state.awakeningRemaining > 0) return;
+      cancelDrift(); state.cleanStreak = 0;
       damageBoost(.08);
       state.speed *= impactSpeedRetention(tuning.collisionSpeedLoss, .7);
       impairAcceleration(.55);
@@ -189,7 +211,8 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
       state.notice = 'craft-collision'; noticeRemaining = 0.8;
     },
     reset() {
-      Object.assign(state, initial); jumps.reset();
+      driftController.reset(); settledAt = -Infinity;
+      Object.assign(state, initial); publishDrift(); jumps.reset();
       fieldPassages.clear(); completedPassages.clear(); margins.clear(); lateCalls.clear(); safeSince.clear(); accelerationRecovery = 0;
       rechargeDelay = 0; boostSpent = 0; impactCooldown = 0; noticeRemaining = 0; heightSwitchSpeed = 0;
       offTrackEpisode = false; forkHandoffRemaining = 0; approachChoiceId = null; approachSteered = false;
@@ -233,25 +256,6 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
           boostSpent = 0;
           if (state.charge >= 0.15) state.boostNeedsRelease = false;
         }
-        const wasBoosting = state.boosting;
-        state.boosting = !awake && input.boost && !input.brake && !state.boostNeedsRelease && state.charge > 0;
-        if (state.boosting && !wasBoosting) state.boostUses++;
-        if (state.boosting) {
-          state.boostElapsed += dt;
-          state.boostStageProgress = Math.min(1, state.boostElapsed / boostStage2Seconds);
-          state.boostStage = state.boostElapsed + 1e-8 >= boostStage2Seconds ? 2 : 1;
-          const spent = Math.min(state.charge, BOOST_ACTIVATION_LIMIT - boostSpent,
-            tuning.boostDrain * (1 + Math.abs(clamp(input.steer, -1, 1)) * .06) * dt);
-          state.charge -= spent; boostSpent += spent;
-          rechargeDelay = 0.8;
-          if (state.charge <= 1e-8) { state.charge = 0; state.boostNeedsRelease = true; interruptBoost(); }
-          else if (boostSpent >= BOOST_ACTIVATION_LIMIT - 1e-8) { state.boostNeedsRelease = true; interruptBoost(); }
-        } else {
-          interruptBoost();
-          rechargeDelay = Math.max(0, rechargeDelay - dt);
-          // Natural recovery and pickups share the same 150% storage capacity.
-          if (!awake && rechargeDelay === 0 && state.charge < BOOST_CAPACITY) state.charge = Math.min(BOOST_CAPACITY, state.charge + tuning.boostRecovery * dt);
-        }
         const oldSpeed = state.speed;
         const fork = forkAt(track, state.distance);
         if (!fork) state.routeId = null;
@@ -271,7 +275,38 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
         const inMouth = !!fork && !!route && !branchChoiceOpen(track, state.distance) && state.distance % track.length < route.mouthEnd;
         const mouthAssist = !awake && !Number.isFinite(input.guidedOffset) && (!!fork && (inMouth || forkHandoffRemaining > 0));
         const fade = choiceAssist || mouthAssist ? 0 : forkApproachDrift(track, state.distance);
-        const drift = curvature * fade;
+        const curveYaw = curvature * fade;
+
+        const ordinaryScale = (Number.isFinite(input.targetSpeedScale) ? clamp(input.targetSpeedScale!, .1, 1) : 1)
+          * (Number.isFinite(input.guidedSpeedScale) ? clamp(input.guidedSpeedScale!, .1, 1) : 1);
+        const localDistance = ((state.distance % track.length) + track.length) % track.length;
+        const airborne = track.jumps?.some(jump => (!jump.routeId || jump.routeId === state.routeId)
+          && localDistance >= jump.start && localDistance < jump.end) ?? false;
+        const blocked = !options.drift || awake || state.boosting || input.boost && !input.brake
+          || Number.isFinite(input.guidedOffset) || Number.isFinite(input.guidedSpeedScale)
+          || airborne || choiceAssist || mouthAssist || accelerationRecovery > 0;
+        if (driftController.prepare(dt, { brake: input.brake, steer: input.steer, speed: state.speed,
+          ordinarySpeed: tuning.topSpeed * ordinaryScale, curvature, blocked })) finishDrift();
+        const driftMix = driftController.blend(dt); publishDrift();
+        const wasBoosting = state.boosting;
+        state.boosting = !awake && input.boost && !input.brake && !state.boostNeedsRelease && state.charge > 0;
+        if (state.boosting && !wasBoosting) state.boostUses++;
+        if (state.boosting) {
+          state.boostElapsed += dt;
+          state.boostStageProgress = Math.min(1, state.boostElapsed / boostStage2Seconds);
+          state.boostStage = state.boostElapsed + 1e-8 >= boostStage2Seconds ? 2 : 1;
+          const spent = Math.min(state.charge, BOOST_ACTIVATION_LIMIT - boostSpent,
+            tuning.boostDrain * (1 + Math.abs(clamp(input.steer, -1, 1)) * .06) * dt);
+          state.charge -= spent; boostSpent += spent;
+          rechargeDelay = 0.8;
+          if (state.charge <= 1e-8) { state.charge = 0; state.boostNeedsRelease = true; interruptBoost(); }
+          else if (boostSpent >= BOOST_ACTIVATION_LIMIT - 1e-8) { state.boostNeedsRelease = true; interruptBoost(); }
+        } else {
+          interruptBoost();
+          rechargeDelay = Math.max(0, rechargeDelay - dt);
+          // Natural recovery and pickups share the same 150% storage capacity.
+          if (!awake && rechargeDelay === 0 && state.charge < BOOST_CAPACITY) state.charge = Math.min(BOOST_CAPACITY, state.charge + tuning.boostRecovery * dt);
+        }
         const bend = sampled.tangent ? sampled.tangent.distanceTo(track.sample(state.distance + 2, aheadFrame, state.routeId).tangent) / (2 * (sampled.distanceScale ?? 1)) : Math.abs(curvature);
         const grade = clamp((sampled.tangent?.y ?? 0) * Math.cos(state.heading) + (sampled.right?.y ?? 0) * Math.sin(state.heading), -1, 1);
         const steer = awake ? 0 : clamp(input.steer, -1, 1);
@@ -281,11 +316,18 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
         const limit = (state.boostStage === 2 ? tuning.boostStage2Speed : state.boosting ? tuning.boostSpeed : tuning.topSpeed) * speedScale;
         const baseThrust = state.boostStage === 2 ? tuning.boostStage2Acceleration : state.boosting ? tuning.boostAcceleration : input.throttle ? tuning.acceleration : 0;
         const thrust = baseThrust * impactAccelerationScale(accelerationRecovery, recoveryDuration);
-        const acceleration = input.brake ? (state.speed < tuning.crawlSpeed ? tuning.acceleration : -tuning.braking)
+        const normalAcceleration = input.brake ? (state.speed < tuning.crawlSpeed ? tuning.acceleration : -tuning.braking)
           : flightAcceleration(state.speed, limit, thrust, tuning, { grade, curvature: bend, steer, altitudeSpeed });
+        const driftTarget = tuning.topSpeed * speedScale * DRIFT_TUNING.targetSpeedScale;
+        const driftThrust = state.speed < driftTarget - 2 ? tuning.acceleration * DRIFT_TUNING.thrustScale
+          * impactAccelerationScale(accelerationRecovery, recoveryDuration) : 0;
+        const driftAcceleration = flightAcceleration(state.speed, tuning.topSpeed * speedScale, driftThrust, tuning,
+          { grade, curvature: bend, steer, altitudeSpeed })
+          - (state.speed > driftTarget + 2 ? tuning.braking * DRIFT_TUNING.brakingScale : 0);
+        const acceleration = normalAcceleration + (driftAcceleration - normalAcceleration) * driftMix;
         const ceiling = limit * (1 + tuning.downhillOverspeed);
         state.speed = clamp(state.speed + acceleration * dt, 0, Math.max(ceiling, state.speed));
-        if (input.brake) state.speed = oldSpeed >= tuning.crawlSpeed ? Math.max(tuning.crawlSpeed, state.speed) : Math.min(tuning.crawlSpeed, state.speed);
+        if (input.brake && driftMix === 0) state.speed = oldSpeed >= tuning.crawlSpeed ? Math.max(tuning.crawlSpeed, state.speed) : Math.min(tuning.crawlSpeed, state.speed);
         if (state.speed > ceiling) state.speed = Math.max(ceiling, state.speed - 18 * dt);
         if (!awake && handoffRemaining > 0) {
           state.speed = Math.max(Math.min(state.speed, ceiling), state.speed - (tuning.boostStage2Speed * AWAKENING_SPEED_SCALE - tuning.topSpeed) / .65 * dt);
@@ -297,21 +339,26 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
         }
         const speed = (oldSpeed + state.speed) * 0.5;
         const travel = awake ? speed : speed * Math.cos(state.heading) / Math.max(0.5, 1 - curvature * state.offset);
-        const yawCapacity = steeringYawRate(speed, tuning) * slopeHandling(grade);
+        const yawCapacity = steeringYawRate(speed, tuning) * slopeHandling(grade) * (1 - (1 - DRIFT_TUNING.yawScale) * driftMix);
         const turnRate = steer * yawCapacity;
         const oldHeading = state.heading;
         // The heading is also the side-slip angle used for lateral travel. Released
         // or opposing input engages the craft's stabilizer; holding a turn keeps
         // its full yaw response. Feathered sticks blend smoothly into braking.
         const stabilization = steer * oldHeading < 0 ? 1 : Math.max(0, 1 - Math.abs(steer) / .15);
-        const damping = tuning.lateralBraking * stabilization;
+        const damping = tuning.lateralBraking * stabilization * (1 - (1 - DRIFT_TUNING.dampingScale) * driftMix);
         const decay = Math.exp(-damping * dt);
         const angularTravel = damping > 1e-8 ? (1 - decay) / damping : dt;
-        const dampedHeading = oldHeading * decay + (turnRate - drift * travel) * angularTravel;
+        const dampedHeading = oldHeading * decay + (turnRate - curveYaw * travel) * angularTravel;
         // Stabilizing side-slip consumes the same yaw capacity as steering. It
         // cannot turn an over-speed craft around a corner beyond that capacity.
-        const yaw = clamp((dampedHeading - oldHeading) / dt + drift * travel, -yawCapacity, yawCapacity);
-        state.heading = clamp(oldHeading + (yaw - drift * travel) * dt, -1.1, 1.1);
+        const yaw = clamp((dampedHeading - oldHeading) / dt + curveYaw * travel, -yawCapacity, yawCapacity);
+        state.heading = clamp(oldHeading + (yaw - curveYaw * travel) * dt, -1.1, 1.1);
+        if (driftMix > 0) {
+          const slipLimit = 1.1 + (DRIFT_TUNING.headingLimit - 1.1) * driftMix;
+          state.heading = clamp(state.heading, -slipLimit, slipLimit);
+        }
+        driftController.advance(dt, state.heading); publishDrift();
         state.offset += speed * Math.sin((oldHeading + state.heading) * 0.5) * dt;
         if (choiceAssist || mouthAssist) {
           // Holding a direction must reach beyond the 30% selection boundary,
@@ -361,6 +408,9 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
         else if (!fork || enteredFork.id !== fork.id || branchChoiceOpen(track, state.distance))
           state.routeId = selectBranch(track, state.distance, state.offset, state.altitudeLevel);
         state.altitude += clamp(state.targetAltitude - state.altitude, -heightSwitchSpeed * dt, heightSwitchSpeed * dt);
+        // Launch settles cleanly, but a failed passage later in this tick still cancels it.
+        if (state.drift.active && track.jumps?.some(jump => (!jump.routeId || jump.routeId === state.routeId)
+          && Math.floor((state.distance - jump.start) / track.length) > Math.floor((oldDistance - jump.start) / track.length))) finishDrift();
         for (const event of jumps.update({ distance: oldDistance, altitude: altitudeFrom, offset: offsetFrom, routeId: state.routeId }, state, awake)) {
           if (event === 'missed') { state.jumpsMissed++; fieldImpact(.8, 'jump-missed'); }
           else { state.jumpsPassed++; passedField(); }
@@ -507,6 +557,7 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
         // High flight can clear the posts. Keep forward progress when it strays
         // beyond the road; one excursion earns one penalty until safely back in.
         if (!awake && Math.abs(state.offset) > track.halfWidth + 1) {
+          cancelDrift(); state.cleanStreak = 0;
           const side = Math.sign(state.offset);
           state.offset = side * track.halfWidth;
           if (state.heading * side > 0) state.heading = -side * 0.12;
@@ -520,6 +571,7 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
           }
         }
         if (!awake && Math.abs(state.offset) > boundary && state.altitude <= 3.2 && !offTrackEpisode) {
+          cancelDrift(); state.cleanStreak = 0;
           const side = Math.sign(state.offset);
           state.offset = side * boundary;
           if (state.heading * side > 0) state.heading = -side * 0.12;
