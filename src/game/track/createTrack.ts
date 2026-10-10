@@ -417,7 +417,7 @@ export function createTrackVisual(track: Track, lineColor?: string) {
   const extent = bounds.getSize(new THREE.Vector3()), center = bounds.getCenter(new THREE.Vector3());
   const groundSize = Math.max(1800, extent.x + 600, extent.z + 600);
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(groundSize, groundSize), new THREE.MeshStandardMaterial({ color: 0x080f17, roughness: 1 }));
-  ground.rotation.x = -Math.PI / 2; ground.position.set(center.x, -0.1, center.z); group.add(ground);
+  ground.name = 'track-ground'; ground.rotation.x = -Math.PI / 2; ground.position.set(center.x, -0.1, center.z); group.add(ground);
   const grid = new THREE.GridHelper(groundSize, Math.ceil(groundSize / 16), 0x19323f, 0x101f2b); grid.position.set(center.x, 0, center.z); group.add(grid);
   return {
     object: group,
