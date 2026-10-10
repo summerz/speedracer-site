@@ -58,13 +58,20 @@ function shader(key: string, local: string, world: string, fragment: string, o: 
   return material;
 }
 
+/** Adds an instanced attribute declaration (and optional varying hand-off) to a shader() material. */
+function declareAttributes(m: THREE.ShaderMaterial, vertexDecl: string, vertexInit = '', fragmentDecl = '') {
+  m.vertexShader = m.vertexShader.replace('void main(){', `${vertexDecl}\nvoid main(){ ${vertexInit}`);
+  if (fragmentDecl) m.fragmentShader = m.fragmentShader.replace('void main(){', `${fragmentDecl}\nvoid main(){`);
+}
+const tagged = (g: THREE.BufferGeometry, name: string, v: number) => { g.setAttribute(name, new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count).fill(v), 1)); return g; };
+
 /**
  * ABYSS: glass domes, tubes, kelp, rocks, jellyfish, a whale, light shafts and a caustic seabed.
  * Same return shape as createDistrictScenery. `hidesGround` tells the caller to hide the GridHelper
  * (the seabed plane at y=0.05 would otherwise z-fight with it at distance).
  */
 export function createAbyssScenery(track: Track, definition: TrackDefinition, palette: MarinePalette = MARINE_ZONES[0].palette) {
-  paletteKey = [palette.glow, palette.accent, palette.kelp.join(), palette.sand, palette.caustic].join();
+  paletteKey = [palette.glow, palette.accent, palette.kelp.join(), palette.sand, palette.caustic, palette.feature].join();
   const CYAN = new THREE.Color(palette.glow), PINK = new THREE.Color(palette.accent);
   const glowHue = CYAN.getHSL({ h: 0, s: 0, l: 0 }).h, accentHue = PINK.getHSL({ h: 0, s: 0, l: 0 }).h;
   const glow = (k = 1) => sceneryV3(palette.glow, k), accent = () => sceneryV3(palette.accent);
@@ -314,6 +321,122 @@ export function createAbyssScenery(track: Track, definition: TrackDefinition, pa
   const seabed = new THREE.Mesh(new THREE.PlaneGeometry(groundSize, groundSize), seabedMaterial);
   seabed.name = 'abyss-seabed'; seabed.rotation.x = -Math.PI / 2; seabed.position.set(routeCenter.x, .05, routeCenter.z); seabed.frustumCulled = false; object.add(seabed);
 
+  // --- Zone signature features (own seeded LCG so the shared layout above never shifts; each is 1-2 draw calls, added last) ---
+  let fseed = (scenerySeed(definition.id) ^ 0x5ea5c3) >>> 0;
+  const frand = () => { fseed = (Math.imul(fseed, 1664525) + 1013904223) >>> 0; return fseed / 4294967296; };
+  const frange = (a: number, b: number) => a + frand() * (b - a);
+  const hw = track.halfWidth;
+  /** A point beside the route on a random side, `reach..reach+spread` m from the road edge. */
+  const beside = (reach: number, spread: number) => { const p = route[Math.floor(frand() * route.length)], ang = frand() * 6.283, d = hw + reach + frand() * spread; return { x: p.x + Math.cos(ang) * d, z: p.z + Math.sin(ang) * d, y: p.y }; };
+  const KELP_N = { low: 40, balanced: 80, high: 140 } as const, CORAL_N = { low: 60, balanced: 120, high: 200 } as const, SCHOOL_N = { low: 4, balanced: 8, high: 12 } as const;
+  const featureMeshes: { mesh: THREE.InstancedMesh; count: (q: RenderQuality) => number }[] = [];
+  const scatter = (total: number, spread: number, reach: number, gap: number, place: (x: number, z: number, y: number) => void, group: [number, number]) => {
+    let cx = 0, cz = 0, left = 0, placed = 0;
+    for (let a = 0; placed < total && a < total * 60; a++) {
+      if (left <= 0) { const b = beside(reach, spread); cx = b.x; cz = b.z; left = group[0] + Math.floor(frand() * (group[1] - group[0] + 1)); }
+      const x = cx + frange(-10, 10), z = cz + frange(-10, 10); left--;
+      if (!freeNear(x, z, gap)) continue;
+      place(x, 0, z); placed++;
+    }
+  };
+
+  if (palette.feature === 'giant-kelp') {
+    // Tall tapered stalk (60 m reference, instances scaled to 35-90 m) with leaf blades; separate float bulbs. Sway grows with height^2.
+    const H = 60, parts: THREE.BufferGeometry[] = [], bulbParts: THREE.BufferGeometry[] = [];
+    const stalk = new THREE.CylinderGeometry(.15, .6, H, 5, 12, true); stalk.translate(0, H / 2, 0); parts.push(stalk);
+    for (let i = 0; i < 9; i++) {
+      const h = 6 + i * 5.6, ang = i * 2.4, blade = new THREE.PlaneGeometry(2.6, 12, 1, 4); blade.translate(0, 6, 0);
+      const bp = blade.attributes.position; for (let k = 0; k < bp.count; k++) bp.setX(k, bp.getX(k) * (1 - .8 * bp.getY(k) / 12));
+      blade.rotateZ(-.55); blade.rotateY(ang); blade.translate(0, h, 0); parts.push(blade);
+      const bulb = new THREE.SphereGeometry(.85, 7, 5); bulb.translate(Math.cos(ang) * 1.1, h + .6, -Math.sin(ang) * 1.1); bulbParts.push(bulb);
+    }
+    const sway = `
+      float kh=clamp(vY/${H}.,0.,1.), kb=kh*kh, kph=vHash*6.283+(w.x+w.z)*.015;
+      w.x+=sin(uTime*1.885+kph)*3.*kb; w.z+=cos(uTime*1.6+kph*1.3)*1.8*kb;`;
+    const stalkMaterial = shader('marine-giant-kelp', '', sway, `
+      float kh=clamp(vY/${H}.,0.,1.);
+      vec3 c=mix(${sceneryV3(palette.kelp[0])},${sceneryV3(palette.kelp[1])},smoothstep(0.,.75,kh)*(.8+.4*vHash))+${sceneryV3(palette.kelp[2])}*kh*kh*.35;
+      gl_FragColor=fogOut(c,1.);`);
+    const bulbMaterial = shader('marine-kelp-bulb', '', sway, `gl_FragColor=fogOut(${glow(1.05)},1.);`);
+    const kelpStalks = add(new THREE.InstancedMesh(mergeGeometries(parts)!, stalkMaterial, KELP_N.high), 'marine-giant-kelp');
+    const kelpBulbs = add(new THREE.InstancedMesh(mergeGeometries(bulbParts)!, bulbMaterial, KELP_N.high), 'marine-kelp-bulbs');
+    let n = 0;
+    scatter(KELP_N.high, 70, 22, 12, (x, _y, z) => { const s = frange(35, 90) / H; const m = matrix(x, 0, z, s, s, s, frand() * 6.283); kelpStalks.setMatrixAt(n, m); kelpBulbs.setMatrixAt(n++, m); }, [4, 9]);
+    kelpStalks.instanceMatrix.needsUpdate = kelpBulbs.instanceMatrix.needsUpdate = true;
+    featureMeshes.push({ mesh: kelpStalks, count: q => Math.min(n, KELP_N[q]) }, { mesh: kelpBulbs, count: q => Math.min(n, KELP_N[q]) });
+  }
+
+  if (palette.feature === 'coral-reef') {
+    // One merged cluster (branching trees + brain mounds, vertex tag aTip: 0 body, 1 glowing tip, 2 brain), instanced beside the road.
+    const parts: THREE.BufferGeometry[] = [];
+    const place = (g: THREE.BufferGeometry, tag: number, ry: number, x: number, y: number, z: number, rz = 0) => { tagged(g, 'aTip', tag); g.rotateZ(rz); g.rotateY(ry); g.translate(x, y, z); parts.push(g); };
+    for (let t = 0; t < 4; t++) {
+      const a = t * 1.57 + .4, x = Math.cos(a) * (t ? 2.6 : 0), z = Math.sin(a) * (t ? 2.6 : 0), h = 3 + (t % 3) * 1.2;
+      place(new THREE.CylinderGeometry(.3, .55, h, 6, 1).translate(0, h / 2, 0), 0, 0, x, 0, z);
+      for (let b = 0; b < 3; b++) {
+        const L = h * .75, az = b * 2.09 + t, tilt = .5 + b * .12;
+        place(new THREE.CylinderGeometry(.14, .26, L, 5, 1).translate(0, L / 2, 0), 0, az, x, h * .9, z, tilt);
+        place(new THREE.ConeGeometry(.2, L * .45, 5).translate(0, L + L * .22, 0), 1, az, x, h * .9, z, tilt);
+      }
+      place(new THREE.ConeGeometry(.3, 1.1, 5).translate(0, h + .5, 0), 1, 0, x, 0, z);
+    }
+    for (let m = 0; m < 2; m++) place(new THREE.SphereGeometry(1, 10, 5, 0, Math.PI * 2, 0, Math.PI / 2).scale(2.2 - m * .5, 1.5 - m * .4, 2.2 - m * .5), 2, 0, m ? -3.4 : 3.6, 0, m ? 2.2 : -2.4);
+    const reefMaterial = shader('marine-coral-reef', '', '', `
+      vec3 cn=cross(dFdx(vWorld),dFdy(vWorld)); float sh=.62+.38*abs(cn.y)/max(length(cn),1e-6);
+      float pulse=.85+.35*sin(uTime*.8+vHash*40.), pick=fract(vHash*7.);
+      vec3 body=mix(${sceneryV3(palette.kelp[1])},${sceneryV3(palette.kelp[2])},.35+.5*fract(vHash*5.))*sh;
+      vec3 tip=mix(${glow()},${accent()},pick)*pulse;
+      float groove=.7+.3*sin(vUv.x*70.+sin(vUv.y*28.)*3.);
+      vec3 brain=mix(${accent()}*.55,${sceneryV3(palette.kelp[2], .9)},pick)*groove*sh;
+      vec3 c=vTip>1.5?brain:(vTip>.5?tip:body);
+      gl_FragColor=fogOut(c,1.);`);
+    declareAttributes(reefMaterial, 'attribute float aTip; varying float vTip;', 'vTip=aTip;', 'varying float vTip;');
+    const reef = add(new THREE.InstancedMesh(mergeGeometries(parts)!, reefMaterial, CORAL_N.high), 'marine-coral-reef');
+    let n = 0;
+    scatter(CORAL_N.high, 60, 14, 14, (x, _y, z) => { const s = frange(2.2, 4.5); reef.setMatrixAt(n++, matrix(x, 0, z, s, s, s, frand() * 6.283)); }, [3, 6]);
+    reef.instanceMatrix.needsUpdate = true;
+    featureMeshes.push({ mesh: reef, count: q => Math.min(n, CORAL_N[q]) });
+  }
+
+  if (palette.feature === 'fish-school') {
+    // Schools loop on ellipses beside the road; the whole swim (path, heading, tail wiggle) is computed in the vertex shader from uTime.
+    const body = new THREE.OctahedronGeometry(1, 0).scale(.45, .7, 1.8), tail = new THREE.OctahedronGeometry(1, 0).scale(.08, .8, .7).translate(0, 0, -2);
+    const fishGeometry = mergeGeometries([body, tail])!;
+    const schools: { x: number; y: number; z: number; rx: number; rz: number; w: number; phase: number; fish: number }[] = [];
+    for (let a = 0; schools.length < SCHOOL_N.high && a < 400; a++) {
+      const rx = frange(14, 28), rz = frange(10, 20), reach = Math.max(rx, rz) * 1.3 + 10, p = route[Math.floor(frand() * route.length)], ang = frand() * 6.283, d = hw + reach + 4 + frand() * 18;
+      const x = p.x + Math.cos(ang) * d, z = p.z + Math.sin(ang) * d;
+      if (nearRoute(x, z, hw + reach, route) || schools.some(s => Math.hypot(s.x - x, s.z - z) < 70)) continue;
+      schools.push({ x, y: p.y + frange(6, 30), z, rx, rz, w: (frand() < .5 ? -1 : 1) * frange(.25, .5), phase: frand() * 6.283, fish: 30 + Math.floor(frand() * 31) });
+    }
+    const total = schools.reduce((n, s) => n + s.fish, 0), perQuality = (q: RenderQuality) => schools.slice(0, SCHOOL_N[q]).reduce((n, s) => n + s.fish, 0);
+    const aFish = new THREE.InstancedBufferAttribute(new Float32Array(Math.max(1, total) * 4), 4), aSchool = new THREE.InstancedBufferAttribute(new Float32Array(Math.max(1, total) * 4), 4);
+    fishGeometry.setAttribute('aFish', aFish); fishGeometry.setAttribute('aSchool', aSchool);
+    const fishMaterial = shader('marine-fish-school', `
+      vHash=fract(aFish.w*7.13);
+      float th=aSchool.z*uTime+aSchool.w+aFish.x, rr=1.+aFish.y;
+      vec3 ctr=vec3(aSchool.x*cos(th)*rr, aFish.z+sin(uTime*.9+aFish.w)*1.4, aSchool.y*sin(th)*rr);
+      vec3 vel=vec3(-aSchool.x*sin(th)*aSchool.z*rr, cos(uTime*.9+aFish.w)*1.26, aSchool.y*cos(th)*aSchool.z*rr);
+      vec3 fw=vel/max(length(vel),1e-4), rt=cross(vec3(0.,1.,0.),fw); rt/=max(length(rt),1e-4);
+      vec3 up2=cross(fw,rt);
+      pos.x+=sin(uTime*9.+aFish.w*6.)*.3*clamp(-pos.z,0.,1.8)/1.8;
+      pos=rt*pos.x+up2*pos.y+fw*pos.z+ctr;`, '', `
+      vec3 cn=cross(dFdx(vWorld),dFdy(vWorld)); float sh=.62+.38*abs(cn.y)/max(length(cn),1e-6);
+      float shim=.5+.5*sin(uTime*3.+vHash*40.);
+      vec3 c=mix(${glow()},${accent()},shim*.3)*(.7+.5*sh);
+      gl_FragColor=fogOut(c,1.);`);
+    declareAttributes(fishMaterial, 'attribute vec4 aFish; attribute vec4 aSchool;');
+    const fish = add(new THREE.InstancedMesh(fishGeometry, fishMaterial, Math.max(1, total)), 'marine-fish-schools');
+    let n = 0;
+    for (const s of schools) for (let i = 0; i < s.fish; i++, n++) {
+      fish.setMatrixAt(n, matrix(s.x, s.y, s.z, 1, 1, 1));
+      aFish.setXYZW(n, frange(-.7, .7), frange(-.25, .25), frange(-3, 3), frand() * 6.283);
+      aSchool.setXYZW(n, s.rx, s.rz, s.w, s.phase);
+    }
+    fish.instanceMatrix.needsUpdate = aFish.needsUpdate = aSchool.needsUpdate = true;
+    featureMeshes.push({ mesh: fish, count: q => perQuality(q) });
+  }
+
   // --- Update / repack ---
   let quality: RenderQuality = 'balanced';
   const lastPosition = new THREE.Vector3(Infinity, Infinity, Infinity);
@@ -340,6 +463,7 @@ export function createAbyssScenery(track: Track, definition: TrackDefinition, pa
     for (const [mesh, n] of [[domeMesh, d], [lightMesh, l], [kelpMesh, k], [rockMesh, r], [tipMesh, t], [poleMesh, pl], [buoyMesh, bu]] as const) {
       mesh.count = n; mesh.instanceMatrix.needsUpdate = true; if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     }
+    for (const f of featureMeshes) f.mesh.count = f.count(quality);
     landmarkObjects.forEach((o, i) => { o.visible = landmarks[i].position.distanceTo(position) - landmarks[i].height < (quality === 'low' ? 1400 : 2200); });
   };
   const wrap = (v: number, s: number) => ((v % s) + s) % s;
