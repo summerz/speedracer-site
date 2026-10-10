@@ -17,6 +17,8 @@ export interface CampaignTrackProgress extends CampaignDifficultyProgress {
   difficulties?: Partial<Record<RaceChallengeId, CampaignDifficultyProgress>>;
 }
 export interface CampaignProgress {
+  /** Hidden production test override; never fabricates clears. */
+  unlockAll?: boolean;
   modes: Record<RaceMode, Record<string, CampaignTrackProgress>>;
   last: { mode: RaceMode; trackId: string; challenge?: RaceChallengeId };
   knownTracks: string[];
@@ -24,7 +26,11 @@ export interface CampaignProgress {
 export const initialCampaign = (): CampaignProgress => ({ knownTracks: TRACK_CATALOG.map(t => t.id), modes: { 'time-attack': {}, competition: {} }, last: { mode: 'time-attack', trackId: TRACK_CATALOG[0].id } });
 export function campaignStatus(progress: CampaignProgress, mode: RaceMode, track: TrackDefinition) {
   if (progress.modes[mode][track.id]?.cleared) return 'cleared';
-  return !track.predecessor || progress.modes[mode][track.predecessor]?.cleared ? 'available' : 'locked';
+  return progress.unlockAll || campaignTrackUnlocked(progress, mode, track) ? 'available' : 'locked';
+}
+/** Normal access rules, ignoring both the test override and this track's own clear. */
+export function campaignTrackUnlocked(progress: CampaignProgress, mode: RaceMode, track: TrackDefinition): boolean {
+  return !track.predecessor || Boolean(progress.modes[mode][track.predecessor]?.cleared);
 }
 export function nextCampaignTrack(progress: CampaignProgress, mode: RaceMode, catalog = TRACK_CATALOG) {
   return catalog.find(t => campaignStatus(progress, mode, t) === 'available') ?? catalog[0];
@@ -56,6 +62,7 @@ export function campaignStars(progress: CampaignProgress, mode: RaceMode, track:
 export function validateCampaign(value: unknown): CampaignProgress {
   if (!value || typeof value !== 'object') throw new Error('잘못된 캠페인 저장 데이터');
   const c = structuredClone(value) as CampaignProgress;
+  if (c.unlockAll !== undefined && typeof c.unlockAll !== 'boolean') throw new Error('잘못된 캠페인 테스트 설정');
   c.knownTracks ??= TRACK_CATALOG.map(t => t.id);
   if (!Array.isArray(c.knownTracks) || c.knownTracks.some(id => typeof id !== 'string' || !/^[a-z][a-z0-9-]*$/.test(id))) throw new Error('잘못된 트랙 목록');
   if (c.last?.challenge !== undefined && raceChallenge(c.last.challenge) !== c.last.challenge) throw new Error('잘못된 난이도');

@@ -74,6 +74,7 @@ export function mountHangar(root: HTMLDivElement, selected: DroneCatalogEntry, o
             </div>
           </div>
           <div class="free-drive"><a class="free-drive-link" href="#drive">시험 주행 · NEON CIRCUIT <span aria-hidden="true">↗</span></a><span class="free-drive-note">포인트 획득 · 캠페인 기록 없음</span></div>
+          <div class="free-drive"><a class="free-drive-link" href="#campaign?test=1">기능 테스트 · 캠페인 모두 해금 <span aria-hidden="true">↗</span></a><span class="free-drive-note">토글로 모든 트랙 열기 · 다시 잠그면 건너뛴 진행 정리</span></div>
           <div class="free-drive"><a class="free-drive-link" href="#drive?track=voltage-yard&mode=time-attack&challenge=easy&test=1">기능 테스트 · 점프 · VOLTAGE YARD <span aria-hidden="true">↗</span></a><span class="free-drive-note">새 기능 미리 타 보기 · 기록 없음</span></div>
           <div class="free-drive"><a class="free-drive-link" href="${featureTestTrackHref('trench-line')}&zone=trench">기능 테스트 · 마린시티 1구역 · 심해 해구 <span aria-hidden="true">↗</span></a></div>
           <div class="free-drive"><a class="free-drive-link" href="${featureTestTrackHref('trench-line')}&zone=kelp">기능 테스트 · 마린시티 2구역 · 켈프 숲 <span aria-hidden="true">↗</span></a></div>
