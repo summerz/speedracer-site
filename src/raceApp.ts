@@ -494,8 +494,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
     awakeningDurationFill.style.transform = `scaleX(${state.awakeningRemaining / AWAKENING_SECONDS})`;
     screen.classList.toggle('is-awakened', awakening);
     speed.parentElement!.dataset.boostStage = String(state.boostStage);
-    // ponytail: swap to state.drift once DrivingState.drift lands
-    updateDriftHud((state as { drift?: DriftView }).drift);
+    updateDriftHud(state.drift);
     const percentage = Math.round(state.charge * 100);
     charge.textContent = `${percentage}%`; meter.setAttribute('aria-valuenow', String(percentage));
     meterFill.style.transform = `scaleX(${state.charge / BOOST_CAPACITY})`;

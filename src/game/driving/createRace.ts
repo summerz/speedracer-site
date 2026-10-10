@@ -37,7 +37,7 @@ import { createTrack, createTrackFrame, createTrackVisual, upcomingHeightObstacl
 import { createSpeedLines } from './createSpeedLines';
 import { createTouchControls } from './createTouchControls';
 import { createBoostPulse } from './createBoostPulse';
-import { createDriftEffect, type DriftView } from '../drone/createDriftEffect';
+import { createDriftEffect } from '../drone/createDriftEffect';
 import { createRaceAudio } from './createRaceAudio';
 import { RACE_EFFECT_FILES } from '../audio/raceEffectFiles';
 import { createRaceFeedback } from './createRaceFeedback';
@@ -677,8 +677,7 @@ export function createRace(
     thrusters.setBoostCharge(replaying ? replayPose.mode / 3 : awake ? 1 : state.boostStageProgress);
     thrusters.update(replaying ? delta : simulationDelta, reducedMotion.matches);
     boostPulse.update(simulationDelta, reducedMotion.matches);
-    // ponytail: swap to state.drift once DrivingState.drift lands
-    driftEffect.update(replaying || cinematic ? undefined : (state as { drift?: DriftView }).drift, simulationDelta, reducedMotion.matches);
+    driftEffect.update(replaying || cinematic ? undefined : state.drift, simulationDelta, reducedMotion.matches);
     boostWarp.update(simulationDelta, awake || state.boostStage === 2, entry, reducedMotion.matches);
     awakeningStrength = THREE.MathUtils.lerp(awakeningStrength, awake ? 1 : 0, 1 - Math.exp(-delta * 12));
     if (awakeningStrength < .001) awakeningStrength = 0;
