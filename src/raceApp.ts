@@ -167,6 +167,8 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
   const heightInstruction = get('height-instruction');
   const heightGuide = root.querySelector<HTMLElement>('.height-guide')!;
   const awakeningControl = root.querySelector<HTMLElement>('.awakening-control')!;
+  // Touch: the core joins the thumb arc beside the items.
+  if (window.matchMedia('(any-pointer: coarse)').matches) root.querySelector('.race-items')!.append(awakeningControl);
   const awakeningButton = get('race-awakening') as HTMLButtonElement;
   const awakeningCubes = awakeningButton.querySelectorAll<HTMLElement>('[data-awakening-core]');
   const awakeningActive = awakeningButton.querySelector<HTMLElement>('[data-awakening-active]')!;
@@ -295,14 +297,15 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
     activeRaceId = attack.raceId; canFocus = attack.canFocus; itemStates = attack.items;
     const focus = get<HTMLButtonElement>('race-focus');
     focus.hidden = !focusSlots || state.phase !== 'running'; focus.disabled = !canFocus || focusPending;
-    focus.innerHTML = `${attack.focusRemaining > 0 ? `집중 ${attack.focusRemaining.toFixed(1)}s` : `집중 ${focusSlots - attack.focusUsed}`}<kbd class="key-badge">V</kbd>`;
+    focus.innerHTML = `집중 <small class="item-count">${attack.focusRemaining > 0 ? `${attack.focusRemaining.toFixed(1)}s` : focusSlots - attack.focusUsed}</small><kbd class="key-badge">V</kbd>`;
     for (const item of RIVAL_ITEMS) {
       const status = attack.items.find(entry => entry.id === item.id)!;
       const button = get<HTMLButtonElement>(`race-${item.id}`);
       button.hidden = !equippedRivalSlots.includes(item.id) || state.phase !== 'running';
       button.disabled = !status.canUse || focusPending;
-      button.textContent = status.active > 1e-8 ? `${item.name} ${status.active.toFixed(1)}s` : `${item.name} ${status.remaining}${attack.itemCooldown > 0 ? ` · ${attack.itemCooldown.toFixed(1)}s` : status.remaining > 0 && !status.targets.length ? ' · 대상 없음' : ''}`;
+      button.innerHTML = status.active > 1e-8 ? `${item.name} <small class="item-count">${status.active.toFixed(1)}s</small>` : `${item.name} <small class="item-count">${status.remaining}</small><small class="item-note">${attack.itemCooldown > 0 ? ` · ${attack.itemCooldown.toFixed(1)}s` : status.remaining > 0 && !status.targets.length ? ' · 대상 없음' : ''}</small>`;
     }
+    let slot = 0; for (const button of screen.querySelectorAll<HTMLButtonElement>('.race-items .race-focus')) if (!button.hidden) button.style.setProperty('--slot', String(slot++));
     get('focus-feedback').hidden = !focusPending && performance.now() >= focusMessageUntil;
     screen.classList.toggle('is-focused', attack.focusRemaining > 0 && state.phase === 'running');
     const deadline = get('lap-deadline'); deadline.hidden = !campaign || selectedMode !== 'time-attack';

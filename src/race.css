@@ -23,6 +23,7 @@
 .race-pause { position:absolute; z-index:4; top:max(16px,env(safe-area-inset-top)); right:max(20px,env(safe-area-inset-right)); width:56px; height:56px; border:1px solid #73b7bb80; border-radius:50%; background:#071724df; color:#d9faf2; font-size:25px; pointer-events:auto; touch-action:manipulation; }
 .race-pause .key-badge { position:absolute; top:calc(100% + 5px); left:50%; transform:translateX(-50%); background:#071724df; }
 .race-focus .key-badge { margin-left:6px; }
+.race-focus small { font:inherit; }
 .race-pause:hover { background:#1b414b; }
 .race-pause:disabled { opacity:.4; }
 .race-pause.on-pip { width:44px; height:44px; font-size:21px; background:#102c38; }
@@ -198,13 +199,16 @@ button:focus-visible { outline:2px solid #c9f9f2; outline-offset:3px; }
 .stick-up { top:9px; }.stick-down { bottom:9px; color:#ffbf94; }.stick-left { left:11px; top:calc(50% - 10px); font-size:20px; }.stick-right { right:11px; top:calc(50% - 10px); font-size:20px; }
 .touch-joystick.is-held .stick-knob { background:#287b7e; border-color:#b6fff0; }
 .touch-joystick.is-braking .stick-knob { background:#78503b; border-color:#ffd0a7; }
-.touch-flight { position:relative; width:84px; height:min(380px,calc(100dvh - 180px - max(16px,env(safe-area-inset-bottom)))); min-height:144px; display:grid; grid-template-rows:1fr 64px 1fr; pointer-events:auto; }
-.touch-flight button { position:relative; border-radius:0; font-size:25px; }
-.touch-flight .touch-rise { grid-row:1; border-radius:40px 40px 0 0; border-bottom:0; }
-.touch-flight .touch-descend { grid-row:3; border-radius:0 0 40px 40px; border-top:0; }
-.touch-flight .touch-boost { grid-row:2; font:10px 'IBM Plex Mono',monospace; }
-.touch-flight-cursor { position:absolute; z-index:1; left:12px; right:12px; height:3px; border-radius:2px; background:#b6fff0; box-shadow:0 0 9px #80ffe580; transform:translateY(-50%); pointer-events:none; }
-.touch-flight-cursor[hidden] { display:none; }
+.touch-flight { position:relative; width:120px; height:120px; pointer-events:auto; }
+.touch-flight button { position:absolute; }
+.touch-flight .touch-boost { inset:0; border-radius:50%; font:600 14px 'IBM Plex Mono',monospace; letter-spacing:1px; border-color:#9ff5e6; box-shadow:0 0 20px #56dacf40, inset 0 0 14px #56dacf22; }
+.touch-flight .touch-rise,.touch-flight .touch-descend { width:48px; height:48px; border-radius:50%; font-size:19px; }
+.touch-flight .touch-rise { --a:162deg; }
+.touch-flight .touch-descend { --a:190deg; }
+.touch-flight .touch-rise,.touch-flight .touch-descend { left:calc(60px + cos(var(--a)) * var(--arc-r,112px) - 24px); top:calc(60px - sin(var(--a)) * var(--arc-r,112px) - 24px); }
+.touch-boost .touch-flight-cursor { position:absolute; z-index:0; left:22px; right:22px; height:2px; border-radius:2px; background:#b6fff0; box-shadow:0 0 9px #80ffe580; transform:translateY(-50%); pointer-events:none; }
+.touch-boost .touch-flight-cursor[hidden] { display:none; }
+.touch-boost span,.touch-boost small { position:relative; z-index:1; }
 .touch-boost small { display:block; margin-top:5px; font-size:8px; color:#b3d7dc; }
 .touch-boost.is-held,.touch-flight .is-swipe { background:#287b7e; border-color:#b6fff0; box-shadow:inset 0 0 12px #80ffe51a; }
 .has-touch-controls .race-scene { touch-action:none; }
@@ -214,10 +218,23 @@ button:focus-visible { outline:2px solid #c9f9f2; outline-offset:3px; }
 .has-touch-controls .key-badge { display:none; }
 .has-touch-controls .drive-keys { display:none; }
 .has-touch-controls .touch-help { display:block; }
-.has-touch-controls .drive-hud { bottom:max(177px,calc(env(safe-area-inset-bottom) + 157px)); left:calc(50% - 20px); width:min(290px,calc(100% - 176px)); }
+.has-touch-controls .drive-hud { bottom:max(186px,calc(env(safe-area-inset-bottom) + 170px)); left:calc(max(18px,env(safe-area-inset-left)) + 32px); width:min(290px,calc(100% - 190px)); transform:none; }
+.has-touch-controls .fork-guide { margin:8px 0 0; text-align:left; }
 .has-touch-controls .drive-controls { gap:6px; }
 .has-touch-controls .awakening-cores { gap:3px; padding:0; }
 .has-touch-controls .awakening-control svg { width:26px; height:30px; }
+.has-touch-controls { --arc-r:112px; --arc-x:calc(max(18px,env(safe-area-inset-right)) + 60px); --arc-y:calc(max(16px,env(safe-area-inset-bottom)) + 60px); }
+.has-touch-controls .race-items { top:auto; right:var(--arc-x); bottom:var(--arc-y); width:0; height:0; display:block; }
+.has-touch-controls .race-items .race-focus,.has-touch-controls .race-items .awakening-control { position:absolute; box-sizing:border-box; width:48px; height:48px; left:calc(cos(var(--a)) * var(--arc-r) - 24px); top:calc(sin(var(--a)) * -1 * var(--arc-r) - 24px); }
+.has-touch-controls .race-items .race-focus { --a:calc(106deg - var(--slot, 0) * 28deg); }
+.has-touch-controls .race-items .awakening-control { --a:134deg; }
+.has-touch-controls .race-items .race-focus { overflow:visible; min-height:0; padding:0 9px; border-radius:50%; font-size:10px; line-height:1.2; white-space:normal; word-break:keep-all; text-align:center; }
+.has-touch-controls .race-items .item-count { position:absolute; top:-5px; right:-5px; min-width:18px; height:18px; padding:0 4px; border-radius:9px; border:1px solid #a598ee; background:#191d36; color:#efe9ff; font:9px/16px 'IBM Plex Mono',monospace; text-align:center; }
+.has-touch-controls .race-items .item-note { display:none; }
+.has-touch-controls .race-items .awakening-control { border-radius:50%; border:1px solid #ffe49b99; background:#071b28c8; box-shadow:0 0 12px #ffd46a44; display:grid; place-items:center; pointer-events:auto; }
+.has-touch-controls .race-items .awakening-control[hidden] { display:none; }
+.has-touch-controls .race-items .awakening-cores { width:100%; height:100%; min-width:0; gap:1px; }
+.has-touch-controls .race-items .awakening-control svg { width:12px; height:14px; }
 .has-touch-controls #boost-status { display:none; }
 @media (max-width:600px) {
   .race-header { padding-top:max(12px,env(safe-area-inset-top)); }
@@ -236,7 +253,8 @@ button:focus-visible { outline:2px solid #c9f9f2; outline-offset:3px; }
 }
 @media (max-height:500px) and (min-width:601px) {
   .race-header { padding-top:max(10px,env(safe-area-inset-top)); }.corner-hint { display:none; }
-  .has-touch-controls .drive-hud { bottom:max(18px,env(safe-area-inset-bottom)); left:50%; width:min(310px,calc(100% - 340px)); }
+  .has-touch-controls .drive-hud { bottom:max(18px,env(safe-area-inset-bottom)); left:50%; transform:translateX(-50%); width:min(310px,calc(100% - 340px)); }
+  .has-touch-controls .fork-guide { margin:10px -45px 0; text-align:center; }
   .drive-overlay { padding:16px; background:linear-gradient(90deg,#030b1680,transparent 65%); }
   .drive-dialog { width:340px; padding:18px; }
   .view-preview { width:max-content; }

@@ -21,14 +21,12 @@ export function createTouchControls(container: HTMLElement, actions: {
     <div class="touch-flight" aria-label="고도와 부스트">
       <button type="button" class="touch-rise" data-lift="1" aria-label="고도 한 단계 상승">↑</button>
       <button type="button" class="touch-descend" data-lift="-1" aria-label="고도 한 단계 하강">↓</button>
-      <button type="button" class="touch-boost" aria-label="부스트: 누른 채 위로 길게 밀수록 높은 고도, 아래로 길게 밀수록 낮은 고도 선택"><span>BOOST</span><small>누른 채 ↕</small></button>
-      <span class="touch-flight-cursor" aria-hidden="true" hidden></span>
+      <button type="button" class="touch-boost" aria-label="부스트: 누른 채 위로 길게 밀수록 높은 고도, 아래로 길게 밀수록 낮은 고도 선택"><span>BOOST</span><small>누른 채 ↕</small><span class="touch-flight-cursor" aria-hidden="true" hidden></span></button>
     </div>`;
   container.append(element);
   const joystick = element.querySelector<HTMLButtonElement>('.touch-joystick')!;
   const knob = element.querySelector<HTMLElement>('.stick-knob')!;
   const boost = element.querySelector<HTMLButtonElement>('.touch-boost')!;
-  const flight = element.querySelector<HTMLElement>('.touch-flight')!;
   const cursor = element.querySelector<HTMLElement>('.touch-flight-cursor')!;
   const rise = element.querySelector<HTMLButtonElement>('.touch-rise')!;
   const descend = element.querySelector<HTMLButtonElement>('.touch-descend')!;
@@ -103,9 +101,8 @@ export function createTouchControls(container: HTMLElement, actions: {
       }
       if (button === joystick && !input.pressStick(event.pointerId)) return;
       if (button === boost) {
-        const rect = flight.getBoundingClientRect();
         const { level, count } = actions.altitude();
-        if (!input.pressBoost(event.pointerId, event.clientY, level, count, rect.top, rect.bottom)) return;
+        if (!input.pressBoost(event.pointerId, event.clientY, level, count)) return;
       }
       captures.set(event.pointerId, button);
       button.setPointerCapture(event.pointerId);
