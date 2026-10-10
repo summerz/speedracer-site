@@ -311,8 +311,8 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
           state.offset = offsetFrom + clamp((input.guidedOffset! - offsetFrom) * (1 - Math.exp(-10 * dt)), -24 * dt, 24 * dt);
           state.heading = 0;
         }
-        // Hands-off, the craft is also eased back to the trunk centre as the fork nears (steering overrides it).
-        if (!Number.isFinite(input.guidedOffset) && Math.abs(steer) < .15) state.offset *= Math.exp(-6 * (1 - fade) * dt);
+        // Legacy two-way forks ease hands-off flight to the trunk; authored choices retain the chosen lane.
+        if (!fork?.authoredLayout && !Number.isFinite(input.guidedOffset) && Math.abs(steer) < .15) state.offset *= Math.exp(-6 * (1 - fade) * dt);
         const oldDistance = state.distance;
         state.distance = advanceTrackDistance(track, state.distance, travel * dt, state.routeId);
         if (Number.isFinite(input.guidedStopDistance)) state.distance = Math.max(oldDistance, Math.min(state.distance, input.guidedStopDistance!));

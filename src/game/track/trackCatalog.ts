@@ -73,12 +73,12 @@ const NEON_TRACK_CATALOG: readonly TrackDefinition[] = Object.freeze(recipes.map
   const experience: BranchRecipe['experience'] = ({ residential: 'city', industrial: 'reactor', stadium: 'arena', skyline: 'sky', research: 'prism', orbital: 'orbit', harbor: 'sky', desert: 'reactor', abyss: 'prism', kelp: 'city', coral: 'prism', lagoon: 'sky' } as const)[r[1]];
   const branches: readonly BranchRecipe[] = branchCourses.includes(i) ? Object.freeze([Object.freeze({ id: `${id}-fork`,
     kind: i % 4 === 1 ? 'vertical' as const : 'horizontal' as const, experience, direction: i % 2 ? -1 as const : 1 as const,
-    intertwined: [6, 13, 17, 23].includes(i), ...(i === 6 ? { groundClearance: 12 } : {}) })]) : [];
+    intertwined: [6, 13, 17, 23].includes(i), ...(i === 8 ? { variety: 'arena-three' as const } : {}), ...(i === 6 ? { groundClearance: 12 } : {}) })]) : [];
   const jumps: readonly JumpRecipe[] = i === 5 ? Object.freeze([Object.freeze({ id: 'voltage-yard-drop', branchId: `${id}-fork`, routeIndex: 1 as const })]) : [];
-  return Object.freeze({ id, name: r[0], jumps, revision: (r[4] ? (r[4].stunts.some(s => s.direction === -1) ? 3 : 2) : 1) + (branches.length ? 3 : 0) + (i === 6 ? 1 : 0) + (jumps.length ? 1 : 0), order: i + 1, district: r[1], rating: r[2], branches,
+  return Object.freeze({ id, name: r[0], jumps, revision: (r[4] ? (r[4].stunts.some(s => s.direction === -1) ? 3 : 2) : 1) + (branches.length ? 3 : 0) + ([6, 8].includes(i) ? 1 : 0) + (jumps.length ? 1 : 0), order: i + 1, district: r[1], rating: r[2], branches,
     predecessor: i ? recipes[i - 1][0].toLowerCase().replaceAll(' ', '-') : null,
     laps: 3, lapLimit: lapLimits[i], halfWidth: r[2] <= 3 ? 14 : 13,
-    altitudeLevels: levels, obstacleLevels: Object.freeze(pattern), layout: r[4] ? Object.freeze({ ...r[4], stunts: Object.freeze(r[4].stunts.map(s => Object.freeze(s))) }) : null, features: r[3] + (jumps.length ? ' · 하강 점프' : '') + (branches.length ? ` · ${branches[0].intertwined ? '입체 교차 분기' : branches[0].kind === 'horizontal' ? '좌우 갈림길' : '상하 갈림길'}` : '') });
+    altitudeLevels: levels, obstacleLevels: Object.freeze(pattern), layout: r[4] ? Object.freeze({ ...r[4], stunts: Object.freeze(r[4].stunts.map(s => Object.freeze(s))) }) : null, features: r[3] + (jumps.length ? ' · 하강 점프' : '') + (branches.length ? ` · ${branches[0].variety ? '3갈래 · 낮은 길/중간 길/높은 길' : branches[0].intertwined ? '입체 교차 분기' : branches[0].kind === 'horizontal' ? '좌우 갈림길' : '상하 갈림길'}` : '') });
 }));
 export const TRACK_CATALOG: readonly TrackDefinition[] = Object.freeze([...NEON_TRACK_CATALOG, ...MARINE_TRACK_CATALOG]);
 export function trackDefinition(id: string) { return TRACK_CATALOG.find(t => t.id === id); }
@@ -95,6 +95,7 @@ export function validateTrackCatalog(catalog: readonly TrackDefinition[]) {
       if (!b.id || branchIds.has(b.id) || !['horizontal','vertical'].includes(b.kind)
         || !['city','reactor','arena','sky','prism','orbit'].includes(b.experience)
         || (b.direction !== undefined && b.direction !== 1 && b.direction !== -1)
+        || (b.variety !== undefined && (b.variety !== 'arena-three' || b.kind !== 'horizontal' || b.experience !== 'arena' || b.intertwined))
         || (b.groundClearance !== undefined && (!Number.isFinite(b.groundClearance) || b.groundClearance < 0))) throw new Error('Invalid course branch');
       branchIds.add(b.id);
     }

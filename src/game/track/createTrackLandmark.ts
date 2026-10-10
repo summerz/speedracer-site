@@ -4,6 +4,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { Track } from './createTrack.js';
 import { DISTRICTS } from './trackCatalog.js';
 import type { TrackDefinition } from './trackCatalog.js';
+import { cityForDistrict } from './cityCatalog.js';
 
 import { LANDMARK_TYPES, LANDMARK_DISTRICTS, LANDMARK_ENCOUNTERS } from './landmarkCatalog.js';
 import type { LandmarkKind } from './landmarkCatalog.js';
@@ -51,7 +52,10 @@ export function describeTrackLandmarks(track: Track, definition: TrackDefinition
     // Tall spires retain a similar skyline height rather than tripling their already tall shape.
     const spec = { ...encounter, kind, scale: kind === 'spire' ? encounter.scale * .7 : encounter.scale };
     const radius = 72 * spec.scale, height = LANDMARK_TYPES[spec.kind].height * spec.scale;
-    const margin = radius + track.halfWidth + 42;
+    // Underwater megastructures need breathing room proportional to their silhouette.
+    // Keep Neon City placements stable; radius already includes the entire mesh footprint.
+    const clearance = 42 * (cityForDistrict(definition.district) === 'marine' ? Math.max(1, spec.scale) : 1);
+    const margin = radius + track.halfWidth + clearance;
     let best: { position: THREE.Vector3; rotation: number; score: number } | undefined;
     // Score the approach, not only the closest sideways pass. Fixed candidates keep previews stable.
     for (const shift of [0, .04, -.04, .09, -.09, .16, -.16, .24, -.24, .32, -.32]) {

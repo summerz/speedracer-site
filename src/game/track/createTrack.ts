@@ -233,8 +233,8 @@ export function createTrack(profile?: AltitudeProfile, preset?: DifficultyPreset
     randomizeObstacles(random) {
       const layout = track.rollObstacleLayout?.(random);
       const corridors = layout?.corridors ?? track.corridorObstacles;
-      heightObstacles.splice(0, heightObstacles.length, ...randomObstacleAltitudes(layout?.heights ?? heightObstacles, altitudeProfile.levels, random));
-      if (corridors) Object.assign(track, { corridorObstacles: randomCorridorLanes(corridors, track.halfWidth, random) });
+      heightObstacles.splice(0, heightObstacles.length, ...randomObstacleAltitudes(layout?.heights ?? heightObstacles, altitudeProfile.levels, random, track));
+      if (corridors) Object.assign(track, { corridorObstacles: randomCorridorLanes(corridors, track.halfWidth, random, track) });
       if (layout) Object.assign(track, { boostPads: randomPadLanes(track, layout.pads, track.corridorObstacles ?? [], random), mineFields: layout.mineFields,
         arcRails: layout.arcRails, boostRings: randomRingSides(track, layout.boostRings, track.corridorObstacles ?? [], random) });
     },

@@ -4,6 +4,7 @@ import { expandObstacleLayout, layoutCounts, layoutObstacles } from '../output/t
 import { TRACK_CATALOG } from '../output/test/game/track/trackCatalog.js';
 import { safePlacement } from '../output/test/game/track/obstacleDynamics.js';
 import { physicalDistance } from '../output/test/game/track/trackBranches.js';
+import { isAuthoredForkRoute } from '../output/test/game/track/authoredForkLayout.js';
 import { createCatalogTrack } from '../output/test/game/track/trackRuntime.js';
 import { minedTrack } from './fixtures/minedTrack.mjs';
 import { createRaceSession } from '../output/test/game/driving/createRaceSession.js';
@@ -27,8 +28,10 @@ test('every campaign course has more fields and random safe levels with unchange
       track.randomizeObstacles(random);
       assert.deepEqual(shape(), kinds);
       const statics = track.heightObstacles.filter(o => !o.motion);
-      const bands = statics.map(o => track.altitudeProfile.levels.findIndex(h => h >= o.minAltitude && h <= o.maxAltitude));
-      assert.ok(bands.every(b => b >= 0));
+      const band = o => track.altitudeProfile.levels.findIndex(h => h >= o.minAltitude && h <= o.maxAltitude);
+      assert.ok(statics.every(o => band(o) >= 0));
+      // Authored pilot fields have their own fixed rise/descend sequence.
+      const bands = statics.filter(o => !isAuthoredForkRoute(track, o.routeId)).map(band);
       for (let i = 2; i < bands.length; i++) assert.ok(!(bands[i] === bands[i-1] && bands[i] === bands[i-2]), `${definition.name}: three identical levels`);
     }
   }
@@ -143,7 +146,9 @@ test('every track re-rolls layout per run: counts per path hold, placement is va
         const gap = (a, b) => physicalDistance(track, a.distance, b.distance - a.distance, routeId);
         for (const pad of pads) {
           assert.equal(track.sample(pad.distance, undefined, routeId).section, 'course', `${definition.name}: boost on a course slot`);
-          if (pad.lane) assert.ok(pad.width === track.halfWidth * .5 && pad.length === 14 && pad.center === ['left', 'center', 'right'].indexOf(pad.lane) * track.halfWidth * .58 - track.halfWidth * .58);
+          if (isAuthoredForkRoute(track, pad.routeId)) {
+            assert.equal(pad.width, track.halfWidth); assert.equal(pad.length, 14); assert.equal(pad.center, 0); assert.equal(pad.lane, 'center');
+          } else if (pad.lane) assert.ok(pad.width === track.halfWidth * .5 && pad.length === 14 && pad.center === ['left', 'center', 'right'].indexOf(pad.lane) * track.halfWidth * .58 - track.halfWidth * .58);
           else assert.ok(Math.abs(Math.abs(pad.offset) - track.halfWidth * .45) < 1e-9);
           for (const { o } of list.filter(l => path(l.o))) assert.ok(Math.abs(gap(pad, o)) - o.depth / 2 >= 40, `${definition.name}/${challenge}: boost 40 m from field edge`);
           const next = (track.corridorObstacles ?? []).filter(path).find(c => c.distance > pad.distance);

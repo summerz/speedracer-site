@@ -7,6 +7,8 @@ import { TRACK_CATALOG } from '../output/test/game/track/trackCatalog.js';
 import { createCatalogTrack } from '../output/test/game/track/trackRuntime.js';
 import { describeTrackLandmarks, createTrackLandmark, disposeScenery, sceneryRoute } from '../output/test/game/track/createTrackLandmark.js';
 import { createDistrictScenery } from '../output/test/game/track/createDistrictScenery.js';
+import { cityForDistrict } from '../output/test/game/track/cityCatalog.js';
+import { roadPoints } from '../output/test/game/track/trackBranches.js';
 
 test('Neon City districts select five night environments; free driving keeps its default', () => {
   assert.deepEqual([0, .2, .4, .6, .8, 1].map(n => selectRaceEnvironment('residential', () => n).id), ['midnight', 'deep-night', 'predawn', 'afterglow', 'storm-night', 'storm-night']);
@@ -54,7 +56,8 @@ test('each campaign course has three safe, separated landmarks with sustained fo
         longest = Math.max(longest, consecutive);
       }
       assert.ok(longest >= 100, `${definition.id}:${index} should remain prominent ahead for at least 100m, got ${longest}`);
-      const race = createTrackLandmark(descriptor), preview = createTrackLandmark(descriptor, true);
+      const underwater = cityForDistrict(definition.district) === 'marine';
+      const race = createTrackLandmark(descriptor, false, underwater), preview = createTrackLandmark(descriptor, true, underwater);
       const light = race.getObjectByName('landmark-lights').material.color;
       assert.ok(light.r * .2126 + light.g * .7152 + light.b * .0722 > .95, 'every district accent crosses the bloom threshold');
       assert.deepEqual(race.children[0].geometry.attributes.position.array, preview.children[0].geometry.attributes.position.array);
@@ -72,5 +75,17 @@ test('each campaign course has three safe, separated landmarks with sustained fo
     city.setQuality('low'); city.update(descriptors[0].position.clone().add(new THREE.Vector3(1000, 0, 0)));
     assert.ok(city.object.getObjectByName(descriptors[0].id).visible, 'hero silhouette survives beyond ordinary building LOD');
     disposeScenery(city.object);
+  }
+});
+
+test('Marine City megastructures leave a readable open strip beyond their footprint and every road edge', () => {
+  for (const definition of TRACK_CATALOG.filter(d => cityForDistrict(d.district) === 'marine')) {
+    const track = createCatalogTrack(definition), route = roadPoints(track, 2);
+    for (const descriptor of describeTrackLandmarks(track, definition)) {
+      const gap = Math.min(...route.map(p => Math.hypot(p.x - descriptor.position.x, p.z - descriptor.position.z)))
+        - descriptor.radius - track.halfWidth;
+      const minimum = descriptor.scale >= 3 ? 100 : descriptor.scale >= 2 ? 75 : 60;
+      assert.ok(gap >= minimum, `${definition.id}:${descriptor.id} open strip ${gap.toFixed(1)}m should exceed ${minimum}m`);
+    }
   }
 });

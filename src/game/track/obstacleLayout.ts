@@ -1,3 +1,4 @@
+import { authoredForkLayout, isAuthoredForkRoute } from './authoredForkLayout.js';
 import { jumpPlacementClear } from './trackJump.js';
 import type { BoostPad, BoostRing, CorridorObstacle, HeightObstacle, MineField, Track } from './createTrack.js';
 import { BOOSTS_PER_KM, HAZARD_GAP, HAZARD_SHARE, hazardEnabled } from './hazardCatalog.js';
@@ -44,10 +45,11 @@ function sequencePicker(n: number, random: () => number) {
 }
 
 /** Positions are fixed here; safe altitudes and moving-field phases change once per run, shared by all racers. */
-export function randomObstacleAltitudes(obstacles: readonly HeightObstacle[], levels: readonly number[], random: () => number): HeightObstacle[] {
+export function randomObstacleAltitudes(obstacles: readonly HeightObstacle[], levels: readonly number[], random: () => number, track?: Track): HeightObstacle[] {
   // ponytail: branch routes share one sequence, so a streak can span two routes' fields.
   const pick = sequencePicker(levels.length, random);
   return obstacles.map(obstacle => {
+    if (isAuthoredForkRoute(track, obstacle.routeId)) return { ...obstacle };
     if (!obstacle.motion) return obstacleAtLevel(obstacle, levels, pick());
     const value = random(), cycle = obstacle.motion.stepSeconds * (levels.length - 1) * 2;
     return { ...obstacle, motion: { ...obstacle.motion, phase: Number.isFinite(value) ? Math.max(0, Math.min(.999999, value)) * cycle : 0 } };
@@ -57,9 +59,10 @@ export function randomObstacleAltitudes(obstacles: readonly HeightObstacle[], le
 const LANES = ['left', 'center', 'right'] as const;
 
 /** Corridor safe lanes change once per run. Same formula as configureExtraObstacles. */
-export function randomCorridorLanes(corridors: readonly CorridorObstacle[], halfWidth: number, random: () => number): CorridorObstacle[] {
+export function randomCorridorLanes(corridors: readonly CorridorObstacle[], halfWidth: number, random: () => number, track?: Track): CorridorObstacle[] {
   const pick = sequencePicker(3, random);
   return corridors.map(corridor => {
+    if (isAuthoredForkRoute(track, corridor.routeId)) return { ...corridor };
     const laneIndex = pick();
     return { ...corridor, safeCenter: (laneIndex - 1) * halfWidth * .58, lane: LANES[laneIndex] };
   });
@@ -71,6 +74,7 @@ export function randomCorridorLanes(corridors: readonly CorridorObstacle[], half
  */
 export function randomPadLanes(track: Track, pads: readonly BoostPad[], corridors: readonly CorridorObstacle[], random: () => number): BoostPad[] {
   return pads.map(pad => {
+    if (isAuthoredForkRoute(track, pad.routeId)) return { ...pad };
     const next = corridors.find(c => (c.routeId ?? null) === (pad.routeId ?? null) && c.distance > pad.distance
       && (gap => gap >= 80 - 1e-6 && gap <= 120 + 1e-6)(physicalDistance(track, pad.distance, c.distance - pad.distance, pad.routeId)));
     const lanes = [0, 1, 2].filter(i => !next || LANES[i] !== next.lane);
@@ -113,6 +117,7 @@ function slotPaths(track: Track): SlotPath[] {
   if (cached) return cached;
   const forks = track.branches ?? [], paths = new Map<string | null, SlotPath>();
   for (const path of roadPaths(track)) {
+    if (isAuthoredForkRoute(track, path.routeId)) continue;
     const fork = path.routeId ? forks.find(f => f.routes.some(r => r.id === path.routeId)) : undefined;
     const lo = fork ? Math.max(path.start, fork.start + 80) : Math.max(path.start, 140);
     const hi = fork ? Math.min(path.end, fork.end - 80) : Math.min(path.end, track.length - 120);
@@ -308,6 +313,8 @@ export function layoutObstacles(track: Track, challenge: RaceChallengeId, random
         : { ...template, routeId, distance: slot.distance });
     }
   }
+  const authored = authoredForkLayout(track, template);
+  heights.push(...authored.heights); corridors.push(...authored.corridors); pads.push(...authored.pads);
   for (const list of [heights, corridors, pads, rings, mineFields]) list.sort((a, b) => a.distance - b.distance);
   return { heights, corridors, pads, rings, mineFields, counts: layoutCounts(heights, corridors, pads, mineFields, rings), missed };
 }

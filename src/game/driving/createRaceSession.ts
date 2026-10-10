@@ -80,8 +80,8 @@ export function aiDrivingInput(track: Track, configuration: DroneConfiguration, 
   index: number, opponents: readonly DrivingState[], profile?: AiDrivingProfile, speedScale = 1): DrivingInput {
   const p = configuration.performance;
   const fork = branchChoiceOpen(track, state.distance) ? forkAt(track, state.distance) : upcomingFork(track, state.distance, Math.max(150, state.speed * 2));
-  const branchSide = (index + Math.floor(state.distance / track.length) + (p.topSpeed > 100 ? 1 : 0)) % 2;
-  const routeId = state.routeId ?? fork?.routes[branchSide].id;
+  const branchSide = (index + Math.floor(state.distance / track.length) + (p.topSpeed > 100 ? 1 : 0)) % (fork?.routes.length ?? 2);
+  const routeId = fork?.routes[branchSide].id ?? state.routeId;
   const curvature = track.sample(state.distance, undefined, routeId).curvature;
   let bend = Math.abs(curvature);
   // Short sampling intervals catch tight bends between the old lookahead points.
@@ -172,7 +172,7 @@ export function aiDrivingInput(track: Track, configuration: DroneConfiguration, 
     if (level >= 0) lift = Math.sign(level - state.altitudeLevel);
   }
   if (fork) {
-    if (fork.kind === 'horizontal') { if (!following && !segment) lane = branchSide ? 3.5 : -3.5; }
+    if (fork.kind === 'horizontal') { if (!following && !segment) lane = fork.authoredLayout ? (fork.routes[branchSide].cue?.choice === 'left' ? -1 : fork.routes[branchSide].cue?.choice === 'right' ? 1 : 0) * track.halfWidth * .45 : branchSide ? 3.5 : -3.5; }
     else if (!next || next.distance > fork.start - state.distance % track.length)
       lift = Math.sign((branchSide ? track.altitudeProfile.levels.length - 1 : 0) - state.altitudeLevel);
   }
@@ -180,7 +180,7 @@ export function aiDrivingInput(track: Track, configuration: DroneConfiguration, 
   if (jump) lift = Math.sign(jump.requiredLevel - state.altitudeLevel);
   // Pull toward the lane, but never ask for a sideways slope beyond what the stabilizer can hold (heading gain 14 x MINE_CHAIN_SLOPE),
   // or the craft overshoots the lane and, for a weakly damped one, the road edge.
-  const lateralPull = following ? Math.max(-14 * MINE_CHAIN_SLOPE, Math.min(14 * MINE_CHAIN_SLOPE, (lane - state.offset) * .5)) : (lane - state.offset) * .14;
+  const lateralPull = following ? Math.max(-14 * MINE_CHAIN_SLOPE, Math.min(14 * MINE_CHAIN_SLOPE, (lane - state.offset) * .5)) : (lane - state.offset) * (fork?.authoredLayout ? .25 : .14);
   // Dampen lane changes after a pickup: a fully boosted craft otherwise swings
   // past its preferred lane and reaches the opposite road edge.
   return { throttle: true, brake: state.speed > goalSpeed + 1, boost,
