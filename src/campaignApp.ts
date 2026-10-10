@@ -8,6 +8,7 @@ import { createCatalogTrack, trackMetrics } from './game/track/trackRuntime';
 import { campaignStatus, nextCampaignTrack, campaignClearRecord, campaignDifficultyProgress, campaignStars, type CampaignProgress } from './game/progression/campaign';
 import type { ProgressStore } from './game/progression/progressStore';
 import type { RaceMode } from './game/driving/createRaceSession';
+import { MARINE_ZONES } from './game/environment/marineZones';
 import { createTrackPreview } from './game/track/createTrackPreview';
 import { describeTrackLandmarks } from './game/track/createTrackLandmark';
 import { loadoutMarkup, mountLoadout } from './campaignLoadout';
@@ -20,6 +21,12 @@ interface Snapshot { view: View; district: DistrictId; trackId: string }
 const CHALLENGE_IDS = ['normal', 'easy', 'hard'] as const;
 const DEPTH: Record<View, number> = { districts: 0, tracks: 1, detail: 2 };
 const number2 = (n: number) => String(n).padStart(2, '0');
+// ponytail: local stand-in, replaced by Codex's city contract (CityId / CITY_CATALOG / cityForDistrict, docs/CITY_STRUCTURE.md on docs/city-contract @ 83c25b2).
+const CITIES = [{ id: 'neon', label: 'NEON CITY', name: '네온시티' }, { id: 'marine', label: 'MARINE CITY', name: '마린시티' }] as const;
+type CityKey = typeof CITIES[number]['id'];
+const MARINE_DISTRICTS: readonly string[] = ['abyss', 'kelp', 'coral', 'lagoon'];
+const cityOf = (district: string): CityKey => MARINE_DISTRICTS.includes(district) ? 'marine' : 'neon';
+const MARINE_BLURB = ['해구 돔과 생물 발광', '흔들리는 거대 해초', '발광 산호 군락', '수면 빛과 물고기 떼'];
 
 export function mountCampaign(root: HTMLDivElement, store: ProgressStore, context?: { mode: RaceMode; trackId?: string; challenge?: RaceChallengeId }) {
   document.title = 'Speedracer · 캠페인';
@@ -122,7 +129,7 @@ export function mountCampaign(root: HTMLDivElement, store: ProgressStore, contex
       ? `<div class="continue-banner" data-done="true"><span class="eyebrow">COMPLETE</span><strong>모든 코스 통과 · <span class="stat-stars">★ ${starTotal}/${starMax}</span></strong></div>`
       : `<div class="continue-banner" style="--district-color:${DISTRICTS[next.district].color}"><span class="continue-copy"><span class="eyebrow">${firstRun ? '첫 코스' : '이어하기'}</span><strong><em>${DISTRICTS[next.district].name}</em> · <span class="mono">${number2(next.order)}</span> ${next.name}</strong></span><button id="campaign-continue" type="button" class="continue-button" data-autofocus>${firstRun ? '첫 도전' : '이어서 도전'} ↗</button></div>`;
     get('districts-summary').innerHTML = `${banner}<div class="overall"><p class="mono"><span>통과 <b>${cleared}</b>/${TRACK_CATALOG.length}</span><span class="stat-stars">★ <b>${starTotal}</b>/${starMax}</span></p><span class="meter" aria-hidden="true"><i style="width:${starTotal / starMax * 100}%"></i></span></div>`;
-    get('district-list').innerHTML = (Object.entries(DISTRICTS) as [DistrictId, typeof DISTRICTS[DistrictId]][]).filter(([id]) => TRACK_CATALOG.some(track => track.district === id)).map(([id, entry], index) => {
+    const districtCard = (id: DistrictId, entry: typeof DISTRICTS[DistrictId], index: number) => {
       const tracks = districtTracks(id);
       const statuses = tracks.map(t => campaignStatus(campaign, mode, t));
       const done = statuses.filter(s => s === 'cleared').length, stars = tracks.reduce((sum, t) => sum + bestStars(campaign, t), 0);
@@ -134,6 +141,19 @@ export function mountCampaign(root: HTMLDivElement, store: ProgressStore, contex
         <strong class="district-name">${entry.name}</strong><span class="district-description">${entry.description}</span>
         <span class="district-foot">${locked ? '<span class="district-lock">🔒 이전 구역을 통과하면 열립니다</span>' : ''}<span class="district-dots" aria-hidden="true">${statuses.map(s => `<i data-status="${s}"></i>`).join('')}</span><span class="district-tracklist" aria-hidden="true">${tracks.map((t, i) => { const st = statuses[i], n = bestStars(campaign, t); return `<span class="dt-row" data-status="${st}" data-next="${!finished && t.id === next.id}"><span class="mono">${number2(t.order)}</span><span class="dt-name">${t.name}</span><span class="dt-mark">${st === 'locked' ? '잠김' : st === 'available' ? '도전' : `<span class="dt-stars">${'★'.repeat(n)}<s>${'★'.repeat(3 - n)}</s></span>`}</span></span>`; }).join('')}</span>
         <span class="district-stats mono"><span>통과 ${done}/${tracks.length}</span><span class="stat-stars">★ ${stars}/${tracks.length * 3}</span></span></span></button>`;
+    };
+    const entries = (Object.entries(DISTRICTS) as [DistrictId, typeof DISTRICTS[DistrictId]][]).filter(([id]) => TRACK_CATALOG.some(track => track.district === id));
+    get('district-list').innerHTML = CITIES.map((city, cityIndex) => {
+      const own = entries.filter(([id]) => cityOf(id) === city.id);
+      const head = (inner: string) => `<header class="city-head"><div class="city-title"><p class="eyebrow">CITY ${number2(cityIndex + 1)}</p><h2>${city.label} <span class="city-ko">${city.name}</span></h2></div>${inner}</header>`;
+      if (!own.length) {
+        const tiles = MARINE_ZONES.map((zone, i) => { const env = zone.environments[0]; return `<div class="zone-preview" aria-disabled="true" style="--district-color:${zone.palette.glow}"><span class="district-top"><span class="district-index mono">${number2(i + 1)}</span><span class="district-state">준비 중</span></span><span class="zone-swatch" style="background:linear-gradient(180deg,${env.zenith},${env.horizon})"><i style="background:${zone.palette.glow}"></i><i style="background:${zone.palette.accent}"></i></span><strong class="district-name">${zone.name}</strong><span class="district-description">${MARINE_BLURB[i] ?? ''}</span></div>`; }).join('');
+        return `<section class="city-group" data-city="${city.id}" data-state="locked" aria-label="${city.label} ${city.name} · 잠김">${head('<p class="city-lock">🔒 네온시티 32번 트랙을 통과하면 열립니다 · 준비 중</p>')}<div class="district-grid">${tiles}</div></section>`;
+      }
+      const tracks = own.flatMap(([id]) => districtTracks(id));
+      const done = tracks.filter(t => campaignStatus(campaign, mode, t) === 'cleared').length, stars = tracks.reduce((sum, t) => sum + bestStars(campaign, t), 0);
+      const progress = tracks.length === TRACK_CATALOG.length ? '' : `<div class="city-progress"><p class="mono"><span>통과 <b>${done}</b>/${tracks.length}</span><span class="stat-stars">★ <b>${stars}</b>/${tracks.length * 3}</span></p><span class="meter" aria-hidden="true"><i style="width:${stars / (tracks.length * 3) * 100}%"></i></span></div>`;
+      return `<section class="city-group" data-city="${city.id}">${head(progress)}<div class="district-grid">${own.map(([id, entry], index) => districtCard(id, entry, index)).join('')}</div></section>`;
     }).join('');
     if (!finished) return;
     get('district-list').querySelector('[data-district]')?.setAttribute('data-autofocus', '');
