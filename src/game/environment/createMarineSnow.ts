@@ -5,7 +5,7 @@ const COUNTS: Record<RenderQuality, number> = { low: 240, balanced: 480, high: 8
 const BOX = 90, HEIGHT = 50;
 
 /** Drifting soft dots wrapped in a box around the camera. One Points draw, CPU-updated positions. */
-export function createMarineSnow(seed = 7) {
+export function createMarineSnow(seed = 7, color = '#bfeff0') {
   const object = new THREE.Group(); object.name = 'marine-snow';
   let s = seed >>> 0;
   const random = () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 4294967296; };
@@ -17,7 +17,7 @@ export function createMarineSnow(seed = 7) {
   const positions = new Float32Array(max * 3);
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3).setUsage(THREE.DynamicDrawUsage));
-  const material = new THREE.PointsMaterial({ color: '#bfeff0', size: .7, sizeAttenuation: true, transparent: true, opacity: .5, depthWrite: false,
+  const material = new THREE.PointsMaterial({ color, size: .7, sizeAttenuation: true, transparent: true, opacity: .5, depthWrite: false,
     blending: THREE.AdditiveBlending, toneMapped: false, map: dotTexture() });
   const points = new THREE.Points(geometry, material); points.frustumCulled = false; object.add(points);
   const wrap = (v: number, size: number) => ((v % size) + size) % size;
