@@ -44,6 +44,7 @@ import './shop.css';
 import { createRaceAnalytics } from './platform/analytics';
 import { gameAnalytics } from './platform/gameAnalytics';
 import { formatDelta } from './game/driving/raceGhost';
+import { DRIFT_STAGE_COLORS, type DriftView } from './game/drone/createDriftEffect';
 
 const formatTime = (seconds: number) => {
   const ms = Math.round(Math.max(0, seconds) * 1000);
@@ -77,7 +78,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
       <div class="race-items"><button id="race-focus" type="button" class="race-focus" aria-keyshortcuts="V" hidden>집중 모드<kbd class="key-badge">V</kbd></button>${RIVAL_ITEMS.map(item => `<button type="button" id="race-${item.id}" class="race-focus" data-use-item="${item.id}" hidden>${item.name}</button>`).join('')}</div><p id="focus-feedback" class="focus-feedback" role="status" aria-live="polite"></p><footer class="drive-hud" aria-label="고도와 부스트 계기판">
         <aside class="height-guide" aria-label="고도 안내: 선택 단계, 민트색 통과 가능, 빨강 통과 불가, 주황 전환 중"><div id="height-level" class="height-bars"></div><strong id="height-instruction"></strong></aside>
         <div class="drive-controls">
-        <div class="boost-readout"><div class="hud-pair"><span class="boost-icon" role="img" aria-label="부스트">${BOOST_ICON}</span><span id="boost-value" class="mono">100%</span></div><div id="boost-meter" class="boost-meter" role="progressbar" aria-label="부스트 잔량 (50%씩 3칸, 최대 150%)" aria-valuemin="0" aria-valuemax="150" aria-valuenow="100"><span></span></div><div id="boost-stage-meter" class="boost-stage-meter" role="progressbar" aria-label="부스트 2단계 축적" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span></span></div><span id="boost-status">Space 유지 · 3초 후 2단계</span></div>
+        <div class="boost-readout"><div class="hud-pair"><span class="boost-icon" role="img" aria-label="부스트">${BOOST_ICON}</span><span id="boost-value" class="mono">100%</span></div><div id="boost-meter" class="boost-meter" role="progressbar" aria-label="부스트 잔량 (50%씩 3칸, 최대 150%)" aria-valuemin="0" aria-valuemax="150" aria-valuenow="100"><span></span></div><div id="boost-stage-meter" class="boost-stage-meter" role="progressbar" aria-label="부스트 2단계 축적" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span></span></div><span id="boost-status">Space 유지 · 3초 후 2단계</span><div id="drift-hud" class="drift-hud mono" hidden><span class="drift-pips" aria-hidden="true"><i></i><i></i><i></i></span><span id="drift-label" class="drift-label" aria-hidden="true"></span><span id="drift-end" class="drift-end" aria-live="polite"></span></div></div>
         <div class="awakening-control" hidden><button id="race-awakening" class="awakening-cores" type="button" aria-label="각성 사용" aria-keyshortcuts="W" disabled><span data-awakening-active hidden>${AWAKENING_ICON}</span>${Array.from({ length: AWAKENING_CAPACITY }, () => `<span data-awakening-core hidden>${CORE_ICON}</span>`).join('')}<span class="awakening-duration" aria-hidden="true" hidden><i></i></span></button><kbd class="key-badge">W</kbd></div>
         </div><p id="race-fork" class="fork-guide" hidden></p></footer></div>
       <section id="drive-overlay" class="drive-overlay" aria-labelledby="drive-overlay-title">
@@ -263,6 +264,34 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
   let impactAnimation: Animation | undefined;
   let boostFlashAnimation: Animation | undefined;
   let lastBoostStage = 0;
+  const driftHud = get('drift-hud'), driftLabel = get('drift-label'), driftEnd = get('drift-end');
+  const driftPips = [...driftHud.querySelectorAll<HTMLElement>('.drift-pips i')];
+  DRIFT_STAGE_COLORS.forEach((c, i) => driftHud.style.setProperty(`--d${i}`, c));
+  let driftRewardId = -1, driftRewardSeen = false, driftEndUntil = 0;
+  const updateDriftHud = (drift: DriftView | undefined) => {
+    const now = performance.now(), reward = drift?.lastReward ?? null;
+    if (!drift) { driftRewardSeen = false; driftEndUntil = 0; } // first sight only records the id, so a stale reward never pops
+    else if (!driftRewardSeen) { driftRewardSeen = true; driftRewardId = reward?.id ?? -1; }
+    else if (reward && reward.id !== driftRewardId) {
+      driftRewardId = reward.id;
+      const charged = !reward.cancelled && reward.stage > 0 && reward.addedCharge > 0;
+      driftEnd.textContent = reward.cancelled ? '드리프트 취소' : charged ? `+${Math.round(reward.addedCharge * 100)}% 충전` : '';
+      driftEnd.dataset.tone = reward.cancelled ? 'cancel' : String(reward.stage);
+      driftEndUntil = driftEnd.textContent ? now + 1200 : 0;
+    }
+    const active = !!drift?.active, showEnd = !active && now < driftEndUntil;
+    driftHud.hidden = !active && !showEnd;
+    if (driftHud.hidden) { driftEnd.textContent = ''; return; }
+    driftHud.classList.toggle('is-ending', showEnd);
+    if (active && drift) {
+      const stage = Math.max(0, Math.min(3, Math.round(drift.stage || 0))), progress = Math.max(0, Math.min(1, Number.isFinite(drift.stageProgress) ? drift.stageProgress : 0));
+      driftPips.forEach((pip, i) => pip.style.setProperty('--f', String(stage >= i + 1 ? 1 : stage === i ? progress : 0)));
+      driftHud.dataset.stage = String(stage);
+      const percent = Math.round((drift.pendingCharge || 0) * 100);
+      driftLabel.textContent = percent > 0 ? `드리프트 +${percent}%` : '드리프트';
+      driftEnd.textContent = '';
+    } else driftLabel.textContent = '';
+  };
   let lastAnnouncement = 0; let lastCallout = 0; let lastNearMisses = 0; let lastStreak = 0;
   let lost = false;
   let previousLevel = -1;
@@ -465,6 +494,8 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
     awakeningDurationFill.style.transform = `scaleX(${state.awakeningRemaining / AWAKENING_SECONDS})`;
     screen.classList.toggle('is-awakened', awakening);
     speed.parentElement!.dataset.boostStage = String(state.boostStage);
+    // ponytail: swap to state.drift once DrivingState.drift lands
+    updateDriftHud((state as { drift?: DriftView }).drift);
     const percentage = Math.round(state.charge * 100);
     charge.textContent = `${percentage}%`; meter.setAttribute('aria-valuenow', String(percentage));
     meterFill.style.transform = `scaleX(${state.charge / BOOST_CAPACITY})`;
