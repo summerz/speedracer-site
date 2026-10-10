@@ -11,3 +11,13 @@ test('every step and device has copy and at least one check', () => {
     assert.ok(Array.isArray(c.targets));
   }
 });
+
+test('await prompts exist for every listed check on both devices', async () => {
+  const { tutorialPrompt } = await import('../output/test/game/driving/tutorialCopy.js');
+  const listed = { steer: ['left', 'right'], altitude: ['up', 'down'], boost: ['on', 'alt-change'], brake: ['on'], hazard: ['pass'] };
+  for (const [step, ids] of Object.entries(listed)) for (const id of ids) for (const device of ['touch', 'keys']) {
+    const p = tutorialPrompt(step, id, device);
+    assert.ok(p && p.title && p.prompt, `${step}/${id}/${device}`);
+  }
+  assert.equal(tutorialPrompt('throttle', 'auto', 'keys'), null);
+});

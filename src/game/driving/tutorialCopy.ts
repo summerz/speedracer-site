@@ -36,3 +36,20 @@ const COPY: Record<TutorialStepId, Record<TutorialDevice, TutorialCopy>> = {
 };
 
 export function tutorialCopy(step: TutorialStepId, device: TutorialDevice): TutorialCopy { return COPY[step][device]; }
+
+const PROMPTS: Record<string, { title: string; keys: string; touch: string }> = {
+  'steer/left': { title: '왼쪽으로 꺾기', keys: '<kbd>A</kbd> 를 눌러 보세요', touch: '왼쪽 원을 왼쪽으로 밀어 보세요' },
+  'steer/right': { title: '오른쪽으로 꺾기', keys: '<kbd>D</kbd> 를 눌러 보세요', touch: '왼쪽 원을 오른쪽으로 밀어 보세요' },
+  'altitude/up': { title: '고도 올리기', keys: '<kbd>↑</kbd> 를 눌러 보세요', touch: '↑ 버튼을 눌러 보세요' },
+  'altitude/down': { title: '고도 내리기', keys: '<kbd>↓</kbd> 를 눌러 보세요', touch: '↓ 버튼을 눌러 보세요' },
+  'boost/on': { title: 'BOOST 누르고 있기', keys: '<kbd>Space</kbd> 를 누른 채로 있어 보세요', touch: '오른쪽 아래 BOOST를 누른 채로 있어 보세요' },
+  'boost/alt-change': { title: '부스트 중 고도 바꾸기', keys: '<kbd>Space</kbd> 를 누른 채 <kbd>↑</kbd> 나 <kbd>↓</kbd> 를 눌러 보세요', touch: 'BOOST를 누른 채 위나 아래로 밀어 보세요' },
+  'brake/on': { title: '감속하기', keys: '<kbd>S</kbd> 를 누르고 있어 보세요', touch: '조이스틱을 아래로 당겨 보세요' },
+  'hazard/pass': { title: '안전한 고도로 바꾸기', keys: '빨간 칸이에요. <kbd>↑</kbd> <kbd>↓</kbd> 로 민트색 고도로 바꿔 보세요', touch: '빨간 칸이에요. ↑ ↓ 버튼으로 민트색 고도로 바꿔 보세요' },
+};
+export function tutorialPrompt(step: TutorialStepId, check: string, device: TutorialDevice): { title: string; prompt: string } | null {
+  const p = PROMPTS[`${step}/${check}`];
+  return p ? { title: p.title, prompt: device === 'touch' ? p.touch : p.keys } : null;
+}
+export const NEAR_MISS_FREEZE = { title: '이렇게 스치면 니어미스', body: '상대 기체 옆을 아슬아슬하게 지나가면 부스트가 채워져요. 가까울수록 많이 채워져요.', tag: '가까울수록 부스트 +' };
+export const STEP_NAMES: Record<TutorialStepId, string> = { throttle: '가속', steer: '조향', altitude: '고도', boost: '부스트', brake: '감속', hazard: '위험 표시', 'near-miss': '니어미스' };
