@@ -117,8 +117,8 @@ export function configureExtraObstacles(track: Track, challenge: RaceChallengeId
       boostRings: ring ? [...createBoostRings(track, arcRails, random, quota), ...courseRings].sort((a, b) => a.distance - b.distance) : [] });
   const baseRandom = mulberry32(Math.round(track.length) + 1);
   (track.heightObstacles as HeightObstacle[]).splice(0, track.heightObstacles.length,
-    ...randomObstacleAltitudes(base.heights, track.altitudeProfile.levels, baseRandom));
-  const corridorObstacles = randomCorridorLanes(base.corridors, track.halfWidth, baseRandom);
+    ...randomObstacleAltitudes(base.heights, track.altitudeProfile.levels, baseRandom, track));
+  const corridorObstacles = randomCorridorLanes(base.corridors, track.halfWidth, baseRandom, track);
   const arcRails = createArcRails(track, challenge, baseRandom), start = rolled(base.heights, base.corridors, base.pads, base.mineFields, arcRails, base.rings, baseRandom);
   return Object.assign(track, {
     corridorObstacles, boostPads: randomPadLanes(track, base.pads, corridorObstacles, baseRandom), mineFields: base.mineFields,

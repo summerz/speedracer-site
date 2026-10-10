@@ -4,7 +4,8 @@ import { focusPrimary, usingKeys } from './platform/menuNavigation';
 import { menuHeader } from './menuHeader';
 import { DRONE_CATALOG } from './game/drone/droneCatalog';
 import { TRACK_CATALOG, DISTRICTS, campaignRankLimit, type DistrictId, type TrackDefinition } from './game/track/trackCatalog';
-import { CITY_CATALOG, cityForDistrict } from './game/track/cityCatalog';
+import { CITY_CATALOG, campaignTracksForCity, cityForDistrict } from './game/track/cityCatalog';
+const gate = campaignTracksForCity('neon').at(-1)!;
 import { createCatalogTrack, trackMetrics } from './game/track/trackRuntime';
 import { isCampaignUnlockAll } from './game/progression/progress';
 import { campaignStatus, campaignCityStatus, nextCampaignTrack, campaignClearRecord, campaignDifficultyProgress, campaignStars, type CampaignProgress } from './game/progression/campaign';
@@ -154,7 +155,7 @@ export function mountCampaign(root: HTMLDivElement, store: ProgressStore, contex
       const tracks = own.flatMap(([id]) => districtTracks(id));
       const done = tracks.filter(t => campaignStatus(campaign, mode, t) === 'cleared').length, stars = tracks.reduce((sum, t) => sum + bestStars(campaign, t), 0);
       const progress = tracks.length === TRACK_CATALOG.length ? '' : `<div class="city-progress"><p class="mono"><span>통과 <b>${done}</b>/${tracks.length}</span><span class="stat-stars">★ <b>${stars}</b>/${tracks.length * 3}</span></p><span class="meter" aria-hidden="true"><i style="width:${stars / (tracks.length * 3) * 100}%"></i></span></div>`;
-      return `<section class="city-group" data-city="${city.id}" data-state="${state}">${head(state === 'locked' ? '<p class="city-lock">🔒 네온시티 32번 트랙을 어느 모드에서든 통과하면 열립니다</p>' : progress)}<div class="district-grid">${own.map(([id, entry], index) => districtCard(id, entry, index)).join('')}</div></section>`;
+      return `<section class="city-group" data-city="${city.id}" data-state="${state}">${head(state === 'locked' ? `<p class="city-lock">🔒 네온시티 마지막 코스 ${number2(gate.order)} ${gate.name}을 통과하면 열려요 · 타임어택과 경쟁 레이스 중 하나만, 난이도는 상관없어요</p>` : progress)}<div class="district-grid">${own.map(([id, entry], index) => districtCard(id, entry, index)).join('')}</div></section>`;
     }).join('');
     if (!finished) return;
     get('district-list').querySelector('[data-district]')?.setAttribute('data-autofocus', '');

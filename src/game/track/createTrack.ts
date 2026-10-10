@@ -11,6 +11,7 @@ import { createBoostPadVisual } from './createBoostPadVisual.js';
 import { createMineFieldVisual } from './createMineFieldVisual.js';
 import { createArcRailVisual } from './createArcRailVisual.js';
 import { createBoostRingVisual } from './createBoostRingVisual.js';
+import { createForkSign } from './createForkSign.js';
 import { createTrackJumpVisual } from './createTrackJumpVisual.js';
 import { roadBoundary, roadPaths, routeDistanceScale, verticalThreshold, type TrackFork } from './trackBranches.js';
 
@@ -233,8 +234,8 @@ export function createTrack(profile?: AltitudeProfile, preset?: DifficultyPreset
     randomizeObstacles(random) {
       const layout = track.rollObstacleLayout?.(random);
       const corridors = layout?.corridors ?? track.corridorObstacles;
-      heightObstacles.splice(0, heightObstacles.length, ...randomObstacleAltitudes(layout?.heights ?? heightObstacles, altitudeProfile.levels, random));
-      if (corridors) Object.assign(track, { corridorObstacles: randomCorridorLanes(corridors, track.halfWidth, random) });
+      heightObstacles.splice(0, heightObstacles.length, ...randomObstacleAltitudes(layout?.heights ?? heightObstacles, altitudeProfile.levels, random, track));
+      if (corridors) Object.assign(track, { corridorObstacles: randomCorridorLanes(corridors, track.halfWidth, random, track) });
       if (layout) Object.assign(track, { boostPads: randomPadLanes(track, layout.pads, track.corridorObstacles ?? [], random), mineFields: layout.mineFields,
         arcRails: layout.arcRails, boostRings: randomRingSides(track, layout.boostRings, track.corridorObstacles ?? [], random) });
     },
@@ -354,7 +355,9 @@ export function createTrackVisual(track: Track, lineColor?: string) {
     track.sample(fork.start - 95, frame);
     const sign = new THREE.Group(); sign.name = `junction-sign-${fork.id}`;
     const arrows = fork.kind === 'horizontal' ? ['←', '→'] : ['↓', '↑'];
-    if (typeof document !== 'undefined') {
+    const cueSign = createForkSign(fork, lineColor, maxAltitude(track) + 3);
+    if (cueSign) { sign.add(cueSign); track.sample(fork.start - 120, frame); }
+    else if (typeof document !== 'undefined') {
       const canvas = document.createElement('canvas'); canvas.width = 1024; canvas.height = 144;
       const context = canvas.getContext('2d');
       if (context) {
