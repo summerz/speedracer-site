@@ -53,7 +53,8 @@ export function forkAt(track: Track, distance: number) {
 }
 export function upcomingFork(track: Track, distance: number, range = 180) {
   const d = localDistance(track, distance);
-  return track.branches?.find(f => f.start > d && f.start - d <= range);
+  return track.branches?.find(f => f.start > d && f.start - d <= range)
+    ?? track.branches?.find(f => f.start + track.length - d <= range);
 }
 /** Physical metres for a shared-progress interval, including forks and the lap seam. */
 export function physicalDistance(track: Track, from: number, gap: number, routeId?: string | null): number {
@@ -144,8 +145,7 @@ export function roadBoundary(track: Track, distance: number, frame: TrackFrame, 
     const axis = frame.right.clone().add(other.right).normalize();
     const gap = (inner ? otherInner.clone().sub(edges[inner]) : edges[inner].clone().sub(otherInner)).dot(axis);
     if (gap <= 0 && Math.abs(edges[inner].clone().sub(otherInner).dot(frame.up)) < track.halfWidth) {
-      if (fork.authoredLayout) edges[inner].addScaledVector(frame.right, gap * .5 * (inner ? 1 : -1) / Math.max(.1, axis.dot(frame.right)));
-      else edges[inner].lerp(otherInner, .5);
+      edges[inner].addScaledVector(frame.right, gap * .5 * (inner ? 1 : -1) / Math.max(.1, axis.dot(frame.right)));
       visible[inner] = false;
     }
   }
@@ -186,16 +186,16 @@ export function withTrackBranches(track: Track, recipes: readonly BranchRecipe[]
   const pairs = new Map<string, (distance: number, otherId: string) => TrackFrame>();
   junctionPairs.set(track, pairs);
   const forks: TrackFork[] = [];
-  for (const [recipeIndex, recipe] of recipes.entries()) {
-    // An early first fork makes the feature immediately discoverable.
+  for (const recipe of recipes) {
+    // Prefer enough uninterrupted road for gentle separation and rejoining.
     const available = eligible.filter(e => (!recipe.intertwined || e.end - e.start - 20 >= 450)
       && !forks.some(f => e.start < f.end + 60 && e.end > f.start - 60));
     available.sort((a, b) => {
       // Leave enough room for the Y mouths before a full coil.
-      const minimum = recipe.intertwined ? 620 : 350;
+      const minimum = recipe.intertwined ? 620 : 650;
       const spacious = Number(b.end - b.start >= minimum) - Number(a.end - a.start >= minimum);
       if (spacious) return spacious;
-      return recipeIndex === 0 ? a.start - b.start : (b.end - b.start) - (a.end - a.start);
+      return (b.end - b.start) - (a.end - a.start) || a.start - b.start;
     });
     const interval = available[0];
     if (!interval) throw new Error(`No safe fork interval: ${recipe.id}`);
@@ -204,7 +204,7 @@ export function withTrackBranches(track: Track, recipes: readonly BranchRecipe[]
     const three = recipe.variety === 'arena-three';
     const junctionLength = three ? 60 : 35;
     // A dedicated, symmetric Y comes before any route-specific experience.
-    const mouthFraction = Math.min(100 / (span - junctionLength * 2), recipe.intertwined ? .18 : .25);
+    const mouthFraction = Math.min((recipe.intertwined ? 100 : three ? 160 : span < 500 ? 140 : 120) / (span - junctionLength * 2), recipe.intertwined ? .18 : three ? .32 : .45);
     const bodySpan = (span - junctionLength * 2) * (1 - mouthFraction * 2);
     // The ellipse descends 52 m below its axis. Account for the base road's
     // height and bank so its lower turn (including the pavement) clears ground.
@@ -236,11 +236,11 @@ export function withTrackBranches(track: Track, recipes: readonly BranchRecipe[]
           let envelope = Math.sin(Math.PI * body) ** (side ? 2 : 3);
           const base = baseSample(start + span * i / count);
           const sign = side === 2 ? 0 : side ? 1 : -1;
-          const weave = side ? 0 : 10 * Math.min(1, bodySpan / 240) ** 2 * Math.sin(4 * Math.PI * body);
+          const weave = side ? 0 : 3 * Math.min(1, bodySpan / 300) ** 2 * Math.sin(4 * Math.PI * body);
           let sideways = sign * (side ? 52 : 34) + weave;
           let rise = side ? 18 : 7;
           if (three) {
-            sideways = sign * (side === 0 ? 40 : 58) + (side === 0 ? 5 : side === 1 ? 8 : 0) * Math.sin(2 * Math.PI * body);
+            sideways = sign * (side === 0 ? 40 : 48) + (side === 0 ? 5 : side === 1 ? 8 : 0) * Math.sin(2 * Math.PI * body);
             rise = side === 2 ? 18 : side === 1 ? 36 : 0;
           }
           if (recipe.kind === 'vertical') { sideways = sign * 34 + weave * .5; rise = side ? 76 : 2; }
@@ -253,10 +253,12 @@ export function withTrackBranches(track: Track, recipes: readonly BranchRecipe[]
           }
           // A vertical-only split hides one deck behind the other from the driver's view.
           // All choices first form a sideways Y on one deck, then rise/coil/roll independently.
-          const mouthSide = sign * (three ? track.halfWidth * 2 + 9 : track.halfWidth + 11);
+          const mouthSide = sign * (three ? track.halfWidth * 2 + .5 : track.halfWidth + 4);
+          if (!recipe.intertwined) sideways = mouthSide + (sideways - mouthSide) * Math.min(1, bodySpan / 300) ** 2;
           const mouthRise = 0;
+          const heightBody = THREE.MathUtils.clamp((u - mouthFraction * .85) / (1 - mouthFraction * 1.7), 0, 1);
           const position = base.position.clone().addScaledVector(base.right, mouthSide * mouth + (sideways - mouthSide) * envelope)
-            .addScaledVector(base.up, mouthRise * mouth + (rise + extraRise - mouthRise) * envelope);
+            .addScaledVector(base.up, mouthRise * mouth + (rise + extraRise - mouthRise) * (recipe.intertwined ? envelope : Math.sin(Math.PI * heightBody) ** 3));
           positions.push(position); frames.push(base);
           if (i) cumulative.push(cumulative[i - 1] + position.distanceTo(positions[i - 1]));
         }
@@ -290,9 +292,11 @@ export function withTrackBranches(track: Track, recipes: readonly BranchRecipe[]
         const u = (i / count * span - junctionLength) / (span - junctionLength * 2);
         const body = (u - mouthFraction) / (1 - mouthFraction * 2);
         const up = transported[i].clone().applyAxisAngle(tangent, seamRoll * smooth(body));
-        // Technical paths offer a full road roll only after leaving the Y.
+        // Short roads need a broader roll ramp; preserve the full turn while
+        // beginning near the end of the Y rather than compressing it into the body.
+        const rollBody = recipe.intertwined ? body : (u - mouthFraction * .85) / (1 - mouthFraction * 1.7);
         const roll = side === 0 && recipe.experience !== 'city' && recipe.experience !== 'arena'
-          ? sweep(body) * Math.PI * 2 * (recipe.direction ?? 1) : 0;
+          ? sweep(rollBody) * Math.PI * 2 * (recipe.direction ?? 1) : 0;
         up.applyAxisAngle(tangent, roll);
         const right = new THREE.Vector3().crossVectors(tangent, up).normalize();
         up.crossVectors(right, tangent).normalize();

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { forkRouteCues, type ForkChoice, type ForkRoadHeight } from './forkCue.js';
+import { LANE_HUES } from './createForkLanes.js';
 import type { TrackFork } from './trackBranches.js';
 
 const ARROWS: Record<ForkChoice, string> = { left: '←', center: '↑', right: '→', lower: '↓', upper: '↑' };
@@ -20,6 +21,7 @@ export function createForkSign(fork: TrackFork, lineColor: string | undefined, y
   cues.forEach((cue, i) => {
     const x = i * PANEL_W;
     if (i) { g.strokeStyle = '#3d6676'; g.lineWidth = 3; g.beginPath(); g.moveTo(x, 18); g.lineTo(x, PANEL_H - 18); g.stroke(); }
+    if (cue.choice in LANE_HUES) { g.fillStyle = LANE_HUES[cue.choice as keyof typeof LANE_HUES]; g.fillRect(x + 8, 8, PANEL_W - 16, 10); }
     g.fillStyle = '#7fffe6'; g.font = 'bold 92px sans-serif'; g.textAlign = 'center';
     g.fillText(ARROWS[cue.choice], x + 62, 62);
     g.textAlign = 'left'; g.fillStyle = '#eaffff'; g.font = 'bold 40px sans-serif';

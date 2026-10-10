@@ -75,7 +75,7 @@ const NEON_TRACK_CATALOG: readonly TrackDefinition[] = Object.freeze(recipes.map
     kind: i % 4 === 1 ? 'vertical' as const : 'horizontal' as const, experience, direction: i % 2 ? -1 as const : 1 as const,
     intertwined: [6, 13, 17, 23].includes(i), ...(i === 8 ? { variety: 'arena-three' as const } : {}), ...(i === 6 ? { groundClearance: 12 } : {}) })]) : [];
   const jumps: readonly JumpRecipe[] = i === 5 ? Object.freeze([Object.freeze({ id: 'voltage-yard-drop', branchId: `${id}-fork`, routeIndex: 1 as const })]) : [];
-  return Object.freeze({ id, name: r[0], jumps, revision: (r[4] ? (r[4].stunts.some(s => s.direction === -1) ? 3 : 2) : 1) + (branches.length ? 3 : 0) + ([6, 8].includes(i) ? 1 : 0) + (jumps.length ? 1 : 0), order: i + 1, district: r[1], rating: r[2], branches,
+  return Object.freeze({ id, name: r[0], jumps, revision: (r[4] ? (r[4].stunts.some(s => s.direction === -1) ? 3 : 2) : 1) + (branches.length ? 4 : 0) + ([6, 8].includes(i) ? 1 : 0) + (jumps.length ? 1 : 0), order: i + 1, district: r[1], rating: r[2], branches,
     predecessor: i ? recipes[i - 1][0].toLowerCase().replaceAll(' ', '-') : null,
     laps: 3, lapLimit: lapLimits[i], halfWidth: r[2] <= 3 ? 14 : 13,
     altitudeLevels: levels, obstacleLevels: Object.freeze(pattern), layout: r[4] ? Object.freeze({ ...r[4], stunts: Object.freeze(r[4].stunts.map(s => Object.freeze(s))) }) : null, features: r[3] + (jumps.length ? ' · 하강 점프' : '') + (branches.length ? ` · ${branches[0].variety ? '3갈래 · 낮은 길/중간 길/높은 길' : branches[0].intertwined ? '입체 교차 분기' : branches[0].kind === 'horizontal' ? '좌우 갈림길' : '상하 갈림길'}` : '') });

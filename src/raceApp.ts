@@ -1,4 +1,5 @@
 import type { ForkCue } from './game/track/forkCue';
+import { LANE_HUES } from './game/track/createForkLanes';
 import { marineZone } from './game/environment/marineZones';
 import { FEATURE_TEST_TRACKS } from './game/track/featureTestTracks';
 import { createDrivingTutorial } from './game/driving/drivingTutorial';
@@ -870,15 +871,16 @@ const FORK_HEIGHT: Record<string, [number, string]> = { low: [1, '낮은 도로'
 let forkCueKey = '';
 let forkCueRouteSince = 0;
 
-/** 3-slot route guide: arrow, name, road height and hazard icons per route; the highlighted slot follows the preview, then locks on selection. */
+/** Route guide (3 slots for left/center/right, 2 for lower/upper): arrow, name, road height and hazard icons per route; the highlighted slot follows the preview, then locks on selection. */
 function renderForkCue(el: HTMLElement, cue: ForkCue | null, coarse: boolean) {
   if (cue?.phase !== 'route') forkCueRouteSince = 0;
   else if (!forkCueRouteSince) forkCueRouteSince = performance.now();
   const routeAge = performance.now() - forkCueRouteSince;
   if (!cue || (cue.phase === 'route' && routeAge > 3200)) { if (!el.hidden) { el.hidden = true; forkCueKey = ''; } return; }
   const dist = `${Math.max(0, Math.ceil(cue.distance / 5) * 5)}m`;
-  const head = cue.phase === 'approach' ? `갈림길 ${dist}` : cue.phase === 'choice' ? `방향 선택 · ${dist}` : '경로 확정';
-  const how = coarse ? '조이스틱 좌우' : '← → 조향';
+  const vertical = cue.kind === 'vertical';
+  const head = cue.phase === 'approach' ? `갈림길 ${dist}` : cue.phase === 'choice' ? `${vertical ? '고도' : '방향'} 선택 · ${dist}` : '경로 확정';
+  const how = vertical ? (coarse ? '↑ ↓ 버튼 · 지금 고도로 선택' : '↑ ↓ 고도 · 지금 고도로 선택') : coarse ? '조이스틱 좌우' : '← → 조향';
   const shown = cue.phase === 'route' ? cue.routes.filter(r => r.id === cue.selectedRouteId) : cue.routes;
   const key = [cue.phase, cue.previewRouteId, cue.selectedRouteId, head, how].join('|');
   el.hidden = false;
@@ -896,7 +898,7 @@ function renderForkCue(el: HTMLElement, cue: ForkCue | null, coarse: boolean) {
     ].join('') || '<span class="clear">✓<small>안전</small></span>';
     const on = cue.phase === 'route' || r.id === cue.previewRouteId;
     const mark = cue.phase === 'route' ? '<em>✓ 확정</em>' : r.id === cue.defaultRouteId ? '<em>기본</em>' : '';
-    return `<div class="fork-slot${on ? ' is-on' : ''}${cue.phase === 'route' ? ' is-locked' : ''}"><b class="fork-arrow">${FORK_ARROWS[r.choice] ?? '↑'}</b><strong>${r.name}</strong><span class="fork-height"><span class="fork-bars">${bars}</span><small>${label}</small></span><span class="fork-chips">${chips}</span>${mark}</div>`;
+    return `<div class="fork-slot${on ? ' is-on' : ''}${cue.phase === 'route' ? ' is-locked' : ''}" style="--lane:${LANE_HUES[r.choice as keyof typeof LANE_HUES] ?? 'transparent'}"><b class="fork-arrow">${FORK_ARROWS[r.choice] ?? '↑'}</b><strong>${r.name}</strong><span class="fork-height"><span class="fork-bars">${bars}</span><small>${label}</small></span><span class="fork-chips">${chips}</span>${mark}</div>`;
   }).join('');
   el.innerHTML = `<p class="fork-head"><b>${head}</b>${cue.phase === 'route' ? '' : `<small>${how}</small>`}</p><div class="fork-slots">${slots}</div>`;
 }

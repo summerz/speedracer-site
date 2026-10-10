@@ -65,7 +65,7 @@ for (const challenge of ['easy', 'normal', 'hard']) test(`${challenge}: randomiz
     .map(list => list.filter(o => o.routeId?.startsWith(fork.id)));
   const expected = layout();
   assert.deepEqual(expected.map(a => a.length), [2, 1, 1, 0, 0, 0]);
-  assert.ok(Math.abs(physicalDistance(track, expected[0][0].distance, expected[0][1].distance - expected[0][0].distance, fork.routes[0].id) - 140) < 1e-8);
+  assert.ok(Math.abs(physicalDistance(track, expected[0][0].distance, expected[0][1].distance - expected[0][0].distance, fork.routes[0].id) - 120) < 1e-8);
   for (const list of expected) for (const o of list) {
     const route = fork.routes.find(r => r.id === o.routeId);
     assert.ok(o.distance > route.mouthEnd && o.distance < route.mergeStart);
