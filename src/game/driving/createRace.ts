@@ -5,13 +5,12 @@ import { RACE_CHALLENGES, challengeLapLimit, type RaceChallengeId } from '../tra
 import { createRaceWeather } from '../environment/createRaceWeather';
 import { createNightSky } from '../environment/createNightSky';
 import { NIGHT_ENVIRONMENTS } from '../environment/raceEnvironment';
-import type { NightEnvironment } from '../environment/raceEnvironment';
+import type { RaceEnvironment } from '../environment/raceEnvironment';
 import { createCatalogTrack } from '../track/trackRuntime';
 import type { TrackDefinition } from '../track/trackCatalog';
 import { createDistrictScenery } from '../track/createDistrictScenery';
 import { createAbyssScenery } from '../track/createAbyssScenery';
 import { createMarineSnow } from '../environment/createMarineSnow';
-import { ABYSS_ENVIRONMENTS } from '../environment/abyssEnvironment';
 import { RENDER_QUALITIES } from '../../platform/renderQuality';
 import type { RenderQuality } from '../../platform/renderQuality';
 import { createAutomaticQuality } from '../../platform/automaticQuality';
@@ -128,16 +127,14 @@ export function createRace(
   mode: RaceMode = 'time-attack',
   course?: TrackDefinition,
   rivalSlots: readonly RivalItemId[] = [],
-  selectedEnvironment: NightEnvironment = NIGHT_ENVIRONMENTS[0],
+  environment: RaceEnvironment = NIGHT_ENVIRONMENTS[0],
   challenge: RaceChallengeId = 'normal',
   intro = false,
   guidance: { tutorial?: ReturnType<typeof createDrivingTutorial>; practice?: boolean } = {},
 ): Race {
   const config = resolveDroneConfiguration(configuration);
   const visuals = config.speedEffects;
-  // ponytail: dev preview until DistrictId 'abyss' lands; replace with course.district === 'abyss'
-  const abyssPreview = import.meta.env.DEV && /[?&]abyss=\d/.test(location.hash);
-  const environment = abyssPreview ? ABYSS_ENVIRONMENTS[/[?&]abyss=2/.test(location.hash) ? 1 : 0] : selectedEnvironment;
+  const underwater = environment.underwater;
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setClearColor(environment.fog);
   container.dataset.environment = environment.id;
@@ -157,13 +154,13 @@ export function createRace(
   const sky = createNightSky(environment, track.sample(0).tangent); scene.add(sky.object);
   const weather = createRaceWeather(!!environment.rain, track.length, Math.random, environment.rainIntensity); scene.add(weather.object);
   container.dataset.rainIntensity = environment.rain ? weather.intensity : 'none';
-  const scenery = course ? (abyssPreview ? createAbyssScenery(track, course) : createDistrictScenery(track, course)) : undefined;
+  const scenery = course ? (underwater ? createAbyssScenery(track, course) : createDistrictScenery(track, course)) : undefined;
   if (scenery) scene.add(scenery.object);
-  const marineSnow = abyssPreview ? createMarineSnow() : undefined;
+  const marineSnow = underwater ? createMarineSnow() : undefined;
   if (marineSnow) scene.add(marineSnow.object);
   const trackVisual = createTrackVisual(track, config.boostStyle.pulseColor);
   scene.add(trackVisual.object);
-  if (abyssPreview) trackVisual.object.traverse(o => { if (o instanceof THREE.GridHelper) o.visible = false; });
+  if (underwater) trackVisual.object.traverse(o => { if (o instanceof THREE.GridHelper) o.visible = false; });
   const drone = createRacingDrone({ variant: config.modelVariant, neonBoost: 1.7, thrusterIntensity: 0.35 });
   scene.add(drone);
   const thrusters = createThrusterEffect(drone, scene, config.boostStyle);

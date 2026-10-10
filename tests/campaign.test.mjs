@@ -18,7 +18,7 @@ const outcome = (track = first, mode = 'time-attack', changes = {}) => ({ mode, 
 const complete = (p, id, result = outcome()) => applyCommand(p, { kind: 'campaign-result', input: reward(id), outcome: result });
 
 test('new districts append eight varied courses without changing earlier campaign identities', () => {
-  assert.equal(TRACK_CATALOG.length,32); assert.equal(Object.keys(DISTRICTS).length,8);
+  assert.equal(TRACK_CATALOG.length,32); assert.equal(new Set(TRACK_CATALOG.map(track => track.district)).size,8);
   assert.equal(TRACK_CATALOG[23].order,24);
   for (const district of ['harbor','desert']) {
     const courses=TRACK_CATALOG.filter(t=>t.district===district);

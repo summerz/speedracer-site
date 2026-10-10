@@ -2,7 +2,7 @@ import type { JumpRecipe } from './trackJump.js';
 import type { CourseLayout, CourseShape } from './trackAuthoring.js';
 import type { BranchRecipe } from './trackBranches.js';
 
-export type DistrictId = 'residential' | 'industrial' | 'stadium' | 'skyline' | 'research' | 'orbital' | 'harbor' | 'desert';
+export type DistrictId = 'residential' | 'industrial' | 'stadium' | 'skyline' | 'research' | 'orbital' | 'harbor' | 'desert' | 'abyss';
 export const DISTRICTS: Record<DistrictId, { name: string; color: string; description: string }> = {
   residential: { name: '네온 주거지', color: '#67dcd0', description: '층별 창 조명과 주거 타워 · 순환로와 블록 사이 입체 주행' },
   industrial: { name: '전력 산업구역', color: '#ffac52', description: '반응로와 전력 기둥 · 공장 사이 연속 코일과 급강하' },
@@ -12,6 +12,7 @@ export const DISTRICTS: Record<DistrictId, { name: string; color: string; descri
   orbital: { name: '오비탈 프런티어', color: '#e4eebb', description: '떠 있는 건물과 거대한 궤도 링 · 공중 교차와 연속 반전' },
   harbor: { name: '네온 항만', color: '#5acbff', description: '낮은 창고와 크레인 · 부두 순환로, 연결교와 입체 8자' },
   desert: { name: '솔라 사막기지', color: '#e9c96b', description: '낮은 계단형 기지와 태양광 패널 · 넓은 곡선과 압축된 연속 회전' },
+  abyss: { name: '수중 도시', color: '#5ff5e6', description: '해저 돔과 연결 터널 · 수면빛과 생물 발광 사이 완만한 고도 주행' },
 };
 export interface TrackDefinition {
   readonly id: string; readonly name: string; readonly revision: number; readonly order: number;
@@ -65,7 +66,7 @@ export const TRACK_CATALOG: readonly TrackDefinition[] = Object.freeze(recipes.m
   const pattern = levels === 2 ? [1, 0, 1, 0] : levels === 3 ? [2, 0, 1, 2, 1, 0] : [3, 0, 1, 2, 3, 1, 2, 0];
   const id = r[0].toLowerCase().replaceAll(' ', '-');
   const branchCourses = [0, 1, 4, 5, 6, 8, 9, 12, 13, 15, 16, 17, 20, 21, 23, 24, 25, 28, 29];
-  const experience: BranchRecipe['experience'] = ({ residential: 'city', industrial: 'reactor', stadium: 'arena', skyline: 'sky', research: 'prism', orbital: 'orbit', harbor: 'sky', desert: 'reactor' } as const)[r[1]];
+  const experience: BranchRecipe['experience'] = ({ residential: 'city', industrial: 'reactor', stadium: 'arena', skyline: 'sky', research: 'prism', orbital: 'orbit', harbor: 'sky', desert: 'reactor', abyss: 'prism' } as const)[r[1]];
   const branches: readonly BranchRecipe[] = branchCourses.includes(i) ? Object.freeze([Object.freeze({ id: `${id}-fork`,
     kind: i % 4 === 1 ? 'vertical' as const : 'horizontal' as const, experience, direction: i % 2 ? -1 as const : 1 as const,
     intertwined: [6, 13, 17, 23].includes(i), ...(i === 6 ? { groundClearance: 12 } : {}) })]) : [];

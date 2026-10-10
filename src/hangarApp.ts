@@ -1,3 +1,4 @@
+import { featureTestTrackHref } from './game/track/featureTestTracks';
 import { DRONE_CATALOG, droneStats } from './game/drone/droneCatalog';
 import type { DroneCatalogEntry } from './game/drone/droneCatalog';
 import { createHangar } from './game/createHangar';
@@ -74,6 +75,7 @@ export function mountHangar(root: HTMLDivElement, selected: DroneCatalogEntry, o
           </div>
           <div class="free-drive"><a class="free-drive-link" href="#drive">시험 주행 · NEON CIRCUIT <span aria-hidden="true">↗</span></a><span class="free-drive-note">포인트 획득 · 캠페인 기록 없음</span></div>
           <div class="free-drive"><a class="free-drive-link" href="#drive?track=voltage-yard&mode=time-attack&challenge=easy&test=1">기능 테스트 · 점프 · VOLTAGE YARD <span aria-hidden="true">↗</span></a><span class="free-drive-note">새 기능 미리 타 보기 · 기록 없음</span></div>
+          <div class="free-drive"><a class="free-drive-link" href="${featureTestTrackHref('trench-line')}">기능 테스트 · 수중 도시 · TRENCH LINE <span aria-hidden="true">↗</span></a><span class="free-drive-note">1랩 시험 주행 · 기록 없음</span></div>
         </section>
       </div>
 
