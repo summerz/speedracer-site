@@ -255,6 +255,8 @@ button:focus-visible { outline:2px solid #c9f9f2; outline-offset:3px; }
   .race-header { padding-top:max(10px,env(safe-area-inset-top)); }.corner-hint { display:none; }
   .has-touch-controls .drive-hud { bottom:max(18px,env(safe-area-inset-bottom)); left:50%; transform:translateX(-50%); width:min(310px,calc(100% - 340px)); }
   .has-touch-controls .fork-guide { margin:10px -45px 0; text-align:center; }
+  .drive-screen .tutorial-coach { top:max(92px,calc(env(safe-area-inset-top) + 80px)); left:max(18px,env(safe-area-inset-left)); transform:none; width:300px; padding:10px 12px; }
+  .drive-screen .tutorial-coach h3 { font-size:20px; }
   .drive-overlay { padding:16px; background:linear-gradient(90deg,#030b1680,transparent 65%); }
   .drive-dialog { width:340px; padding:18px; }
   .view-preview { width:max-content; }
@@ -386,7 +388,7 @@ button:focus-visible { outline:2px solid #c9f9f2; outline-offset:3px; }
 @media (max-height:500px) { .race-callout { top:56px; font-size:20px; } .race-callout[data-kind='perfect'] { font-size:24px; } .race-announcement[data-kind='final-lap'] { top:84px; } .race-announcement[data-kind='final-lap'] strong { font-size:28px; } .race-announcement[data-kind='final-lap'] span { display:none; } .race-streak { font-size:14px; top:30%; } .race-nearmiss { top:60%; font-size:18px; } }
 
 /* Full-screen race result: applies only while the race is finished; start and pause keep the left dialog. */
-.drive-screen[data-phase='finished'] :is(.drive-hud,.race-items,.hazard-edges,.race-pause,.race-header,.race-countdown,.race-announcement,.race-callout,.race-nearmiss,.race-streak,.race-notice,.focus-feedback) { display:none !important; }
+.drive-screen[data-phase='finished'] :is(.drive-hud,.race-items,.hazard-edges,.race-pause,.race-header,.race-countdown,.race-announcement,.race-callout,.race-nearmiss,.race-streak,.race-notice,.focus-feedback,.tutorial-coach) { display:none !important; }
 .drive-screen[data-phase='finished'] .drive-overlay { --gain:#4ff0a6; --loss:#ff7a6b; --gold:#ffd66b; padding:max(40px,env(safe-area-inset-top)) max(56px,env(safe-area-inset-right)) max(32px,env(safe-area-inset-bottom)) max(56px,env(safe-area-inset-left)); overflow-y:auto; pointer-events:auto;
   background:radial-gradient(120% 70% at 50% 50%,transparent 35%,#050a10bb 100%),linear-gradient(180deg,#050a10cc 0%,#050a1055 30%,transparent 42%,transparent 58%,#050a10f2 76%); }
 .drive-screen[data-phase='finished'] .drive-dialog { align-self:stretch; display:grid; width:100%; max-height:none; min-height:100%; padding:0; overflow:visible; background:none; border:0;
@@ -483,3 +485,23 @@ button:focus-visible { outline:2px solid #c9f9f2; outline-offset:3px; }
 @media (max-width:600px) { .result-card { flex:none; overflow:visible; } }
 @media (max-width:600px) { .drive-screen[data-phase='finished'] .drive-overlay { padding-bottom:0; } .drive-screen[data-phase='finished'] .drive-dialog { padding-bottom:calc(200px + env(safe-area-inset-bottom)); } }
 @media (max-width:600px) { .drive-screen[data-phase='finished'] .drive-dialog { align-self:flex-start; height:auto; } }
+.tutorial-coach { position:absolute; z-index:6; top:max(96px, calc(env(safe-area-inset-top) + 84px)); left:50%; transform:translateX(-50%); width:min(360px, calc(100% - 32px)); padding:12px 14px; border-radius:10px; background:#081620e6; border:1px solid #56dacf66; box-shadow:0 8px 30px #0008, 0 0 24px #56dacf22; backdrop-filter:blur(8px); pointer-events:none; color:#e9f2f4; }
+.tutorial-coach[hidden] { display:none; }
+.tutorial-coach .coach-eyebrow { display:flex; justify-content:space-between; font:500 10px 'IBM Plex Mono',monospace; letter-spacing:1.6px; color:#56dacf; }
+.tutorial-coach .coach-eyebrow span:last-child { color:#6f8590; margin-right:64px; }
+.tutorial-coach h3 { margin:6px 0 4px; font:700 24px/1.05 'Barlow Condensed',sans-serif; }
+.tutorial-coach p { margin:0; font-size:13px; line-height:1.5; color:#cfe1e4; }
+.tutorial-coach .ok { color:#64ffb9; } .tutorial-coach .bad { color:#ff6851; }
+.tutorial-coach .coach-checks { display:flex; gap:12px; margin-top:9px; font:500 11px 'IBM Plex Mono',monospace; color:#8c9ba4; }
+.tutorial-coach .coach-checks .is-done { color:#4ff0a6; }
+.tutorial-coach kbd { display:inline-block; min-width:22px; padding:1px 6px; border:1px solid #9fc1c6; border-bottom-width:2px; border-radius:4px; font:500 11px 'IBM Plex Mono',monospace; background:#0d2430; color:#fff; text-align:center; }
+.tutorial-coach .coach-skip { position:absolute; right:12px; top:34px; pointer-events:auto; font-size:11px; color:#9bb4c1; background:transparent; border:1px solid #58717d70; border-radius:12px; padding:3px 9px; min-height:0; touch-action:manipulation; }
+.tutorial-coach .coach-off { margin-left:auto; pointer-events:auto; padding:0; min-height:0; border:0; background:transparent; color:#6f8590; font:inherit; text-decoration:underline; text-underline-offset:2px; touch-action:manipulation; }
+.tutorial-coach .coach-bar { position:absolute; left:0; right:0; bottom:0; height:3px; border-radius:0 0 10px 10px; overflow:hidden; background:#ffffff12; }
+.tutorial-coach .coach-bar i { display:block; height:100%; background:#56dacf; box-shadow:0 0 8px #56dacf; transition:width .2s; }
+.tutorial-coach .coach-toast { position:absolute; left:50%; top:calc(100% + 12px); transform:translateX(-50%); white-space:nowrap; padding:8px 16px; border-radius:20px; background:#0b2a22ee; border:1px solid #4ff0a6; color:#4ff0a6; font:600 14px -apple-system,sans-serif; box-shadow:0 0 20px #4ff0a644; }
+[data-coach-target] { outline:2px solid #ffd66b; outline-offset:4px; box-shadow:0 0 0 8px #ffd66b22, 0 0 26px #ffd66b88; animation:coach-pulse 1.4s ease-in-out infinite; }
+.touch-joystick[data-coach-target], .touch-boost[data-coach-target], .touch-rise[data-coach-target], .touch-descend[data-coach-target] { border-radius:50%; }
+.height-guide[data-coach-target], .boost-readout[data-coach-target] { border-radius:8px; }
+@keyframes coach-pulse { 50% { outline-color:#ffd66b80; box-shadow:0 0 0 12px #ffd66b11, 0 0 18px #ffd66b55; } }
+@media (prefers-reduced-motion:reduce) { [data-coach-target] { animation:none; } }
