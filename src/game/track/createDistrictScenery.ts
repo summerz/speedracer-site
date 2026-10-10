@@ -20,9 +20,49 @@ export function createDistrictScenery(track: Track, definition: TrackDefinition)
   const color = new THREE.Color(DISTRICTS[definition.district].color);
   const bodyMaterial = new THREE.MeshStandardMaterial({ color: definition.district === 'desert' ? '#241d14' : '#09131d', roughness: .8, metalness: .45 });
   const windowMaterial = new THREE.MeshBasicMaterial({ color: color.clone().multiplyScalar(1.7), toneMapped: false });
+  const timeUniform = { value: 0 };
+  const HASH = 'fract(sin(dot(instanceMatrix[3].xyz, vec3(12.9898, 78.233, 37.719))) * 43758.5453)';
+  const patch = (mat: THREE.MeshBasicMaterial, key: string, fragment: string) => {
+    mat.customProgramCacheKey = () => key;
+    mat.onBeforeCompile = shader => {
+      shader.uniforms.uTime = timeUniform;
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nvarying float vHash;\nvarying vec2 vUv2;')
+        .replace('#include <begin_vertex>', `#include <begin_vertex>\nvHash = ${HASH};\nvUv2 = uv;`);
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', '#include <common>\nuniform float uTime;\nvarying float vHash;\nvarying vec2 vUv2;')
+        .replace('#include <color_fragment>', `#include <color_fragment>\n${fragment}`);
+    };
+  };
+  patch(windowMaterial, 'city-window-flicker', `
+    {
+      float h = vHash, b = 1.0;
+      if (h < 0.10) {
+        float period = 9.0 + h * 110.0, t = fract(uTime / period + h * 13.0);
+        b = mix(0.15, 1.0, smoothstep(0.25, 0.25 + 0.4 / period, t) * (1.0 - smoothstep(1.0 - 0.4 / period, 1.0, t)));
+      } else if (h > 0.94) {
+        float period = 6.0 + (h - 0.94) * 133.0, t = mod(uTime + h * 97.0, period);
+        b = t < 0.6 ? mix(0.3, 1.0, step(0.5, fract(uTime * 17.0 + h * 7.0))) : 1.0;
+      }
+      diffuseColor.rgb *= b;
+    }`);
+  const billboardMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false });
+  patch(billboardMaterial, 'city-billboard-ads', `
+    {
+      float h = vHash, len = 6.0 + h * 4.0, tc = uTime / len, cyc = floor(tc), ph = fract(tc);
+      vec3 pal[4] = vec3[4](vec3(0.337, 0.855, 0.812), vec3(1.0, 0.31, 0.847), vec3(1.0, 0.702, 0.278), vec3(0.545, 0.482, 1.0));
+      int ia = int(mod(floor(cyc + h * 5.0), 4.0)), ib = int(mod(floor(cyc - 1.0 + h * 5.0), 4.0));
+      vec3 ca = pal[ia], cb = pal[ib];
+      float wipe = clamp(ph * len / 0.35, 0.0, 1.0);
+      vec3 base = vUv2.x > wipe ? cb : ca;
+      float cy = vUv2.x > wipe ? cyc - 1.0 : cyc;
+      float bands = 0.4 + 0.6 * step(0.5, fract(vUv2.y * 3.0 + cy * 0.37));
+      float border = max(max(step(vUv2.x, 0.04), step(0.96, vUv2.x)), max(step(vUv2.y, 0.06), step(0.94, vUv2.y)));
+      diffuseColor.rgb = base * max(bands, border * 1.25) * 0.95;
+    }`);
   const accentMaterial = new THREE.MeshBasicMaterial({ color: color.clone().multiplyScalar(.75), toneMapped: false });
-  const boxes: THREE.Matrix4[] = [], windows: THREE.Matrix4[] = [], accents: THREE.Matrix4[] = [];
-  const clusters: { center: THREE.Vector3; radius: number; boxes: THREE.Matrix4[]; windows: THREE.Matrix4[]; accents: THREE.Matrix4[] }[] = [];
+  const boxes: THREE.Matrix4[] = [], windows: THREE.Matrix4[] = [], accents: THREE.Matrix4[] = [], billboards: THREE.Matrix4[] = [];
+  const clusters: { center: THREE.Vector3; radius: number; boxes: THREE.Matrix4[]; windows: THREE.Matrix4[]; accents: THREE.Matrix4[]; billboards: THREE.Matrix4[] }[] = [];
   const dummy = new THREE.Object3D();
   const matrix = (x: number, y: number, z: number, sx: number, sy: number, sz: number) => {
     dummy.position.set(x, y, z); dummy.scale.set(sx, sy, sz); dummy.rotation.set(0, 0, 0); dummy.updateMatrix(); return dummy.matrix.clone();
@@ -50,7 +90,7 @@ export function createDistrictScenery(track: Track, definition: TrackDefinition)
     const district = definition.district;
     const height = district === 'skyline' ? 100 + random() * 200 : district === 'orbital' ? 80 + random() * 180 : district === 'industrial' ? 25 + random() * 65 : district === 'stadium' ? 25 + random() * 55 : district === 'harbor' ? 20 + random() * 40 : district === 'desert' ? 16 + random() * 34 : 40 + random() * 120;
     const floor = district === 'orbital' ? 24 + random() * 40 : 0;
-    const firstBox = boxes.length, firstWindow = windows.length, firstAccent = accents.length;
+    const firstBox = boxes.length, firstWindow = windows.length, firstAccent = accents.length, firstBillboard = billboards.length;
     boxes.push(matrix(x, floor + height / 2, z, width, height, depth));
     // Terraced crowns, reactor pylons and arena bleachers produce distinct silhouettes.
     if (district === 'research' || district === 'skyline') boxes.push(matrix(x, floor + height + 12, z, width * .65, 24, depth * .65));
@@ -78,9 +118,14 @@ export function createDistrictScenery(track: Track, definition: TrackDefinition)
       windows.push(matrix(x + width / 2 + .05, y, z, .12, .8, depth * .8));
       if (random() > .35) windows.push(matrix(x, y, z + depth / 2 + .05, width * .75, .8, .12));
     }
+    if (district !== 'desert' && district !== 'harbor' && random() < .22 && height > 45) {
+      // Face the panel toward the nearest stretch of road so drivers actually see it.
+      const near = route.reduce((a, p) => Math.hypot(p.x - x, p.z - z) < Math.hypot(a.x - x, a.z - z) ? p : a), dx = near.x - x, dz = near.z - z, y = floor + height * (.55 + random() * .25);
+      billboards.push(Math.abs(dx) > Math.abs(dz) ? matrix(x + Math.sign(dx) * (width / 2 + .3), y, z, .25, 11, Math.min(depth * .7, 26)) : matrix(x, y, z + Math.sign(dz) * (depth / 2 + .3), Math.min(width * .7, 26), 11, .25));
+    }
     accents.push(matrix(x, floor + height, z, width + .3, .55, depth + .3));
     clusters.push({ center: new THREE.Vector3(x, floor + height / 2, z), radius: Math.hypot(radius, height / 2 + 36),
-      boxes: boxes.slice(firstBox), windows: windows.slice(firstWindow), accents: accents.slice(firstAccent) });
+      boxes: boxes.slice(firstBox), windows: windows.slice(firstWindow), accents: accents.slice(firstAccent), billboards: billboards.slice(firstBillboard) });
   }
   const geometry = new THREE.BoxGeometry();
   const mesh = (mat: THREE.Material, matrices: THREE.Matrix4[], name: string) => {
@@ -91,23 +136,26 @@ export function createDistrictScenery(track: Track, definition: TrackDefinition)
   const lights = mesh(windowMaterial, windows, 'city-windows');
   const crowns = mesh(accentMaterial, accents, 'city-crowns');
   object.add(...landmarkObjects);
+  const boards = mesh(billboardMaterial, billboards, 'city-billboards');
   let quality: RenderQuality = 'balanced';
   const lastPosition = new THREE.Vector3(Infinity, Infinity, Infinity);
   let dirty = true;
-  const update = (position: THREE.Vector3) => {
+  const update = (position: THREE.Vector3, time = 0) => {
+    timeUniform.value = time;
     if (!dirty && lastPosition.distanceToSquared(position) < 35 ** 2) return;
     dirty = false; lastPosition.copy(position);
     const ranges = quality === 'low' ? [480, 165] : quality === 'high' ? [800, 380] : [650, 280];
-    let bodyCount = 0, windowCount = 0, crownCount = 0;
+    let bodyCount = 0, windowCount = 0, crownCount = 0, boardCount = 0;
     for (const cluster of clusters) {
       const distance = cluster.center.distanceTo(position) - cluster.radius;
       if (distance > ranges[0]) continue;
       for (const matrix of cluster.boxes) bodies.setMatrixAt(bodyCount++, matrix);
       for (const matrix of cluster.accents) crowns.setMatrixAt(crownCount++, matrix);
       if (distance > ranges[1]) continue;
+      for (const matrix of cluster.billboards) boards.setMatrixAt(boardCount++, matrix);
       for (let i = 0; i < cluster.windows.length; i += quality === 'low' ? 2 : 1) lights.setMatrixAt(windowCount++, cluster.windows[i]);
     }
-    for (const [mesh, count] of [[bodies, bodyCount], [lights, windowCount], [crowns, crownCount]] as const) {
+    for (const [mesh, count] of [[bodies, bodyCount], [lights, windowCount], [crowns, crownCount], [boards, boardCount]] as const) {
       mesh.count = count; mesh.instanceMatrix.needsUpdate = true;
     }
     landmarkObjects.forEach((object, i) => {
@@ -118,7 +166,7 @@ export function createDistrictScenery(track: Track, definition: TrackDefinition)
   };
   update(track.sample(0).position);
   return {
-    object, landmark, landmarks, counts: { buildings: clusters.length, windows: windows.length },
+    object, landmark, landmarks, counts: { buildings: clusters.length, windows: windows.length, billboards: billboards.length },
     setQuality(value: RenderQuality) { if (quality !== value) { quality = value; dirty = true; update(lastPosition.clone()); } },
     setOverview(overview: boolean) { object.visible = !overview; },
     update,

@@ -680,7 +680,7 @@ export function createRace(
     if (replaying) speedLines.update(replayClock + replayT, replayPose.speed, replayPick.shot === 1 && replayPose.mode >= 2, reducedMotion.matches, replayPose.mode === 3);
     else speedLines.update(state.elapsed, state.speed, awake || state.boosting, reducedMotion.matches, awake || state.boostStage === 2);
     views.prepareDriving();
-    scenery?.setOverview(false); scenery?.update(drone.position); sky.update(camera.position);
+    scenery?.setOverview(false); scenery?.update(drone.position, reducedMotion.matches ? 0 : performance.now() / 1000); sky.update(camera.position);
     const weatherFrame = weather.update(camera.position, state.distance, (guidance.tutorial ? worldDelta : delta) * slow, phase === 'running' && !tutorialFrozen(), reducedMotion.matches);
     ambient.intensity = environment.ambientIntensity + weatherFrame.flash * 5;
     sun.intensity = environment.lightIntensity + weatherFrame.flash * 10;
