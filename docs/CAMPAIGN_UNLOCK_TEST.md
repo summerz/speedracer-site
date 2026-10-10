@@ -1,6 +1,6 @@
 # 캠페인 모두 해금 테스트 계약
 
-운영 빌드에서도 사용하는 숨겨진 테스트 기능이다. UI는 Claude, 진행·저장·기록 정리는 Codex가 맡는다. 작은 기능을 먼저 배포할 수 있게 현재 main(32트랙)에 독립적으로 연결한다. 버전 변경과 배포는 UI 연결 뒤 사용자 요청 시 한 번만 한다.
+운영 빌드에서도 사용하는 숨겨진 테스트 기능이다. UI는 Claude, 진행·저장·기록 정리는 Codex가 맡는다. 마린시티 편입 후 정식 48트랙과 공유 도시 gate에 적용한다. 버전 변경과 배포는 UI 연결 뒤 사용자 요청 시 한 번만 한다.
 
 ## 화면 진입
 
@@ -61,12 +61,12 @@ store.command({ kind: 'campaign-unlock-all', on: boolean }): Promise<Progress>
 
 `tests/campaignUnlock.test.mjs`: 플래그 저장·기존 데이터 호환, 전체 트랙/양 모드 해금, 실제 보상 저장, 연쇄 재잠금, 정상 진행 유지, 지갑 보존, cache-only 미리보기, 실제 기록 키/고스트 삭제 범위, 저장 실패와 재시도.
 
-## Marine 데이터 후속 연결
+## Marine 도시 gate 연결
 
-`feat/campaign-unlock-marine`은 Marine 데이터 `67151b4` + 동일 토글/기록 정리 로직으로 48트랙과 공유 도시 gate를 검증한 보존 브랜치다. main용 토글 위에 도시 데이터를 합칠 때 `campaign.ts`의 접근 조건은 다음 계약으로 유지한다.
+`feat/marine-campaign-integration`은 도시 데이터 `67151b4`를 0.19.17의 모두 해금 토글 위에 연결한다. `campaign.ts`의 접근 조건은 다음과 같다.
 
 - `campaignTrackUnlocked` 안에서 Marine gate를 먼저 검사하고, 이어서 predecessor를 검사한다. 이 함수는 unlockAll과 자기 자신 cleared를 무시한다.
 - `campaignStatus`는 cleared → unlockAll 또는 campaignTrackUnlocked → locked 순서로 판정한다.
 - `campaignCityStatus`의 Marine 잠금 조건에 `!progress.unlockAll`을 추가한다.
 
-Marine 통합판 테스트는 보존 브랜치의 `tests/campaignUnlock.test.mjs`에 있다. 특히 상대 모드의 삭제 예정 32번 기록으로 도시가 계속 열리지 않는 경우와, 어느 한 모드의 정상 32번 통과가 남아 있을 때 도시가 유지되는 경우를 검증한다. 도시 데이터 도입 전에는 미래 트랙 ID를 unknown으로 보존하며, 도입 후 정상 규칙으로 정리한다.
+Marine 통합판 테스트는 `tests/campaignUnlock.test.mjs`에 있다. 특히 상대 모드의 삭제 예정 32번 기록으로 도시가 계속 열리지 않는 경우와, 어느 한 모드의 정상 32번 통과가 남아 있을 때 도시가 유지되는 경우를 검증한다. 도시 데이터 도입 전에는 미래 트랙 ID를 unknown으로 보존하며, 도입 후 정상 규칙으로 정리한다.

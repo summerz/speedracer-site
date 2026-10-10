@@ -1,15 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { initialProgress, applyCommand, validateProgress, isCampaignUnlockAll, setCampaignUnlockAll, previewRelock } from '../output/test/game/progression/progress.js';
-import { campaignStatus } from '../output/test/game/progression/campaign.js';
+import { campaignStatus, campaignCityStatus } from '../output/test/game/progression/campaign.js';
 import { createProgressStore } from '../output/test/game/progression/progressStore.js';
 import { campaignRecordKeys } from '../output/test/game/progression/campaignRecordCleanup.js';
 import { TRACK_CATALOG } from '../output/test/game/track/trackCatalog.js';
+import { campaignTracksForCity } from '../output/test/game/track/cityCatalog.js';
 import { challengeLapLimit } from '../output/test/game/track/raceChallenge.js';
 import { createRaceRecords } from '../output/test/game/driving/raceRecords.js';
 import { ghostKey } from '../output/test/game/driving/raceGhost.js';
 const modes = ['time-attack', 'competition'];
-const neon = TRACK_CATALOG;
+const neon = campaignTracksForCity('neon'), marine = campaignTracksForCity('marine');
 const entry = (cleared = true) => ({cleared, attempts:1, records:{}, stars:cleared?3:0});
 const pairs = plan => plan.flatMap(group => group.trackIds.map(id => `${group.mode}/${id}`));
 function storage() {
@@ -35,55 +36,58 @@ test('unlock is persisted without fake clears and normal race rewards still save
   assert.equal(isCampaignUnlockAll(validateProgress(JSON.parse(JSON.stringify(on)))),true);
   for (const mode of modes) {
     for (const track of TRACK_CATALOG) assert.equal(campaignStatus(on.campaign,mode,track),'available');
+    assert.equal(campaignCityStatus(on.campaign,mode,'marine'),'available');
   }
-  const completed = clear(on,neon.at(-1),'competition','easy');
-  assert.equal(campaignStatus(completed.campaign,'competition',neon.at(-1)),'cleared');
-  assert.ok(completed.balance>0); assert.equal(completed.campaign.modes.competition[neon.at(-1).id].difficulties.easy.stars,3);
+  const completed = clear(on,marine.at(-1),'competition','easy');
+  assert.equal(campaignStatus(completed.campaign,'competition',marine.at(-1)),'cleared');
+  assert.ok(completed.balance>0); assert.equal(completed.campaign.modes.competition[marine.at(-1).id].difficulties.easy.stars,3);
   const off = setCampaignUnlockAll(completed,false);
-  assert.equal(campaignStatus(off.campaign,'competition',neon.at(-1)),'locked');
+  assert.equal(campaignStatus(off.campaign,'competition',marine.at(-1)),'locked');
   assert.deepEqual(off.rewards,completed.rewards); assert.equal(off.balance,completed.balance);
   for (const flag of [1,'true',null]) assert.throws(()=>validateProgress({...on,campaign:{...on.campaign,unlockAll:flag}}));
   assert.throws(()=>setCampaignUnlockAll(on,'false'));
 });
 
-test('relock cascades through own clears, difficulty records and both modes', () => {
+test('relock cascades through own clears, difficulty records and both modes before the shared city gate', () => {
   const purchased = applyCommand({...initialProgress(),balance:5000},{kind:'craft',id:'needle'});
   const upgraded = applyCommand(purchased,{kind:'upgrade',id:'needle',upgrade:'engine'});
   const on = setCampaignUnlockAll(upgraded,true);
   on.campaign.modes['time-attack'][neon[0].id] = entry();
   on.campaign.modes['time-attack'][neon[1].id] = entry(false); // available failed attempt survives
-  for (const mode of modes) for (const track of neon.slice(2)) on.campaign.modes[mode][track.id] = entry();
+  for (const mode of modes) for (const track of neon.slice(2).concat(marine)) on.campaign.modes[mode][track.id] = entry();
   on.campaign.modes.competition[neon[1].id] = {...entry(),difficulties:{easy:entry(),normal:entry(),hard:entry()}};
   on.campaign.modes.competition.retired = entry();
-  on.campaign.last = {mode:'competition',trackId:neon.at(-1).id,challenge:'hard'};
+  on.campaign.last = {mode:'competition',trackId:marine.at(-1).id,challenge:'hard'};
   const original = structuredClone(on), preview = previewRelock(on), off = setCampaignUnlockAll(on,false);
-  assert.deepEqual(on,original); assert.deepEqual(preview.map(group=>group.trackIds.length),[neon.length-2,neon.length-1]);
+  assert.deepEqual(on,original); assert.deepEqual(preview.map(group=>group.trackIds.length),[46,47]);
   assert.deepEqual(off.campaign.modes['time-attack'],{[neon[0].id]:entry(),[neon[1].id]:entry(false)});
   assert.deepEqual(off.campaign.modes.competition,{retired:entry()});
   assert.deepEqual(off.campaign.last,{mode:'competition',trackId:neon[0].id,challenge:'hard'});
+  for (const mode of modes) assert.equal(campaignCityStatus(off.campaign,mode,'marine'),'locked');
   assert.deepEqual(pairs(previewRelock(off)),[]);
   for (const key of Object.keys(on).filter(key=>!['campaign','revision'].includes(key))) assert.deepEqual(off[key],on[key]);
 });
 
-test('legitimate complete chains and partial mode-specific progress keep their records', () => {
+test('legitimate chains in either mode keep the shared city gate and their records', () => {
   for (const gateMode of modes) {
     let on = setCampaignUnlockAll(initialProgress(),true);
     for (const track of neon) on = clear(on,track,gateMode,'easy');
     const other = modes.find(mode=>mode!==gateMode);
-    on = clear(on,neon[0],other,'hard'); on = clear(on,neon[1],other,'normal');
-    on = clear(on,neon[3],other);
-    assert.deepEqual(pairs(previewRelock(on)),[`${other}/${neon[3].id}`]);
+    on = clear(on,marine[0],other,'hard'); on = clear(on,marine[1],other,'normal');
+    on = clear(on,marine[3],gateMode);
+    assert.deepEqual(pairs(previewRelock(on)),[`${gateMode}/${marine[3].id}`]);
     const off = setCampaignUnlockAll(on,false);
-    assert.equal(campaignStatus(off.campaign,other,neon[2]),'available');
-    assert.equal(campaignStatus(off.campaign,other,neon[3]),'locked');
-    assert.deepEqual(off.campaign.modes[gateMode],on.campaign.modes[gateMode]);
+    assert.equal(campaignCityStatus(off.campaign,other,'marine'),'available');
+    assert.equal(campaignStatus(off.campaign,other,marine[2]),'available');
+    assert.equal(campaignStatus(off.campaign,gateMode,marine[1]),'locked');
+    assert.deepEqual(off.campaign.modes[gateMode][neon.at(-1).id],on.campaign.modes[gateMode][neon.at(-1).id]);
   }
 });
 
 test('preview includes cache-only tracks, and transaction cleanup removes all locked variants only', async () => {
   let saved = setCampaignUnlockAll(initialProgress(),true), fail = false;
   saved.campaign.modes['time-attack'][neon[0].id] = entry();
-  const cache = storage(), locked = neon[1], cacheOnly = neon.at(-1);
+  const cache = storage(), locked = neon[1], cacheOnly = marine.at(-1);
   const remove = [record(cache,locked,'competition'),record(cache,locked,'competition','easy',1,true),record(cache,cacheOnly,'time-attack','hard',2)];
   const ghost = ghostKey(`${cacheOnly.id}:v2`,'hard'); cache.setItem(ghost,'ghost'); remove.push(ghost);
   const keep = [record(cache,locked,'time-attack'),record(cache,neon[0],'competition'),record(cache,{id:'trench-line',revision:1},'competition')];
@@ -107,7 +111,7 @@ test('preview includes cache-only tracks, and transaction cleanup removes all lo
 
 test('cache removal failures report a saved flag and can be retried while off', async () => {
   let saved = setCampaignUnlockAll(initialProgress(),true), fail = true;
-  const cache = storage(); const key = record(cache,neon.at(-1),'time-attack');
+  const cache = storage(); const key = record(cache,marine[0],'time-attack');
   const remove = cache.removeItem; cache.removeItem = key=>{if(fail)throw Error('cache-denied');remove(key);};
   const store = createProgressStore({read:async()=>saved,close(){},transact:async change=>saved=change(saved)},cache);
   try {

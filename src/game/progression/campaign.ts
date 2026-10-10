@@ -1,5 +1,6 @@
 import { TRACK_CATALOG, campaignRankLimit } from '../track/trackCatalog.js';
 import type { TrackDefinition } from '../track/trackCatalog.js';
+import { campaignTracksForCity, cityForDistrict, MARINE_GATE_TRACK_ID, type CityId } from '../track/cityCatalog.js';
 import { RACE_PARTICIPANT_COUNT } from '../driving/aiRoster.js';
 import { challengeLapLimit, challengeStars, raceChallenge, type RaceStarIncidents, type RaceChallengeId } from '../track/raceChallenge.js';
 import type { RaceMode } from '../driving/createRaceSession.js';
@@ -30,7 +31,18 @@ export function campaignStatus(progress: CampaignProgress, mode: RaceMode, track
 }
 /** Normal access rules, ignoring both the test override and this track's own clear. */
 export function campaignTrackUnlocked(progress: CampaignProgress, mode: RaceMode, track: TrackDefinition): boolean {
+  if (cityForDistrict(track.district) === 'marine' && !marineCityUnlocked(progress)) return false;
   return !track.predecessor || Boolean(progress.modes[mode][track.predecessor]?.cleared);
+}
+export type CampaignCityStatus = 'locked' | 'available' | 'cleared';
+function marineCityUnlocked(progress: CampaignProgress): boolean {
+  return Boolean(progress.modes['time-attack'][MARINE_GATE_TRACK_ID]?.cleared || progress.modes.competition[MARINE_GATE_TRACK_ID]?.cleared);
+}
+/** City gate is shared across modes/challenges; progress inside each city remains mode-specific. */
+export function campaignCityStatus(progress: CampaignProgress, mode: RaceMode, city: CityId): CampaignCityStatus {
+  const tracks = campaignTracksForCity(city);
+  if (tracks.length && tracks.every(track => progress.modes[mode][track.id]?.cleared)) return 'cleared';
+  return city === 'marine' && !progress.unlockAll && !marineCityUnlocked(progress) ? 'locked' : 'available';
 }
 export function nextCampaignTrack(progress: CampaignProgress, mode: RaceMode, catalog = TRACK_CATALOG) {
   return catalog.find(t => campaignStatus(progress, mode, t) === 'available') ?? catalog[0];

@@ -25,6 +25,9 @@ export const LANDMARK_DISTRICTS: Record<DistrictId, LandmarkDistrict> = {
   orbital: { signature: ['orbital-ring', 'bridge'], companions: ['dome', 'orbital-ring'], accents: ['#b7d5ff', '#ffc7dd', '#b2fff4'] },
   harbor: { signature: ['bridge', 'orbital-ring'], companions: ['spire', 'bridge'], accents: ['#ffbd79', '#a5ffe8', '#ffaad3'] },
   desert: { signature: ['reactor', 'terrace'], companions: ['dome', 'reactor'], accents: ['#93efff', '#bcffa5', '#ffc194'] },
+  kelp: { signature: ['dome', 'bridge'], companions: ['dome', 'bridge'], accents: ['#c0ef56', '#eabc58', '#b0df92'] },
+  coral: { signature: ['dome', 'dome'], companions: ['dome', 'bridge'], accents: ['#ffb39a', '#ffd16a', '#a7c4ff'] },
+  lagoon: { signature: ['dome', 'bridge'], companions: ['dome', 'bridge'], accents: ['#a4fff0', '#fff2c0', '#6bcac0'] },
   abyss: { signature: ['dome', 'dome'], companions: ['dome', 'bridge'], accents: ['#5ff5e6', '#ff7aa8', '#9de6ff'] },
 };
 export const LANDMARK_ENCOUNTERS = [
