@@ -491,8 +491,8 @@ button:focus-visible { outline:2px solid #c9f9f2; outline-offset:3px; }
 .drive-screen.is-tutorial-complete .drive-overlay { display:none; }
 .tutorial-coach .coach-eyebrow { display:flex; justify-content:space-between; font:500 10px 'IBM Plex Mono',monospace; letter-spacing:1.6px; color:#56dacf; }
 .tutorial-coach .coach-eyebrow span:last-child { color:#6f8590; margin-right:64px; }
-.tutorial-coach h3 { margin:6px 0 4px; font:700 24px/1.05 'Barlow Condensed',sans-serif; }
-.tutorial-coach p { margin:0; font-size:13px; line-height:1.5; color:#cfe1e4; }
+.tutorial-coach h3 { margin:6px 0 4px; font:700 24px/1.2 'Barlow Condensed',sans-serif; }
+.tutorial-coach p { margin:0; font-size:13px; line-height:1.7; color:#cfe1e4; }
 .tutorial-coach .ok { color:#64ffb9; } .tutorial-coach .bad { color:#ff6851; }
 .tutorial-coach .coach-checks { display:flex; gap:12px; margin-top:9px; font:500 11px 'IBM Plex Mono',monospace; color:#8c9ba4; }
 .tutorial-coach .coach-checks .is-done { color:#4ff0a6; }
@@ -508,7 +508,7 @@ button:focus-visible { outline:2px solid #c9f9f2; outline-offset:3px; }
 .tutorial-coach.is-await { border-color:#ffd66b88; box-shadow:0 8px 30px #0008,0 0 28px #ffd66b33; }
 .tutorial-coach.is-await .coach-eyebrow { color:#ffd66b; }
 .tutorial-coach.is-await .coach-skip { position:static; }
-.coach-prompt { margin-top:10px; padding:9px 10px; border-radius:6px; background:#ffd66b14; border:1px dashed #ffd66b66; font:600 14px -apple-system,sans-serif; color:#fff3cf; }
+.coach-prompt { margin-top:10px; padding:9px 10px; border-radius:6px; background:#ffd66b14; border:1px dashed #ffd66b66; font:600 14px/1.8 -apple-system,sans-serif; color:#fff3cf; }
 .coach-prompt kbd { font-size:14px; min-width:30px; padding:3px 8px; border-color:#ffd66b; color:#ffd66b; box-shadow:0 0 14px #ffd66b66; }
 .coach-foot { display:flex; align-items:center; justify-content:space-between; margin-top:10px; font:500 11px 'IBM Plex Mono',monospace; color:#8c9ba4; }
 .coach-foot .coach-checks { margin-top:0; }
