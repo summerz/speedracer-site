@@ -11,7 +11,8 @@ import { sfxPreference } from './game/audio/sfxPreference';
 import { soundtrack } from './game/audio/soundtrack';
 import { OFF_TRACK_PENALTY_POINTS, COLLISION_PENALTY_POINTS, OBSTACLE_COLLISION_PENALTY_POINTS, CLEAN_HALF_LAP_POINTS } from './game/driving/raceScoring';
 import { RENDER_QUALITIES } from './platform/renderQuality';
-import type { RenderQuality } from './platform/renderQuality';
+import { createQualityPreferenceStore } from './platform/automaticQuality';
+import type { QualityPreference } from './platform/automaticQuality';
 import { DEFAULT_DRONE_CONFIGURATION } from './game/drone/droneConfiguration';
 import type { DroneConfiguration } from './game/drone/droneConfiguration';
 import { altitudeCanPass } from './game/track/altitudeProfile';
@@ -108,7 +109,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
       <dialog id="race-preferences" class="race-preferences" aria-labelledby="preferences-title">
         <header><h2 id="preferences-title">설정</h2><button type="button" id="preferences-close" aria-label="설정 닫기">닫기</button></header>
         <div class="preference-options"><button type="button" id="race-bloom" aria-pressed="true"><span>네온 발광 <small>Bloom</small></span></button><button type="button" id="race-sound" aria-pressed="true" aria-keyshortcuts="N"><span>주행 효과음 <kbd class="key-badge">N</kbd></span></button><button type="button" id="race-music" aria-pressed="true" aria-keyshortcuts="M"><span>배경 음악 <kbd class="key-badge">M</kbd> <small>로비 1곡 · 경주 8곡</small></span></button><button type="button" id="race-haptics" aria-pressed="true"><span>진동</span></button></div>
-        <div class="render-options"><label for="race-quality">렌더링 품질</label><select id="race-quality">${Object.entries(RENDER_QUALITIES).map(([id, option]) => `<option value="${id}" ${id === 'balanced' ? 'selected' : ''}>${option.label}</option>`).join('')}</select></div>
+        <div class="render-options"><label for="race-quality">렌더링 품질</label><small id="quality-status" class="quality-status"></small><select id="race-quality"><option value="auto">자동 (권장)</option>${Object.entries(RENDER_QUALITIES).map(([id, option]) => `<option value="${id}">${option.label}</option>`).join('')}</select></div>
         <div class="preference-options"><button type="button" id="race-haze" aria-pressed="false"><span>배기 아지랑이 <small>추적 시점</small></span></button></div>
         <p class="quality-hint">아지랑이는 배기 주변에만 적용합니다. 성능이 낮으면 끄거나 ‘성능 우선’을 선택하세요.</p>
         <details class="control-help"><summary>조작 안내</summary>
@@ -133,7 +134,10 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
   const startButton = get<HTMLButtonElement>('drive-start');
   const pauseButton = get<HTMLButtonElement>('race-pause');
   const bloomButton = get<HTMLButtonElement>('race-bloom');
-  const qualitySelect = get<HTMLSelectElement>('race-quality');
+  const qualitySelect = get<HTMLSelectElement>('race-quality'), qualityStatus = get<HTMLElement>('quality-status');
+  let qualityStorage: Storage | undefined; try { qualityStorage = window.localStorage; } catch { /* Optional storage. */ }
+  const qualityPreferences = createQualityPreferenceStore(qualityStorage);
+  qualitySelect.value = qualityPreferences.read();
   const hazeButton = get<HTMLButtonElement>('race-haze');
   const soundButton = get<HTMLButtonElement>('race-sound');
   const musicButton = get<HTMLButtonElement>('race-music');
@@ -700,7 +704,8 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
     try {
       race = createRace(get<HTMLDivElement>('race-scene'), update, showError, configuration, undefined, campaign ? trackPreset(campaign.track) : DIFFICULTIES[selectedDifficulty], focusSlots, selectedMode, campaign?.track, equippedRivalSlots, environment, challenge, introPending);
       introPending = false;
-      race.setQuality(qualitySelect.value as RenderQuality);
+      race.setQuality(qualitySelect.value as QualityPreference);
+      race.onQualityChange(status => { qualityStatus.textContent = status.preference === 'auto' ? `자동 · 지금 ${RENDER_QUALITIES[status.quality].label}` : ''; });
       race.setExhaustHaze(hazeButton.getAttribute('aria-pressed') === 'true');
       race.setBloom(bloomButton.getAttribute('aria-pressed') === 'true');
       race.setSoundEnabled(soundButton.getAttribute('aria-pressed') === 'true');
@@ -771,7 +776,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
     if (screenDisposed || restartConfirm.returnValue === 'restart') return;
     (lastPhase === 'paused' ? get('race-restart') : startButton).focus({ preventScroll: true });
   }, listen);
-  qualitySelect.addEventListener('change', () => race?.setQuality(qualitySelect.value as RenderQuality), listen);
+  qualitySelect.addEventListener('change', () => { const value = qualitySelect.value as QualityPreference; qualityPreferences.save(value); race?.setQuality(value); }, listen);
   hazeButton.addEventListener('click', () => {
     const enabled = hazeButton.getAttribute('aria-pressed') !== 'true';
     hazeButton.setAttribute('aria-pressed', String(enabled)); race?.setExhaustHaze(enabled);

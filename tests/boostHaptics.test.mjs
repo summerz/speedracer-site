@@ -50,3 +50,32 @@ test('altitude cue is lighter than boost, respects settings and is cancelled whe
   assert.doesNotThrow(() => createBoostHaptics().altitudeStep());
   assert.doesNotThrow(() => createBoostHaptics(() => { throw new Error('Denied'); }).altitudeStep());
 });
+
+test('race cues survive non-boosting frames and collision takes priority over near misses', () => {
+  const calls = [];
+  const haptics = createBoostHaptics(pattern => { calls.push(pattern); return true; });
+  haptics.nearMiss(); haptics.update(.016, 0, true);
+  assert.deepEqual(calls, [10]);
+  haptics.collision(); haptics.nearMiss(); haptics.altitudeStep();
+  haptics.update(.016, 2, true);
+  assert.deepEqual(calls, [10, [18, 25, 12]]);
+  haptics.update(.1, 2, true);
+  assert.deepEqual(calls.at(-1), [28, 35, 18]);
+});
+
+test('rapid repeated contacts are throttled even without boost and pause cancels race cues', () => {
+  const calls = [];
+  const haptics = createBoostHaptics(pattern => { calls.push(pattern); return true; });
+  haptics.collision(); haptics.collision();
+  haptics.update(.2, 0, true); haptics.collision();
+  assert.equal(calls.length, 1);
+  haptics.update(.2, 0, true); haptics.collision();
+  assert.equal(calls.length, 2);
+  haptics.update(.016, 0, false); haptics.update(.016, 0, false);
+  assert.equal(calls.at(-1), 0);
+  assert.equal(calls.length, 3);
+  haptics.setEnabled(false); haptics.collision(); haptics.nearMiss();
+  assert.equal(calls.length, 3);
+  assert.doesNotThrow(() => { const h = createBoostHaptics(); h.collision(); h.nearMiss(); });
+  assert.doesNotThrow(() => { const h = createBoostHaptics(() => { throw Error('Denied'); }); h.collision(); h.nearMiss(); });
+});

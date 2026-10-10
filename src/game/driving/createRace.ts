@@ -8,6 +8,8 @@ import type { TrackDefinition } from '../track/trackCatalog';
 import { createDistrictScenery } from '../track/createDistrictScenery';
 import { RENDER_QUALITIES } from '../../platform/renderQuality';
 import type { RenderQuality } from '../../platform/renderQuality';
+import { createAutomaticQuality } from '../../platform/automaticQuality';
+import type { QualityPreference, QualityStatus } from '../../platform/automaticQuality';
 import { createExhaustHaze } from './createExhaustHaze';
 import { gamepadDriving } from '../../platform/gamepadInput';
 import * as THREE from 'three';
@@ -95,7 +97,8 @@ export interface Race {
   toggleCockpit(): void;
   cycleTrack(): void;
   setBloom(enabled: boolean): void;
-  setQuality(quality: RenderQuality): void;
+  setQuality(preference: QualityPreference): void;
+  onQualityChange(listener: (status: QualityStatus) => void): () => void;
   setExhaustHaze(enabled: boolean): void;
   setSoundEnabled(enabled: boolean): void;
   setMusicEnabled(enabled: boolean): void;
@@ -176,6 +179,8 @@ export function createRace(
   const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.65, 0.25, 0.95);
   const exhaustHaze = createExhaustHaze(drone, camera);
   let renderQuality: RenderQuality = 'balanced';
+  const autoQuality = createAutomaticQuality('auto');
+  let hapticCollisions = 0, hapticNearMisses = 0;
   const output = new OutputPass();
   const boostWarp = createBoostWarp(visuals.boostWarpStrength);
   composer.addPass(render); composer.addPass(bloom); composer.addPass(exhaustHaze.pass); composer.addPass(boostWarp.pass); composer.addPass(output);
@@ -312,7 +317,7 @@ export function createRace(
     clearInput(); raceAudio.activate();
     if (timeAttack.phase === 'ready' || timeAttack.phase === 'finished') { feedback.reset(); raceAudio.reset(); }
     const fresh = timeAttack.phase === 'ready' || timeAttack.phase === 'finished';
-    timeAttack.start(); if (fresh) { ghostRecorder.reset(); replayBuffer.reset(); replayClock = 0; replayT = 0; armStart(); soundFeedback.reset(); trackVisual.refreshObstacles(); raceGates.refresh(); weather.reset(); } touchControls.setRunning(timeAttack.phase === 'running'); previous = performance.now(); notify();
+    timeAttack.start(); if (fresh) { ghostRecorder.reset(); replayBuffer.reset(); replayClock = 0; replayT = 0; armStart(); soundFeedback.reset(); trackVisual.refreshObstacles(); raceGates.refresh(); weather.reset(); hapticCollisions = 0; hapticNearMisses = 0; } touchControls.setRunning(timeAttack.phase === 'running'); previous = performance.now(); notify();
   };
   const togglePause = () => {
     if (timeAttack.phase === 'running' || timeAttack.phase === 'countdown') pause();
@@ -320,7 +325,7 @@ export function createRace(
   };
   const restart = () => {
     if (lost || disposed) return;
-    clearInput(); feedback.reset(); soundFeedback.reset(); raceAudio.activate(); raceAudio.reset(); timeAttack.restart(); ghostRecorder.reset(); replayBuffer.reset(); replayClock = 0; replayT = 0; armStart(); trackVisual.refreshObstacles(); raceGates.refresh(); weather.reset(); boostPulse.reset(); boostWarp.reset(); boostHaptics.stop(); boostEntryAge = 1; bank = 0; craftShake = 0; cameraSnap = true; touchControls.setRunning(false); previous = performance.now(); notify();
+    clearInput(); feedback.reset(); soundFeedback.reset(); raceAudio.activate(); raceAudio.reset(); timeAttack.restart(); hapticCollisions = 0; hapticNearMisses = 0; ghostRecorder.reset(); replayBuffer.reset(); replayClock = 0; replayT = 0; armStart(); trackVisual.refreshObstacles(); raceGates.refresh(); weather.reset(); boostPulse.reset(); boostWarp.reset(); boostHaptics.stop(); boostEntryAge = 1; bank = 0; craftShake = 0; cameraSnap = true; touchControls.setRunning(false); previous = performance.now(); notify();
   };
   const recover = () => {
     if (lost || disposed) return;
@@ -426,7 +431,9 @@ export function createRace(
 
   const tick = (now: number) => {
     if (disposed || lost) return;
-    const delta = Math.min((now - previous) / 1000, 0.1); previous = now;
+    const rawFrameMs = now - previous, delta = Math.min(rawFrameMs / 1000, 0.1); previous = now;
+    const qualityReport = autoQuality.sample(rawFrameMs, timeAttack.phase === 'running' && !document.hidden);
+    if (import.meta.env.DEV && qualityReport?.metrics) console.info('[race-performance]', { trackId, preference: qualityReport.preference, appliedQuality: qualityReport.quality, ...qualityReport.metrics });
     const oldRecoveries = model.state.recoveries;
     const oldCollisions = model.state.collisions, oldPads = model.state.boostPads, oldRings = model.state.boostRings;
     const oldExits = model.state.offTrackExits;
@@ -630,7 +637,10 @@ export function createRace(
     if (awakeningStrength < .001) awakeningStrength = 0;
     overdrive.setStrength(awakeningStrength); overdrive.update(simulationDelta, reducedMotion.matches);
     coreVisual.update(state.elapsed, reducedMotion.matches);
-    boostHaptics.update(simulationDelta, state.boostStage, phase === 'running' && coarsePointer.matches && !reducedMotion.matches);
+    const hapticActive = phase === 'running' && coarsePointer.matches && !reducedMotion.matches;
+    boostHaptics.update(simulationDelta, state.boostStage, hapticActive);
+    if (hapticActive) { if (state.collisions > hapticCollisions) boostHaptics.collision(); if (state.nearMisses > hapticNearMisses) boostHaptics.nearMiss(); }
+    hapticCollisions = state.collisions; hapticNearMisses = state.nearMisses;
     if (heightChanged && coarsePointer.matches && !reducedMotion.matches) boostHaptics.altitudeStep();
     hudElapsed += delta;
     if (hudElapsed >= 0.08) { hudElapsed = 0; notify(); }
@@ -678,17 +688,20 @@ export function createRace(
   renderer.domElement.addEventListener('webglcontextlost', (event) => {
     event.preventDefault(); lost = true; pause(); cancelAnimationFrame(animation); onError();
   }, listen);
+  const applyQuality = (quality: RenderQuality) => { scenery?.setQuality(quality); weather.setQuality(quality); renderQuality = quality; resize(); };
+  const unsubscribeQuality = autoQuality.onChange(status => applyQuality(status.quality));
   notify(); animation = requestAnimationFrame(tick);
   return {
     start, togglePause, restart, skipCinematic: endCinematic, useAwakening, useFocus() { const used = timeAttack.useFocus(); if (used) notify(); return used; }, useRivalItem(item) { const used = timeAttack.useRivalItem(item); if (used) notify(); return used; }, recover, toggleCockpit, cycleTrack,
     setBloom(enabled) { bloom.enabled = enabled; },
-    setQuality(quality) { scenery?.setQuality(quality); weather.setQuality(quality); renderQuality = quality; resize(); },
+    setQuality(preference) { autoQuality.setPreference(preference); },
+    onQualityChange(listener) { return autoQuality.onChange(listener); },
     setExhaustHaze(enabled) { exhaustHaze.setEnabled(enabled); },
     setSoundEnabled(enabled) { raceAudio.setEnabled(enabled); },
     setMusicEnabled(enabled) { raceAudio.setMusicEnabled(enabled); },
     setHapticsEnabled(enabled) { boostHaptics.setEnabled(enabled); },
     dispose() {
-      disposed = true; cancelAnimationFrame(animation); events.abort(); observer.disconnect();
+      disposed = true; unsubscribeQuality(); cancelAnimationFrame(animation); events.abort(); observer.disconnect();
       touchControls.dispose(); rivalVisuals.dispose(); thrusters.dispose(); overdrive.dispose(); coreVisual.dispose(); boostPulse.dispose(); raceAudio.dispose(); boostHaptics.dispose();
       const geometries = new Set<THREE.BufferGeometry>();
       const materials = new Set<THREE.Material>();
