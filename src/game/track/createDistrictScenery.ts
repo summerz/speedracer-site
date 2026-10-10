@@ -3,6 +3,7 @@ import type { Track } from './createTrack.js';
 import { DISTRICTS } from './trackCatalog.js';
 import type { TrackDefinition } from './trackCatalog.js';
 import type { RenderQuality } from '../../platform/renderQuality.js';
+import { createSkyTraffic } from './createSkyTraffic.js';
 import { createTrackLandmark, describeTrackLandmarks, sceneryRoute, scenerySeed } from './createTrackLandmark.js';
 
 /** Seeded instanced silhouettes and emissive windows; no per-window lights or draw calls. */
@@ -137,11 +138,14 @@ export function createDistrictScenery(track: Track, definition: TrackDefinition)
   const crowns = mesh(accentMaterial, accents, 'city-crowns');
   object.add(...landmarkObjects);
   const boards = mesh(billboardMaterial, billboards, 'city-billboards');
+  const traffic = createSkyTraffic(route, bounds, definition.district, scenerySeed(definition.id) ^ 0x5eed);
+  object.add(traffic.object);
   let quality: RenderQuality = 'balanced';
   const lastPosition = new THREE.Vector3(Infinity, Infinity, Infinity);
   let dirty = true;
   const update = (position: THREE.Vector3, time = 0) => {
     timeUniform.value = time;
+    traffic.update(time);
     if (!dirty && lastPosition.distanceToSquared(position) < 35 ** 2) return;
     dirty = false; lastPosition.copy(position);
     const ranges = quality === 'low' ? [480, 165] : quality === 'high' ? [800, 380] : [650, 280];
@@ -167,7 +171,7 @@ export function createDistrictScenery(track: Track, definition: TrackDefinition)
   update(track.sample(0).position);
   return {
     object, landmark, landmarks, counts: { buildings: clusters.length, windows: windows.length, billboards: billboards.length },
-    setQuality(value: RenderQuality) { if (quality !== value) { quality = value; dirty = true; update(lastPosition.clone()); } },
+    setQuality(value: RenderQuality) { traffic.setQuality(value); if (quality !== value) { quality = value; dirty = true; update(lastPosition.clone()); } },
     setOverview(overview: boolean) { object.visible = !overview; },
     update,
   };
