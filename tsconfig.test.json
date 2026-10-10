@@ -8,6 +8,9 @@
   },
   "include": [
     "src/platform/analytics.ts",
+    "src/game/driving/drivingTutorial.ts",
+    "src/game/driving/scriptedTutorial.ts",
+    "src/game/driving/tutorialProgress.ts",
     "src/platform/automaticQuality.ts",
     "src/platform/gamepadInput.ts",
     "src/game/environment/createNightSky.ts",
@@ -39,6 +42,7 @@
     "src/game/audio/synth.ts",
     "src/game/drone/droneCatalog.ts",
     "src/game/drone/createRacingDrone.ts",
-    "src/game/driving/createExhaustHaze.ts"
+    "src/game/driving/createExhaustHaze.ts",
+    "src/game/driving/tutorialCopy.ts"
   ]
 }

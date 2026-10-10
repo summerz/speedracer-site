@@ -1,5 +1,7 @@
+import type { TutorialSnapshot, TutorialStatus } from '../game/driving/drivingTutorial.js';
+
 export type AnalyticsScreen = 'hangar' | 'campaign' | 'shop' | 'race';
-export type AnalyticsEvent = 'page_view' | 'level_start' | 'level_end' | 'race_quit';
+export type AnalyticsEvent = 'page_view' | 'level_start' | 'level_end' | 'race_quit' | 'tutorial_begin' | 'tutorial_step' | 'tutorial_complete';
 export type AnalyticsParams = Record<string, string | number | boolean>;
 export interface AnalyticsTransport {
   send(event: AnalyticsEvent, params: AnalyticsParams): void;
@@ -43,21 +45,27 @@ export function createAnalytics(options: {
 export interface RaceAnalyticsContext {
   track_id: string; race_mode: string; difficulty: string; ship_id: string;
   control_type: 'touch' | 'desktop';
+  tutorial_mode?: 'off' | 'first-run' | 'practice'; practice?: boolean;
+  tutorial_history?: 'unseen' | 'completed' | 'skipped';
 }
 export interface RaceAnalyticsSnapshot {
   id: string; phase: 'ready' | 'countdown' | 'running' | 'paused' | 'finished';
   seconds: number; laps: number; collisions: number; exits: number; obstacles: number;
   success: boolean; disqualified: boolean; rank: number; stars: number;
+  tutorial?: TutorialSnapshot | null; tutorialStatus?: TutorialStatus | null;
 }
 
 /** One attempt spans countdown, pauses and completion. A reset closes the preceding attempt. */
 export function createRaceAnalytics(send: (event: AnalyticsEvent, params: AnalyticsParams) => void) {
-  let active: { context: RaceAnalyticsContext; state: RaceAnalyticsSnapshot; ended: boolean } | undefined;
+  let active: { context: RaceAnalyticsContext; state: RaceAnalyticsSnapshot; ended: boolean;
+    tutorialStarted: boolean; tutorialEnded: boolean; steps: Set<number> } | undefined;
   let attempts = 0;
   const metrics = (state: RaceAnalyticsSnapshot): AnalyticsParams => ({
     elapsed_seconds: Math.round(state.seconds * 100) / 100,
     completed_laps: state.laps, collisions: state.collisions, off_track_exits: state.exits,
     obstacles_passed: state.obstacles,
+    ...(state.tutorialStatus ? { tutorial_outcome: state.tutorialStatus.outcome ?? 'incomplete',
+      tutorial_completed_steps: state.tutorialStatus.completedSteps, tutorial_skipped_steps: state.tutorialStatus.skippedSteps } : {}),
   });
   const safeSend: typeof send = (event, params) => { try { send(event, params); } catch { /* Never affect driving. */ } };
   const quit = (reason: 'restart' | 'navigation' | 'page_exit' | 'render_error') => {
@@ -70,10 +78,34 @@ export function createRaceAnalytics(send: (event: AnalyticsEvent, params: Analyt
       if (state.phase === 'ready' || !state.id) return;
       if (active?.state.id !== state.id) {
         quit('restart');
-        active = { context: { ...context }, state: { ...state }, ended: false };
+        active = { context: { ...context }, state: { ...state }, ended: false,
+          tutorialStarted: false, tutorialEnded: false, steps: new Set() };
         safeSend('level_start', { ...context, level_name: context.track_id, is_retry: attempts++ > 0 });
       }
       active.state = { ...state };
+      if (state.tutorialStatus && (state.phase === 'running' || active.tutorialStarted || state.phase === 'finished' && state.tutorialStatus.outcome)) {
+        if (!active.tutorialStarted) {
+          active.tutorialStarted = true;
+          safeSend('tutorial_begin', { ...active.context, level_name: context.track_id });
+        }
+        // Summaries also cover a skipped guide or a last step observed only after finish.
+        for (const [index, step] of (state.tutorialStatus.steps ?? []).entries()) {
+          if (step.result === 'pending' || active.steps.has(index)) continue;
+          active.steps.add(index);
+          safeSend('tutorial_step', { ...active.context, tutorial_step: step.id,
+            tutorial_step_index: index, skipped: step.result === 'skipped' });
+        }
+        const tutorial = state.tutorial;
+        if (tutorial?.phase === 'done' && !active.steps.has(tutorial.index)) {
+          active.steps.add(tutorial.index);
+          safeSend('tutorial_step', { ...active.context, tutorial_step: tutorial.step,
+            tutorial_step_index: tutorial.index, skipped: !tutorial.checks.every(check => check.done) });
+        }
+        if (state.tutorialStatus.outcome && !active.tutorialEnded) {
+          active.tutorialEnded = true;
+          safeSend('tutorial_complete', { ...active.context, ...metrics(state) });
+        }
+      }
       if (state.phase === 'finished' && !active.ended) {
         active.ended = true;
         safeSend('level_end', { ...active.context, level_name: active.context.track_id, ...metrics(state),

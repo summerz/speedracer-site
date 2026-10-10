@@ -1,3 +1,5 @@
+import { createTutorialTrack, createTutorialRuntime } from './scriptedTutorial';
+import type { createDrivingTutorial, TutorialSnapshot, TutorialStatus } from './drivingTutorial';
 import { RACE_CHALLENGES, challengeLapLimit, type RaceChallengeId } from '../track/raceChallenge';
 import { createRaceWeather } from '../environment/createRaceWeather';
 import { createNightSky } from '../environment/createNightSky';
@@ -62,6 +64,9 @@ import { boostPadGuide, configureExtraObstacles, corridorCanPass, mineFieldGuide
 
 export type DrivingPhase = RacePhase;
 export interface RaceSnapshot extends DrivingState {
+  tutorial: TutorialSnapshot | null;
+  tutorialStatus: TutorialStatus | null;
+  tutorialTargetScreen: { x: number; y: number; visible: boolean } | null;
   competition: CompetitionSnapshot | null;
   altitudeProfile: AltitudeProfile;
   announcement: RaceAnnouncement | null;
@@ -86,9 +91,12 @@ export interface RaceSnapshot extends DrivingState {
   ghostDelta: number | null;
 }
 export interface Race {
+  continueTutorial(): boolean;
   start(): void;
   togglePause(): void;
   restart(): void;
+  skipTutorial(): void;
+  skipAllTutorial(): void;
   skipCinematic(): void;
   useFocus(): boolean;
   useAwakening(): boolean;
@@ -118,6 +126,7 @@ export function createRace(
   environment: NightEnvironment = NIGHT_ENVIRONMENTS[0],
   challenge: RaceChallengeId = 'normal',
   intro = false,
+  guidance: { tutorial?: ReturnType<typeof createDrivingTutorial>; practice?: boolean } = {},
 ): Race {
   const config = resolveDroneConfiguration(configuration);
   const visuals = config.speedEffects;
@@ -135,7 +144,8 @@ export function createRace(
   const ambient = new THREE.HemisphereLight(environment.ambient, 0x152435, environment.ambientIntensity); scene.add(ambient);
   const sun = new THREE.DirectionalLight(environment.light, environment.lightIntensity);
   sun.position.set(-50, 150, -100); scene.add(sun);
-  const track = course ? createCatalogTrack(course, challenge) : configureExtraObstacles(createTrack(altitudeProfile, difficulty), challenge, difficulty?.id);
+  const baseTrack = course ? createCatalogTrack(course, challenge) : configureExtraObstacles(createTrack(altitudeProfile, difficulty), challenge, difficulty?.id);
+  const track = guidance.tutorial ? createTutorialTrack(baseTrack) : baseTrack;
   const sky = createNightSky(environment, track.sample(0).tangent); scene.add(sky.object);
   const weather = createRaceWeather(!!environment.rain, track.length, Math.random, environment.rainIntensity); scene.add(weather.object);
   container.dataset.rainIntensity = environment.rain ? weather.intensity : 'none';
@@ -160,13 +170,22 @@ export function createRace(
   try { storage = window.localStorage; } catch { /* Private browsing can deny storage. */ }
   const trackId = course ? `${course.id}:v${course.revision}` : `neon-circuit-v1:${difficulty?.id ?? 'beginner'}`;
   const records = createRaceRecords({ laps: course?.laps, trackId, configurationId: JSON.stringify({ ...(challenge !== 'normal' ? { challenge } : {}), performance: config.performance, altitude: track.altitudeProfile, ...(focusSlots || rivalSlots.length ? { assisted: true } : {}), ...(mode === 'competition' ? { mode } : {}) }) }, storage);
-  const timeAttack = createRaceSession(track, config, records, focusSlots, mode, Math.random, coarsePointer.matches ? 'touch' : 'desktop', course ? { laps: course.laps, ...(mode === 'time-attack' ? { lapLimit: challengeLapLimit(course, challenge) } : {}) } : {}, course?.rating, rivalSlots, challenge);
+  const training = !!guidance.practice || !!guidance.tutorial;
+  const timeAttack = createRaceSession(track, config, records, focusSlots, mode, Math.random, coarsePointer.matches ? 'touch' : 'desktop', { practice: training, ...(course ? { laps: course.laps, ...(mode === 'time-attack' ? { lapLimit: challengeLapLimit(course, challenge) } : {}) } : {}) }, course?.rating, rivalSlots, challenge);
   const rivalVisuals = createRivalVisuals(scene, track, timeAttack.rivals);
   const ghostStorageKey = ghostKey(trackId, challenge);
-  const ghost = mode === 'time-attack' ? loadGhost(storage, ghostStorageKey) : null;
+  const ghost = mode === 'time-attack' && !guidance.tutorial ? loadGhost(storage, ghostStorageKey) : null;
   const ghostVisual = ghost && createGhostVisual(scene, track, ghost, config.modelVariant);
   const ghostRecorder = createGhostRecorder();
   const model = timeAttack.model;
+  const tutorialRuntime = guidance.tutorial && createTutorialRuntime(track, timeAttack, guidance.tutorial);
+  const tutorialFrozen = () => !!guidance.tutorial?.snapshot()?.frozen;
+  const targetPoint = new THREE.Vector3();
+  const tutorialTargetScreen = () => {
+    const target = guidance.tutorial?.snapshot()?.target; if (!target || views.trackDisplay === 'primary') return null;
+    const d = layout.driving; targetPoint.set(target.worldPosition.x, target.worldPosition.y, target.worldPosition.z).project(camera);
+    return { x: d.x + (targetPoint.x + 1) / 2 * d.width, y: d.height - (targetPoint.y + 1) / 2 * d.height, visible: targetPoint.z < 1 && Math.abs(targetPoint.x) < 1.1 && Math.abs(targetPoint.y) < 1.1 };
+  };
   const coreVisual = createAwakeningCoreVisual(track, model); scene.add(coreVisual.object);
   const raceGates = createRaceGates(track, timeAttack.snapshot().gatesPerLap);
   scene.add(raceGates.object);
@@ -286,7 +305,7 @@ export function createRace(
     const selected = choosing ? undefined : junction?.routes.find(r => r.id === model.state.routeId);
     const fork = junction ? { kind: junction.kind, names: junction.routes.map(r => r.name), level: verticalThreshold(track) + 1, selected: selected?.name ?? null,
       distance: physicalDistance(track, model.state.distance, (selected ? junction.end : junction.start + junction.junctionLength) - model.state.distance % track.length, model.state.routeId) } : null;
-    onUpdate({ ...model.state, competition: session.competition, announcement: feedback.announcement, boostStage2Seconds: model.boostStage2Seconds, altitudeProfile: model.altitudeProfile, phase: timeAttack.phase, timeAttack: session, cinematic: cinematic && { kind: cinematic.kind, reduced: cinematic.reduced, seconds: cinematic.duration, shot: currentShot() }, callout, ghostDelta: ghost && timeAttack.phase !== 'finished' && model.state.elapsed > 0 ? ghostDelta(ghost, model.state.elapsed, model.state.distance) : null, view: views.view, trackDisplay: views.trackDisplay, trackLength: track.length, upcomingCurvature: upcoming.curvature, upcomingSection: upcoming.section, heightObstacle, corridor, mineField, boostPad, arcRail, boostRing, fork });
+    onUpdate({ ...model.state, tutorial: timeAttack.phase === 'finished' ? null : guidance.tutorial?.snapshot() ?? null, tutorialStatus: guidance.tutorial?.status() ?? null, tutorialTargetScreen: timeAttack.phase === 'finished' ? null : tutorialTargetScreen(), competition: session.competition, announcement: feedback.announcement, boostStage2Seconds: model.boostStage2Seconds, altitudeProfile: model.altitudeProfile, phase: timeAttack.phase, timeAttack: session, cinematic: cinematic && { kind: cinematic.kind, reduced: cinematic.reduced, seconds: cinematic.duration, shot: currentShot() }, callout, ghostDelta: ghost && timeAttack.phase !== 'finished' && model.state.elapsed > 0 ? ghostDelta(ghost, model.state.elapsed, model.state.distance) : null, view: views.view, trackDisplay: views.trackDisplay, trackLength: track.length, upcomingCurvature: upcoming.curvature, upcomingSection: upcoming.section, heightObstacle, corridor, mineField, boostPad, arcRail, boostRing, fork });
   };
   const heightRequests: { lift: number; targetAltitudeLevel?: number }[] = [];
   const touchControls = createTouchControls(container.parentElement ?? container, {
@@ -299,7 +318,7 @@ export function createRace(
     },
     selectAltitude(level) { if (timeAttack.phase === 'running') heightRequests.push({ lift: 0, targetAltitudeLevel: level }); },
     interact() { raceAudio.activate(); },
-    releaseBoost() { if (!keys.has('Space')) { model.interruptBoost(); boostHaptics.stop(); notify(); } },
+    releaseBoost() { if (!tutorialFrozen() && !keys.has('Space')) { model.interruptBoost(); boostHaptics.stop(); notify(); } },
   });
   const clearInput = () => { keys.clear(); heightRequests.length = 0; touchControls.reset(); };
   const pause = () => {
@@ -307,6 +326,7 @@ export function createRace(
     timeAttack.pause(); touchControls.setRunning(false); notify();
   };
   const finishGhost = () => {
+    if (training) return;
     const { result, disqualified } = timeAttack.snapshot();
     if (result && shouldSaveGhost({ mode, disqualified, isNewBest: result.isNewBest })) saveGhost(storage, ghostStorageKey, ghostRecorder.finish(model.state, model.state.elapsed, model.state.distance));
   };
@@ -328,14 +348,14 @@ export function createRace(
     clearInput(); feedback.reset(); soundFeedback.reset(); raceAudio.activate(); raceAudio.reset(); timeAttack.restart(); hapticCollisions = 0; hapticNearMisses = 0; ghostRecorder.reset(); replayBuffer.reset(); replayClock = 0; replayT = 0; armStart(); trackVisual.refreshObstacles(); raceGates.refresh(); weather.reset(); boostPulse.reset(); boostWarp.reset(); boostHaptics.stop(); boostEntryAge = 1; bank = 0; craftShake = 0; cameraSnap = true; touchControls.setRunning(false); previous = performance.now(); notify();
   };
   const recover = () => {
-    if (lost || disposed) return;
+    if (lost || disposed || guidance.tutorial?.snapshot()) return;
     const recoveries = model.state.recoveries;
     clearInput(); timeAttack.recover(); boostPulse.reset(); boostWarp.reset(); boostHaptics.stop(); boostEntryAge = 1;
     if (timeAttack.phase === 'running' && model.state.recoveries > recoveries) raceAudio.play('recovery');
     cameraSnap = true; notify();
   };
   const useAwakening = () => {
-    if (lost || disposed || !timeAttack.useAwakening()) return false;
+    if (lost || disposed || guidance.tutorial?.snapshot() || !timeAttack.useAwakening()) return false;
     clearInput(); raceAudio.activate(); boostPulse.trigger();
     say('perfect', '코어 각성', 'awakening'); notify(); return true;
   };
@@ -348,10 +368,12 @@ export function createRace(
     if (lost || disposed) return;
     views.cycleTrack(); resize(); notify();
   };
-  const controlCodes = new Set(['KeyS', 'KeyA', 'KeyD', 'KeyW', 'ArrowDown', 'ArrowUp', 'Space', 'KeyR', 'KeyC', 'KeyX', 'Escape']);
+  const continueTutorial = () => { if (timeAttack.phase !== 'running') return false; const continued = guidance.tutorial?.continue() ?? false; if (continued) notify(); return continued; };
+  const controlCodes = new Set(['KeyS', 'KeyA', 'KeyD', 'KeyW', 'ArrowDown', 'ArrowUp', 'Space', 'KeyR', 'KeyC', 'KeyX', 'Escape', 'Enter']);
   window.addEventListener('speedracer:pad-action', (event) => {
     if (lost || document.querySelector('dialog[open]')) return;
     const action = (event as CustomEvent<string>).detail;
+    if (action === 'confirm' && guidance.tutorial?.snapshot()) { continueTutorial(); return; }
     if (action === 'pause') { togglePause(); return; }
     if (timeAttack.phase !== 'running') return;
     if (action === 'up' || action === 'down') heightRequests.push({ lift: action === 'up' ? 1 : -1 });
@@ -379,6 +401,7 @@ export function createRace(
     event.preventDefault();
     if (!event.repeat && event.code === 'KeyC') { toggleCockpit(); return; }
     if (!event.repeat && event.code === 'KeyX') { cycleTrack(); return; }
+    if (event.code === 'Enter') { if (!event.repeat) continueTutorial(); return; }
     if (!event.repeat && event.code === 'Escape') { togglePause(); return; }
     if (!event.repeat && event.code === 'KeyR') { window.dispatchEvent(new CustomEvent('speedracer:restart-request')); return; }
     if (event.code === 'KeyW') { if (!event.repeat) useAwakening(); return; }
@@ -396,7 +419,7 @@ export function createRace(
   }, listen);
   window.addEventListener('keyup', (event) => {
     keys.delete(event.code); if (event.code === 'Space') spaceHeld = false;
-    if (event.code === 'Space' && !touchControls.read().boost && !gamepadDriving.boost) { model.interruptBoost(); boostHaptics.stop(); notify(); }
+    if (event.code === 'Space' && !tutorialFrozen() && !touchControls.read().boost && !gamepadDriving.boost) { model.interruptBoost(); boostHaptics.stop(); notify(); }
   }, listen);
   window.addEventListener('blur', pause, listen);
 
@@ -432,7 +455,7 @@ export function createRace(
   const tick = (now: number) => {
     if (disposed || lost) return;
     const rawFrameMs = now - previous, delta = Math.min(rawFrameMs / 1000, 0.1); previous = now;
-    const qualityReport = autoQuality.sample(rawFrameMs, timeAttack.phase === 'running' && !document.hidden);
+    const qualityReport = autoQuality.sample(rawFrameMs, timeAttack.phase === 'running' && !tutorialFrozen() && !document.hidden);
     if (import.meta.env.DEV && qualityReport?.metrics) console.info('[race-performance]', { trackId, preference: qualityReport.preference, appliedQuality: qualityReport.quality, ...qualityReport.metrics });
     const oldRecoveries = model.state.recoveries;
     const oldCollisions = model.state.collisions, oldPads = model.state.boostPads, oldRings = model.state.boostRings;
@@ -442,12 +465,12 @@ export function createRace(
     const oldNearMisses = model.state.nearMisses;
     const oldCores = model.state.coresCollected;
     const oldAwakening = model.state.awakeningRemaining;
-    let heightChanged = false;
+    let heightChanged = false, worldDelta = 0;
     if (cinematic) {
       const pressed = Array.from(navigator.getGamepads?.() ?? []).some(pad => pad?.buttons.some(button => button.pressed));
       if (!pressed) padArmed = true; else if (padArmed) endCinematic();
     } else padArmed = false;
-    replaying = oldPhase === 'finished' && !cinematic && !reducedMotion.matches && replayBuffer.seconds() >= .5;
+    replaying = !training && oldPhase === 'finished' && !cinematic && !reducedMotion.matches && replayBuffer.seconds() >= .5;
     const slow = cinematic?.kind === 'finish' ? finishTimeScale(cinematic.t, cinematic.reduced) : 1;
     if (oldPhase === 'running' || oldPhase === 'countdown') {
       const touch = touchControls.read();
@@ -458,19 +481,24 @@ export function createRace(
       const padBoost = touch.boost || gamepadDriving.boost;
       if (padBoost && !boostHeld && !launched) pressAt = untilGo;
       boostHeld = padBoost;
-      for (const request of heightRequests) {
-        const previousLevel = model.state.altitudeLevel;
-        model.step(0, { ...input, ...request });
-        heightChanged ||= model.state.altitudeLevel !== previousLevel;
+      if (tutorialRuntime) {
+        const applied = tutorialRuntime.step(delta, input, heightRequests);
+        Object.assign(input, applied.input); heightChanged = applied.altitudeChanged; worldDelta = applied.simulationDelta;
+      } else {
+        for (const request of heightRequests) {
+          const previousLevel = model.state.altitudeLevel;
+          model.step(0, { ...input, ...request });
+          heightChanged ||= model.state.altitudeLevel !== previousLevel;
+        }
+        input.lift = 0; timeAttack.step(delta, input); worldDelta = delta;
       }
       heightRequests.length = 0;
-      input.lift = 0; timeAttack.step(delta, input);
     }
     if (oldPhase === 'finished') timeAttack.step(delta * slow, { throttle: false, brake: false, boost: false, steer: 0, lift: 0 });
     const phase = timeAttack.phase;
     if (oldPhase === 'countdown' || oldPhase === 'running') untilGo = Math.max(-1, untilGo - delta);
     if (phase === 'running' && !launched) {
-      if (isPerfectStart(pressAt)) {
+      if (!guidance.tutorial && isPerfectStart(pressAt)) {
         launched = true; model.launch(config.performance.topSpeed * PERFECT_START_SPEED); if (spaceHeld) keys.add('Space');
         raceAudio.play('boost-full'); say('perfect', 'PERFECT START');
       } else if (untilGo < -PERFECT_START_WINDOW) launched = true;
@@ -482,11 +510,11 @@ export function createRace(
     if (model.state.nearMisses > oldNearMisses) { raceAudio.play('boost-full'); boostPulse.trigger(); notify(); }
     if (model.state.coresCollected > oldCores) { raceAudio.play('boost-full'); say('pickup', '각성 코어 획득'); }
     if (oldAwakening > 0 && model.state.awakeningRemaining === 0 && phase === 'running') { raceAudio.play('boost-complete'); notify(); }
-    rivalVisuals.update(delta * slow, reducedMotion.matches);
-    if (mode === 'time-attack' && timeAttack.phase === 'running') ghostRecorder.sample(model.state);
+    rivalVisuals.update((guidance.tutorial ? worldDelta : delta) * slow, reducedMotion.matches);
+    if (!training && mode === 'time-attack' && timeAttack.phase === 'running') ghostRecorder.sample(model.state);
     ghostVisual?.update(model.state.elapsed, cinematic?.kind !== 'intro' && phase !== 'finished' && model.state.elapsed > 0);
     const cues = feedback.update({ ...timeAttack.snapshot(), phase, elapsed: model.state.elapsed });
-    raceAudio.update(phase, model.state.awakeningRemaining > 0 ? 2 : model.state.boostStage,
+    raceAudio.update(phase === 'running' && tutorialFrozen() ? 'paused' : phase, model.state.awakeningRemaining > 0 ? 2 : model.state.boostStage,
       model.state.awakeningRemaining > 0 ? 1 : model.state.boostStageProgress,
       model.state.speed / visuals.referenceSpeed, model.state.awakeningRemaining === 0 && input.brake);
     const sound = soundFeedback.update(phase, model.state);
@@ -502,14 +530,15 @@ export function createRace(
     if (model.state.recoveries > oldRecoveries) raceAudio.play('recovery');
     if (phase !== oldPhase) {
       touchControls.setRunning(phase === 'running');
-      if (phase === 'finished') { clearInput(); boostHaptics.stop(); boostPulse.reset(); boostWarp.reset(); cinematic = newCinematic('finish'); finishGhost(); }
+      if (phase === 'finished') { clearInput(); boostHaptics.stop(); boostPulse.reset(); boostWarp.reset(); cinematic = guidance.tutorial ? null : newCinematic('finish'); finishGhost(); }
       notify();
     }
     if (cinematic && (cinematic.t += delta) >= cinematic.duration) endCinematic();
     if (oldRecoveries !== model.state.recoveries) { cameraSnap = true; boostPulse.reset(); boostWarp.reset(); boostEntryAge = 1; }
     const state = model.state;
     const awake = state.awakeningRemaining > 0;
-    const simulationDelta = phase === 'running' ? delta : 0;
+    const simulationDelta = phase === 'running' ? worldDelta : 0;
+    const sceneDelta = tutorialFrozen() && phase === 'running' ? 0 : delta;
     boostEntryAge += simulationDelta;
     if (phase === 'running' && state.boostStage === 2 && oldBoostStage !== 2) { boostPulse.trigger(); boostEntryAge = 0; notify(); }
     if (state.collisions > oldCollisions && (state.notice === 'height-collision' || state.notice === 'corridor-collision')) {
@@ -519,7 +548,7 @@ export function createRace(
     const entry = !reducedMotion.matches && state.boostStage === 2 && boostEntryAge < 0.45
       ? boostEntryAge < 0.055 ? boostEntryAge / 0.055 : (1 - (boostEntryAge - 0.055) / 0.395) ** 2 : 0;
     const targetFov = reducedMotion.matches ? visuals.baseFov : Math.min(100, visuals.baseFov + Math.min(state.speed / visuals.referenceSpeed, 2) * visuals.cruiseFovGain + (state.boosting ? visuals.boostFovGain : 0) + (state.boostStage === 2 ? visuals.boostStage2FovGain : 0) + entry * visuals.boostEntryFovGain);
-    const fov = replaying || (cinematic?.kind === 'intro' && !cinematic.reduced && cinematic.t >= INTRO_SECONDS) ? camera.fov : THREE.MathUtils.lerp(camera.fov, targetFov, 1 - Math.exp(-delta * (entry > 0 ? Math.max(18, visuals.fovResponse) : visuals.fovResponse)));
+    const fov = replaying || (cinematic?.kind === 'intro' && !cinematic.reduced && cinematic.t >= INTRO_SECONDS) ? camera.fov : THREE.MathUtils.lerp(camera.fov, targetFov, 1 - Math.exp(-sceneDelta * (entry > 0 ? Math.max(18, visuals.fovResponse) : visuals.fovResponse)));
     if (Math.abs(camera.fov - fov) > 0.001) { camera.fov = fov; camera.updateProjectionMatrix(); }
     const cameraScale = Math.tan(THREE.MathUtils.degToRad(visuals.baseFov / 2)) / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
     track.sample(state.distance, frame, state.routeId);
@@ -528,16 +557,16 @@ export function createRace(
     flightRight.copy(frame.right).multiplyScalar(Math.cos(state.heading)).addScaledVector(frame.tangent, -Math.sin(state.heading));
     flightUp.copy(frame.up);
     const targetBank = phase === 'running' && !awake ? -input.steer * 0.32 * Math.min(state.speed / 25, 1) : 0;
-    bank = THREE.MathUtils.lerp(bank, reducedMotion.matches ? 0 : targetBank, 1 - Math.exp(-delta * 8));
+    bank = THREE.MathUtils.lerp(bank, reducedMotion.matches ? 0 : targetBank, 1 - Math.exp(-sceneDelta * 8));
     drone.quaternion.setFromRotationMatrix(poseBasis.makeBasis(flightRight, flightUp, backward.copy(flightForward).negate()));
     const shakeTarget = phase === 'running' && state.boosting && !reducedMotion.matches
       ? visuals.boostCraftShake * (state.boostStage === 2 ? 1.6 : 1) : 0;
-    craftShake = THREE.MathUtils.lerp(craftShake, shakeTarget, 1 - Math.exp(-delta * 16));
+    craftShake = THREE.MathUtils.lerp(craftShake, shakeTarget, 1 - Math.exp(-sceneDelta * 16));
     if (reducedMotion.matches) craftShake = 0;
     drone.rotateZ(bank + Math.sin(state.elapsed * 51) * craftShake);
     drone.rotateX(Math.sin(state.elapsed * 67 + 1) * craftShake * .5 + (reducedMotion.matches ? 0 : (state.targetAltitude - state.altitude) * -0.045));
     drone.rotateY(Math.sin(state.elapsed * 43) * craftShake * .35);
-    if (oldPhase === 'running') {
+    if (!training && oldPhase === 'running') {
       replayClock += delta;
       replayBuffer.record(replayClock, drone.position.x, drone.position.y, drone.position.z, drone.quaternion.x, drone.quaternion.y, drone.quaternion.z, drone.quaternion.w,
         state.speed, awake || state.boostStage === 2 ? 3 : state.boosting ? 2 : input.throttle && state.speed > 1 ? 1 : 0, phase !== 'running');
@@ -549,9 +578,9 @@ export function createRace(
     } else replayT = 0;
     desiredCameraOffset.copy(flightForward).multiplyScalar(-8.5).addScaledVector(flightUp, 3.5);
     const targetCameraAltitude = model.altitudeProfile.levels[0] + (state.altitude - model.altitudeProfile.levels[0]) * 0.62;
-    cameraAltitude = cameraSnap ? targetCameraAltitude : THREE.MathUtils.lerp(cameraAltitude, targetCameraAltitude, 1 - Math.exp(-delta * (reducedMotion.matches ? 12 : 4)));
+    cameraAltitude = cameraSnap ? targetCameraAltitude : THREE.MathUtils.lerp(cameraAltitude, targetCameraAltitude, 1 - Math.exp(-sceneDelta * (reducedMotion.matches ? 12 : 4)));
     if (cameraSnap) { cameraOffset.copy(desiredCameraOffset); cameraSnap = false; }
-    else cameraOffset.lerp(desiredCameraOffset, 1 - Math.exp(-delta * 9));
+    else cameraOffset.lerp(desiredCameraOffset, 1 - Math.exp(-sceneDelta * 9));
     camera.position.copy(drone.position).addScaledVector(cameraOffset, cameraScale);
     camera.position.addScaledVector(flightUp, cameraAltitude - state.altitude);
     camera.position.addScaledVector(flightForward, -entry * visuals.boostEntryPullback);
@@ -637,7 +666,7 @@ export function createRace(
     if (awakeningStrength < .001) awakeningStrength = 0;
     overdrive.setStrength(awakeningStrength); overdrive.update(simulationDelta, reducedMotion.matches);
     coreVisual.update(state.elapsed, reducedMotion.matches);
-    const hapticActive = phase === 'running' && coarsePointer.matches && !reducedMotion.matches;
+    const hapticActive = phase === 'running' && !tutorialFrozen() && coarsePointer.matches && !reducedMotion.matches;
     boostHaptics.update(simulationDelta, state.boostStage, hapticActive);
     if (hapticActive) { if (state.collisions > hapticCollisions) boostHaptics.collision(); if (state.nearMisses > hapticNearMisses) boostHaptics.nearMiss(); }
     hapticCollisions = state.collisions; hapticNearMisses = state.nearMisses;
@@ -650,7 +679,7 @@ export function createRace(
     else speedLines.update(state.elapsed, state.speed, awake || state.boosting, reducedMotion.matches, awake || state.boostStage === 2);
     views.prepareDriving();
     scenery?.setOverview(false); scenery?.update(drone.position); sky.update(camera.position);
-    const weatherFrame = weather.update(camera.position, state.distance, delta * slow, phase === 'running', reducedMotion.matches);
+    const weatherFrame = weather.update(camera.position, state.distance, (guidance.tutorial ? worldDelta : delta) * slow, phase === 'running' && !tutorialFrozen(), reducedMotion.matches);
     ambient.intensity = environment.ambientIntensity + weatherFrame.flash * 5;
     sun.intensity = environment.lightIntensity + weatherFrame.flash * 10;
     sky.setLightning(weatherFrame.flash);
@@ -692,7 +721,7 @@ export function createRace(
   const unsubscribeQuality = autoQuality.onChange(status => applyQuality(status.quality));
   notify(); animation = requestAnimationFrame(tick);
   return {
-    start, togglePause, restart, skipCinematic: endCinematic, useAwakening, useFocus() { const used = timeAttack.useFocus(); if (used) notify(); return used; }, useRivalItem(item) { const used = timeAttack.useRivalItem(item); if (used) notify(); return used; }, recover, toggleCockpit, cycleTrack,
+    start, togglePause, restart, continueTutorial, skipTutorial() { guidance.tutorial?.skip(); notify(); }, skipAllTutorial() { guidance.tutorial?.skipAll(); notify(); }, skipCinematic: endCinematic, useAwakening, useFocus() { if (guidance.tutorial?.snapshot()) return false; const used = timeAttack.useFocus(); if (used) notify(); return used; }, useRivalItem(item) { if (guidance.tutorial?.snapshot()) return false; const used = timeAttack.useRivalItem(item); if (used) notify(); return used; }, recover, toggleCockpit, cycleTrack,
     setBloom(enabled) { bloom.enabled = enabled; },
     setQuality(preference) { autoQuality.setPreference(preference); },
     onQualityChange(listener) { return autoQuality.onChange(listener); },

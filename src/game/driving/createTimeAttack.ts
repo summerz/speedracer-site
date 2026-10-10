@@ -10,13 +10,13 @@ import { createCleanHalfLaps } from './raceScoring.js';
 
 export type RacePhase = 'ready' | 'countdown' | 'running' | 'paused' | 'finished';
 
-export interface RaceRules { laps?: number; lapLimit?: number }
+export interface RaceRules { laps?: number; lapLimit?: number; practice?: boolean }
 
 /** Owns race timing and transitions; the renderer only steps and displays it. */
 export function createTimeAttack(track: Track, performance: DronePerformance, records: ReturnType<typeof createRaceRecords>, focusSlots = 0, rules: RaceRules = {}) {
   if (!Number.isInteger(focusSlots) || focusSlots < 0 || focusSlots > 2) throw new RangeError('Invalid focus slots');
   const totalLaps = rules.laps ?? RACE_LAPS;
-  const lapLimit = rules.lapLimit ?? null;
+  const lapLimit = rules.practice ? null : rules.lapLimit ?? null;
   if (lapLimit !== null && (!Number.isFinite(lapLimit) || lapLimit <= 0)) throw new Error('Invalid lap deadline');
   let disqualified = false;
   const model = createDrivingModel(track, performance);
@@ -69,6 +69,13 @@ export function createTimeAttack(track: Track, performance: DronePerformance, re
     useAwakening() {
       if (phase !== 'running' || !model.useAwakening()) return false;
       focusRemaining = 0; return true;
+    },
+    /** Training ends at the last lesson, without crossing a finish gate or saving a record. */
+    finishPractice() {
+      if (!rules.practice || phase !== 'running') return false;
+      finishSpeed = model.state.speed;
+      model.endAwakening(); model.state.speed = 0; model.interruptBoost(); phase = 'finished';
+      return true;
     },
     useFocus() {
       if (phase !== 'running' || model.state.awakeningRemaining > 0 || focusUsed >= focusSlots || focusCooldown > 0) return false;
@@ -123,7 +130,7 @@ export function createTimeAttack(track: Track, performance: DronePerformance, re
         finishSpeed = model.state.speed;
         model.endAwakening(); model.state.speed = 0; model.interruptBoost(); phase = 'finished';
         const completed = progress.snapshot();
-        result = records.save(finish, completed.lapTimes, completed.checkpointTimes);
+        if (!rules.practice) result = records.save(finish, completed.lapTimes, completed.checkpointTimes);
         return true;
       });
         if (phase === 'running') model.state.elapsed = startedAt + duration;

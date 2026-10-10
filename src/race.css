@@ -255,6 +255,8 @@ button:focus-visible { outline:2px solid #c9f9f2; outline-offset:3px; }
   .race-header { padding-top:max(10px,env(safe-area-inset-top)); }.corner-hint { display:none; }
   .has-touch-controls .drive-hud { bottom:max(18px,env(safe-area-inset-bottom)); left:50%; transform:translateX(-50%); width:min(310px,calc(100% - 340px)); }
   .has-touch-controls .fork-guide { margin:10px -45px 0; text-align:center; }
+  .drive-screen .tutorial-coach { top:max(92px,calc(env(safe-area-inset-top) + 80px)); left:max(18px,env(safe-area-inset-left)); transform:none; width:300px; padding:10px 12px; }
+  .drive-screen .tutorial-coach h3 { font-size:20px; }
   .drive-overlay { padding:16px; background:linear-gradient(90deg,#030b1680,transparent 65%); }
   .drive-dialog { width:340px; padding:18px; }
   .view-preview { width:max-content; }
@@ -386,7 +388,7 @@ button:focus-visible { outline:2px solid #c9f9f2; outline-offset:3px; }
 @media (max-height:500px) { .race-callout { top:56px; font-size:20px; } .race-callout[data-kind='perfect'] { font-size:24px; } .race-announcement[data-kind='final-lap'] { top:84px; } .race-announcement[data-kind='final-lap'] strong { font-size:28px; } .race-announcement[data-kind='final-lap'] span { display:none; } .race-streak { font-size:14px; top:30%; } .race-nearmiss { top:60%; font-size:18px; } }
 
 /* Full-screen race result: applies only while the race is finished; start and pause keep the left dialog. */
-.drive-screen[data-phase='finished'] :is(.drive-hud,.race-items,.hazard-edges,.race-pause,.race-header,.race-countdown,.race-announcement,.race-callout,.race-nearmiss,.race-streak,.race-notice,.focus-feedback) { display:none !important; }
+.drive-screen[data-phase='finished'] :is(.drive-hud,.race-items,.hazard-edges,.race-pause,.race-header,.race-countdown,.race-announcement,.race-callout,.race-nearmiss,.race-streak,.race-notice,.focus-feedback,.tutorial-coach) { display:none !important; }
 .drive-screen[data-phase='finished'] .drive-overlay { --gain:#4ff0a6; --loss:#ff7a6b; --gold:#ffd66b; padding:max(40px,env(safe-area-inset-top)) max(56px,env(safe-area-inset-right)) max(32px,env(safe-area-inset-bottom)) max(56px,env(safe-area-inset-left)); overflow-y:auto; pointer-events:auto;
   background:radial-gradient(120% 70% at 50% 50%,transparent 35%,#050a10bb 100%),linear-gradient(180deg,#050a10cc 0%,#050a1055 30%,transparent 42%,transparent 58%,#050a10f2 76%); }
 .drive-screen[data-phase='finished'] .drive-dialog { align-self:stretch; display:grid; width:100%; max-height:none; min-height:100%; padding:0; overflow:visible; background:none; border:0;
@@ -483,3 +485,52 @@ button:focus-visible { outline:2px solid #c9f9f2; outline-offset:3px; }
 @media (max-width:600px) { .result-card { flex:none; overflow:visible; } }
 @media (max-width:600px) { .drive-screen[data-phase='finished'] .drive-overlay { padding-bottom:0; } .drive-screen[data-phase='finished'] .drive-dialog { padding-bottom:calc(200px + env(safe-area-inset-bottom)); } }
 @media (max-width:600px) { .drive-screen[data-phase='finished'] .drive-dialog { align-self:flex-start; height:auto; } }
+.tutorial-coach { position:absolute; z-index:6; top:max(96px, calc(env(safe-area-inset-top) + 84px)); left:50%; transform:translateX(-50%); width:min(360px, calc(100% - 32px)); padding:12px 14px; border-radius:10px; background:#081620e6; border:1px solid #56dacf66; box-shadow:0 8px 30px #0008, 0 0 24px #56dacf22; backdrop-filter:blur(8px); pointer-events:none; color:#e9f2f4; }
+@media (min-width:1000px) and (pointer:fine) { .drive-screen .tutorial-coach { top:120px; left:24px; transform:none; } }
+.tutorial-coach[hidden] { display:none; }
+.drive-screen.is-tutorial-complete .drive-overlay { display:none; }
+.tutorial-coach .coach-eyebrow { display:flex; justify-content:space-between; font:500 10px 'IBM Plex Mono',monospace; letter-spacing:1.6px; color:#56dacf; }
+.tutorial-coach .coach-eyebrow span:last-child { color:#6f8590; margin-right:64px; }
+.tutorial-coach h3 { margin:6px 0 4px; font:700 24px/1.2 'Barlow Condensed',sans-serif; }
+.tutorial-coach p { margin:0; font-size:13px; line-height:1.7; color:#cfe1e4; }
+.tutorial-coach .ok { color:#64ffb9; } .tutorial-coach .bad { color:#ff6851; }
+.tutorial-coach .coach-checks { display:flex; gap:12px; margin-top:9px; font:500 11px 'IBM Plex Mono',monospace; color:#8c9ba4; }
+.tutorial-coach .coach-checks .is-done { color:#4ff0a6; }
+.tutorial-coach kbd { display:inline-block; min-width:22px; padding:1px 6px; border:1px solid #9fc1c6; border-bottom-width:2px; border-radius:4px; font:500 11px 'IBM Plex Mono',monospace; background:#0d2430; color:#fff; text-align:center; }
+.tutorial-coach .coach-skip { position:absolute; right:12px; top:34px; pointer-events:auto; font-size:11px; color:#9bb4c1; background:transparent; border:1px solid #58717d70; border-radius:12px; padding:3px 9px; min-height:0; touch-action:manipulation; }
+.tutorial-coach .coach-off { margin-left:auto; pointer-events:auto; padding:0; min-height:0; border:0; background:transparent; color:#6f8590; font:inherit; text-decoration:underline; text-underline-offset:2px; touch-action:manipulation; }
+.tutorial-coach .coach-bar { position:absolute; left:0; right:0; bottom:0; height:3px; border-radius:0 0 10px 10px; overflow:hidden; background:#ffffff12; }
+.tutorial-coach .coach-bar i { display:block; height:100%; background:#56dacf; box-shadow:0 0 8px #56dacf; transition:width .2s; }
+.tutorial-coach .coach-toast { position:absolute; left:50%; top:calc(100% + 12px); transform:translateX(-50%); white-space:nowrap; padding:8px 16px; border-radius:20px; background:#0b2a22ee; border:1px solid #4ff0a6; color:#4ff0a6; font:600 14px -apple-system,sans-serif; box-shadow:0 0 20px #4ff0a644; }
+.tutorial-coach[data-phase='intro'],.tutorial-coach[data-phase='freeze'] { pointer-events:auto; cursor:pointer; }
+.coach-chip { position:absolute; top:-26px; left:50%; transform:translateX(-50%); font:500 10px 'IBM Plex Mono',monospace; letter-spacing:2px; color:#cfe1e4; background:#081620cc; border:1px solid #58717d80; border-radius:10px; padding:3px 10px; white-space:nowrap; }
+.coach-chip::before { content:'❚❚ '; color:#ffd66b; letter-spacing:0; }
+.tutorial-coach.is-await { border-color:#ffd66b88; box-shadow:0 8px 30px #0008,0 0 28px #ffd66b33; }
+.tutorial-coach.is-await .coach-eyebrow { color:#ffd66b; }
+.tutorial-coach.is-await .coach-skip { position:static; }
+.coach-prompt { margin-top:10px; padding:9px 10px; border-radius:6px; background:#ffd66b14; border:1px dashed #ffd66b66; font:600 14px/1.8 -apple-system,sans-serif; color:#fff3cf; }
+.coach-prompt kbd { font-size:14px; min-width:30px; padding:3px 8px; border-color:#ffd66b; color:#ffd66b; box-shadow:0 0 14px #ffd66b66; }
+.coach-foot { display:flex; align-items:center; justify-content:space-between; margin-top:10px; font:500 11px 'IBM Plex Mono',monospace; color:#8c9ba4; }
+.coach-foot .coach-checks { margin-top:0; }
+.coach-foot .coach-off { margin-left:0; }
+.coach-go { pointer-events:auto; display:inline-flex; align-items:center; gap:8px; padding:7px 12px; min-height:0; border-radius:6px; border:0; background:#56dacf; color:#06231f; font:600 13px -apple-system,sans-serif; touch-action:manipulation; }
+.coach-go kbd { background:#06231f; color:#56dacf; border-color:#06231f; }
+.drive-screen.is-tutorial-frozen .race-scene { filter:saturate(.45) brightness(.8); transition:filter .25s; }
+.drive-screen.is-tutorial-frozen .race-scene::after { content:''; position:absolute; inset:0; pointer-events:none; background:radial-gradient(120% 90% at 50% 55%,#050a1000 40%,#050a10a0 100%); }
+.coach-world-ring { position:absolute; z-index:5; left:0; top:0; width:92px; height:92px; margin:-46px 0 0 -46px; border-radius:50%; border:2px solid #ffd66b; box-shadow:0 0 0 6px #ffd66b22,0 0 26px #ffd66b88; pointer-events:none; }
+.coach-world-tag { position:absolute; z-index:5; left:0; top:0; font:600 12px -apple-system,sans-serif; color:#08131a; background:#ffd66b; padding:3px 8px; border-radius:4px; white-space:nowrap; pointer-events:none; }
+.tutorial-complete { position:absolute; inset:0; z-index:8; display:grid; place-items:center; background:#050a10c8; }
+.tutorial-complete .complete-card { width:min(460px,calc(100% - 32px)); padding:26px 26px 22px; border-radius:12px; background:#081620f2; border:1px solid #56dacf66; box-shadow:0 0 40px #56dacf22; text-align:center; color:#e9f2f4; }
+.tutorial-complete .complete-eyebrow { font:500 11px 'IBM Plex Mono',monospace; letter-spacing:2px; color:#56dacf; }
+.tutorial-complete h2 { margin:8px 0 6px; font:700 44px/1 'Barlow Condensed',sans-serif; }
+.tutorial-complete p { margin:0; font-size:13px; line-height:1.5; color:#cfe1e4; }
+.tutorial-complete ul { list-style:none; margin:16px 0; padding:0; display:grid; grid-template-columns:1fr 1fr; gap:6px 16px; text-align:left; font:500 12px 'IBM Plex Mono',monospace; }
+.tutorial-complete li.is-done { color:#4ff0a6; } .tutorial-complete li.is-skipped { color:#8c9ba4; }
+.tutorial-complete .complete-actions { display:grid; gap:8px; }
+.tutorial-complete .complete-actions button { padding:13px; border-radius:6px; font:600 15px -apple-system,sans-serif; background:#0b1720; color:#e9f2f4; border:1px solid #58717d80; touch-action:manipulation; }
+.tutorial-complete .complete-actions .primary-action { background:#56dacf; color:#06231f; border-color:#56dacf; }
+[data-coach-target] { outline:2px solid #ffd66b; outline-offset:4px; box-shadow:0 0 0 8px #ffd66b22, 0 0 26px #ffd66b88; animation:coach-pulse 1.4s ease-in-out infinite; }
+.touch-joystick[data-coach-target], .touch-boost[data-coach-target], .touch-rise[data-coach-target], .touch-descend[data-coach-target] { border-radius:50%; }
+.height-guide[data-coach-target], .boost-readout[data-coach-target] { border-radius:8px; }
+@keyframes coach-pulse { 50% { outline-color:#ffd66b80; box-shadow:0 0 0 12px #ffd66b11, 0 0 18px #ffd66b55; } }
+@media (prefers-reduced-motion:reduce) { [data-coach-target] { animation:none; } }

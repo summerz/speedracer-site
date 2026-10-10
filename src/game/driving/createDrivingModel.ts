@@ -15,7 +15,7 @@ import { AWAKENING_SECONDS, AWAKENING_SPEED_SCALE, AWAKENING_CAPACITY, CORE_REAC
 export { OFF_TRACK_PENALTY_POINTS, COLLISION_PENALTY_POINTS, OBSTACLE_COLLISION_PENALTY_POINTS } from './raceScoring.js';
 
 /** lift is a single tap impulse (-1 / 0 / 1), never a held key. */
-export interface DrivingInput { throttle: boolean; brake: boolean; steer: number; lift: number; boost: boolean; targetAltitudeLevel?: number; targetSpeedScale?: number }
+export interface DrivingInput { throttle: boolean; brake: boolean; steer: number; lift: number; boost: boolean; targetAltitudeLevel?: number; targetSpeedScale?: number; guidedSpeedScale?: number; guidedOffset?: number; guidedStopDistance?: number }
 export interface DrivingState {
   routeId?: string | null;
   distance: number;
@@ -257,7 +257,8 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
         const grade = clamp((sampled.tangent?.y ?? 0) * Math.cos(state.heading) + (sampled.right?.y ?? 0) * Math.sin(state.heading), -1, 1);
         const steer = awake ? 0 : clamp(input.steer, -1, 1);
         const altitudeSpeed = Math.min(heightSwitchSpeed, Math.abs(state.targetAltitude - state.altitude) / dt);
-        const speedScale = !awake && Number.isFinite(input.targetSpeedScale) ? clamp(input.targetSpeedScale!, .1, 1) : 1;
+        const guidedScale = Number.isFinite(input.guidedSpeedScale) ? clamp(input.guidedSpeedScale!, .1, 1) : 1;
+        const speedScale = (!awake && Number.isFinite(input.targetSpeedScale) ? clamp(input.targetSpeedScale!, .1, 1) : 1) * guidedScale;
         const limit = (state.boostStage === 2 ? tuning.boostStage2Speed : state.boosting ? tuning.boostSpeed : tuning.topSpeed) * speedScale;
         const baseThrust = state.boostStage === 2 ? tuning.boostStage2Acceleration : state.boosting ? tuning.boostAcceleration : input.throttle ? tuning.acceleration : 0;
         const thrust = baseThrust * impactAccelerationScale(accelerationRecovery, recoveryDuration);
@@ -272,7 +273,7 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
           handoffRemaining = Math.max(0, handoffRemaining - dt);
         }
         if (awake) {
-          const awakeSpeed = tuning.boostStage2Speed * AWAKENING_SPEED_SCALE;
+          const awakeSpeed = tuning.boostStage2Speed * AWAKENING_SPEED_SCALE * guidedScale;
           state.speed = oldSpeed + clamp(awakeSpeed - oldSpeed, -tuning.boostStage2Acceleration * 3 * dt, tuning.boostStage2Acceleration * 3 * dt);
         }
         const speed = (oldSpeed + state.speed) * 0.5;
@@ -301,10 +302,15 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
           state.altitudeLevel = target.level; state.targetAltitude = target.altitude;
           heightSwitchSpeed = 30;
         }
+        if (Number.isFinite(input.guidedOffset)) {
+          state.offset = offsetFrom + clamp((input.guidedOffset! - offsetFrom) * (1 - Math.exp(-10 * dt)), -24 * dt, 24 * dt);
+          state.heading = 0;
+        }
         // Hands-off, the craft is also eased back to the trunk centre as the fork nears (steering overrides it).
-        if (Math.abs(steer) < .15) state.offset *= Math.exp(-6 * (1 - fade) * dt);
+        if (!Number.isFinite(input.guidedOffset) && Math.abs(steer) < .15) state.offset *= Math.exp(-6 * (1 - fade) * dt);
         const oldDistance = state.distance;
         state.distance = advanceTrackDistance(track, state.distance, travel * dt, state.routeId);
+        if (Number.isFinite(input.guidedStopDistance)) state.distance = Math.max(oldDistance, Math.min(state.distance, input.guidedStopDistance!));
         // Commit the choice in the same tick that crosses the entrance, before
         // any renderer, obstacle or rival can observe an unselected route.
         const enteredFork = forkAt(track, state.distance);

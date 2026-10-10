@@ -272,6 +272,7 @@ export function createRaceSession(track: Track, configuration: DroneConfiguratio
       if (fresh) grid();
     },
     restart() { track.randomizeObstacles?.(random); player.restart(); rivals.forEach(p => p.controller.restart()); grid(); },
+    finishPractice() { return player.finishPractice(); },
     pause() { player.pause(); rivals.forEach(p => p.controller.pause()); },
     recover() { player.recover(); },
     useAwakening() { return player.useAwakening(); },
