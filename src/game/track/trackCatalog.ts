@@ -16,7 +16,7 @@ export const DISTRICTS: Record<DistrictId, { name: string; color: string; descri
   abyss: { name: '심해 해구', color: '#5ff5e6', description: '해저 돔과 연결 터널 · 수면빛과 생물 발광 사이 완만한 고도 주행' },
   kelp: { name: '켈프 숲', color: '#c0ef56', description: '큰 해초 기둥 사이 순환로 · 완만한 곡선에서 연속 코일까지' },
   coral: { name: '산호 정원', color: '#ff936c', description: '산호 군락과 해저 정원 · 넓은 루프와 교차 주행' },
-  lagoon: { name: '햇빛 라군', color: '#a4fff0', description: '수면빛이 닿는 얕은 바다 · 탁 트인 곡선과 입체 회전' },
+  lagoon: { name: '햇빛 라군', color: '#ffd27a', description: '수면빛이 닿는 얕은 바다 · 탁 트인 곡선과 입체 회전' },
 };
 export interface TrackDefinition {
   readonly id: string; readonly name: string; readonly revision: number; readonly order: number;

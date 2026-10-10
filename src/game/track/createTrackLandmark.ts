@@ -94,7 +94,7 @@ export function describeTrackLandmarks(track: Track, definition: TrackDefinition
 }
 
 /** Seven silhouettes, with course-specific proportions; emissive strips replace point lights. */
-export function createTrackLandmark(descriptor: TrackLandmark, preview = false) {
+export function createTrackLandmark(descriptor: TrackLandmark, preview = false, underwater = false) {
   const object = new THREE.Group(); object.name = descriptor.id;
   object.position.copy(descriptor.position); object.rotation.y = descriptor.rotation; object.scale.setScalar(descriptor.scale);
   object.userData.landmark = { id: descriptor.id, kind: descriptor.kind, name: descriptor.name };
@@ -148,6 +148,14 @@ export function createTrackLandmark(descriptor: TrackLandmark, preview = false) 
     const rim = add(new THREE.TorusGeometry(47, .9, 6, 48), glow, 0, 62, 0); rim.rotation.x = .3;
     box(-28, 23, 0, 12, 42, 16); box(28, 23, 0, 12, 42, 16);
     for (const x of [-45, 45]) { box(x, 24, 0, 21, 3, 55); box(x, 26, 0, 21, .8, 55, dim); }
+  } else if (underwater && descriptor.kind === 'bridge') {
+    // Underwater: coral-rock spires joined by a glowing arch instead of ground-city towers.
+    for (const [index, x] of [-34, 34].entries()) {
+      const h = 100 + index * 18 + variation;
+      add(new THREE.ConeGeometry(6, h, 7), body, x, h / 2 + 5, 0);
+      for (const f of [.3, .55, .78]) ring(6 * (1 - f) + 1, h * f + 5, .9);
+    }
+    add(new THREE.TorusGeometry(34, 1.6, 6, 32, Math.PI), glow, 0, 30, 0);
   } else {
     const towers = descriptor.kind === 'bridge' ? [-34, 34] : descriptor.kind === 'terrace' ? [-26, 0, 26] : [0];
     for (const [index, x] of towers.entries()) {
