@@ -185,7 +185,7 @@ test('either choice remains available in the shared entrance without moving the 
       state.distance = d; state.offset = fork.authoredLayout ? -6 : -3; state.altitudeLevel = 0;
       model.step(1/120, NEUTRAL_INPUT); assert.equal(state.routeId, fork.routes[0].id);
       state.offset = fork.authoredLayout ? 6 : 3; state.altitudeLevel = track.altitudeProfile.levels.length-1;
-      model.step(1/120, NEUTRAL_INPUT); assert.equal(state.routeId, fork.routes[fork.authoredLayout ? 2 : 1].id);
+      model.step(1/120, NEUTRAL_INPUT); assert.equal(state.routeId, fork.routes[fork.authoredLayout === 'arena-three' ? 2 : 1].id);
       state.offset = fork.authoredLayout ? -6 : -3; state.altitudeLevel = 0;
       model.step(1/120, NEUTRAL_INPUT); assert.equal(state.routeId, fork.routes[0].id);
     }

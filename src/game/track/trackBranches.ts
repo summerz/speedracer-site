@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { createTrackFrame, type Track, type TrackFrame, type HeightObstacle } from './createTrack.js';
 
+export type BranchVariety = 'arena-three' | 'terrace-height';
 export interface BranchRecipe {
   readonly id: string;
   readonly kind: 'horizontal' | 'vertical';
@@ -9,14 +10,14 @@ export interface BranchRecipe {
   readonly direction?: 1 | -1;
   /** Minimum ground clearance below the pavement in a low-lying coil. */
   readonly groundClearance?: number;
-  readonly variety?: 'arena-three';
+  readonly variety?: BranchVariety;
 }
 export interface BranchRoute {
   readonly id: string; readonly name: string; readonly description: string;
   readonly length: number; readonly features: readonly string[];
   /** Shared-progress boundaries of the dedicated entry/merge mouths. */
   readonly mouthEnd: number; readonly mergeStart: number;
-  readonly cue?: { readonly choice: 'left' | 'center' | 'right'; readonly roadHeight: 'low' | 'middle' | 'high'; readonly hazards: readonly ('height' | 'corridor')[] };
+  readonly cue?: { readonly choice: 'left' | 'center' | 'right' | 'lower' | 'upper'; readonly roadHeight: 'low' | 'middle' | 'high'; readonly hazards: readonly ('height' | 'corridor')[] };
 }
 export interface TrackFork {
   readonly id: string; readonly kind: BranchRecipe['kind'];
@@ -25,7 +26,7 @@ export interface TrackFork {
   readonly junctionLength: number;
   readonly routes: readonly BranchRoute[];
   readonly defaultRouteId?: string;
-  readonly authoredLayout?: 'arena-three';
+  readonly authoredLayout?: BranchVariety;
 }
 export interface RoadPath { start: number; end: number; routeId: string | null }
 const localDistance = (track: Track, distance: number) => { const d = distance % track.length; return d < 0 ? d + track.length : d; };
@@ -202,7 +203,8 @@ export function withTrackBranches(track: Track, recipes: readonly BranchRecipe[]
     const span = Math.min(680, interval.end - interval.start - 20);
     const start = interval.start + 10, end = start + span;
     const three = recipe.variety === 'arena-three';
-    const junctionLength = three ? 60 : 35;
+    const terrace = recipe.variety === 'terrace-height';
+    const junctionLength = recipe.variety ? 60 : 35;
     // A dedicated, symmetric Y comes before any route-specific experience.
     const mouthFraction = Math.min((recipe.intertwined ? 100 : three ? 160 : span < 500 ? 140 : 120) / (span - junctionLength * 2), recipe.intertwined ? .18 : three ? .32 : .45);
     const bodySpan = (span - junctionLength * 2) * (1 - mouthFraction * 2);
@@ -244,6 +246,7 @@ export function withTrackBranches(track: Track, recipes: readonly BranchRecipe[]
             rise = side === 2 ? 18 : side === 1 ? 36 : 0;
           }
           if (recipe.kind === 'vertical') { sideways = sign * 34 + weave * .5; rise = side ? 76 : 2; }
+          if (terrace) { sideways = sign * (side ? 52 : 34) + (side ? 0 : weave * .3); rise = side ? 76 : 0; }
           if (recipe.intertwined) {
             // Opposite points on an ellipse cross in plan while remaining separated in 3D.
             envelope = smooth(body / .15) * smooth((1 - body) / .15);
@@ -262,7 +265,7 @@ export function withTrackBranches(track: Track, recipes: readonly BranchRecipe[]
           positions.push(position); frames.push(base);
           if (i) cumulative.push(cumulative[i - 1] + position.distanceTo(positions[i - 1]));
         }
-        if (three || !side || recipe.intertwined || cumulative[count] >= technicalLength * 1.03 || extraRise >= 240) break;
+        if (recipe.variety || !side || recipe.intertwined || cumulative[count] >= technicalLength * 1.03 || extraRise >= 240) break;
         extraRise += 12;
       } while (true);
       const entryIndex = Math.round(junctionLength / span * count), exitIndex = count - entryIndex;
@@ -327,6 +330,10 @@ export function withTrackBranches(track: Track, recipes: readonly BranchRecipe[]
         features: side === 0 ? ['완만한 S자', '고도 장애물'] : side === 2 ? ['완만한 기본 길', '안전 차선'] : ['높은 전망', '부스트 패드'],
         cue: { choice: side === 0 ? 'left' : side === 2 ? 'center' : 'right', roadHeight: side === 0 ? 'low' : side === 2 ? 'middle' : 'high',
           hazards: side === 0 ? ['height'] : side === 2 ? ['corridor'] : [] } };
+      if (terrace) return { id, name: side ? '스카이 익스프레스' : '테라스 슬라럼', length, mouthEnd, mergeStart,
+        description: side ? '높은 전망 · 위험 없는 부스트 패드' : '짧은 아래길 · 상승 후 하강',
+        features: side ? ['높은 전망', '부스트 패드'] : ['완만한 굽이', '고도 장애물'],
+        cue: { choice: side ? 'upper' : 'lower', roadHeight: side ? 'high' : 'low', hazards: side ? [] : ['height'] } };
       return { id, name: names[recipe.experience][side as 0 | 1], length, features, mouthEnd, mergeStart,
         description: technical ? '가까운 구조물 · 굽이와 고도 대응' : '트인 전망 · 긴 부스트 기회' };
     };
@@ -342,7 +349,7 @@ export function withTrackBranches(track: Track, recipes: readonly BranchRecipe[]
       return track.sample(pairedDistance, undefined, otherId);
     });
     forks.push({ id: recipe.id, kind: recipe.kind, start, end, junctionLength, routes,
-      ...(three ? { defaultRouteId: `${recipe.id}:2`, authoredLayout: 'arena-three' as const } : {}) });
+      ...(recipe.variety ? { defaultRouteId: `${recipe.id}:${three ? 2 : 0}`, authoredLayout: recipe.variety } : {}) });
   }
   Object.assign(track, { branches: forks });
   track.sample = (distance, target = createTrackFrame(), routeId) => {

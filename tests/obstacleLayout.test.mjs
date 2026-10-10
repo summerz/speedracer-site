@@ -142,7 +142,7 @@ test('every track re-rolls layout per run: counts per path hold, placement is va
         }
       }
       for (const routeId of [null, ...(track.branches ?? []).flatMap(f => f.routes.map(r => r.id))]) {
-        const path = o => !o.routeId || o.routeId === routeId, pads = [...track.boostPads, ...track.boostRings.filter(r => track.sample(r.distance, undefined, r.routeId).section === 'course')].filter(path);
+        const path = o => !o.routeId || o.routeId === routeId, pads = [...track.boostPads, ...track.boostRings.filter(r => track.sample(r.distance, undefined, r.routeId).section === 'course')].filter(path).sort((a, b) => a.distance - b.distance);
         const gap = (a, b) => physicalDistance(track, a.distance, b.distance - a.distance, routeId);
         for (const pad of pads) {
           assert.equal(track.sample(pad.distance, undefined, routeId).section, 'course', `${definition.name}: boost on a course slot`);

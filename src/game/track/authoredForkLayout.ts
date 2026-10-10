@@ -9,18 +9,19 @@ export function isAuthoredForkRoute(track: Track | undefined, routeId?: string |
 export function authoredForkLayout(track: Track, template: HeightObstacle) {
   const heights: HeightObstacle[] = [], corridors: CorridorObstacle[] = [], pads: BoostPad[] = [];
   for (const fork of track.branches ?? []) {
-    if (fork.authoredLayout !== 'arena-three') continue;
+    if (!fork.authoredLayout) continue;
+    const terrace = fork.authoredLayout === 'terrace-height';
     for (const route of fork.routes) {
       const at = (metres: number) => {
         const d = advanceTrackDistance(track, route.mouthEnd, metres, route.id);
         if (d > route.mergeStart - 15) throw new Error(`Authored fork site outside route body: ${route.id}`);
         return d;
       };
-      if (route.cue?.choice === 'left') {
+      if (route.cue?.choice === 'left' || route.cue?.choice === 'lower') {
         const levels = track.altitudeProfile.levels;
         for (const [i, level] of [levels.length - 1, 0].entries()) {
           const height = levels[level];
-          heights.push({ ...template, motion: undefined, routeId: route.id, distance: at(20 + i * 120),
+          heights.push({ ...template, motion: undefined, routeId: route.id, distance: at(terrace ? 65 + i * 140 : 20 + i * 120),
             kind: level === 0 ? 'descend' : 'rise',
             minAltitude: level === 0 ? height : height - .45,
             maxAltitude: level === 0 ? height + .45 : height });
@@ -29,7 +30,7 @@ export function authoredForkLayout(track: Track, template: HeightObstacle) {
         corridors.push({ routeId: route.id, distance: at(80), depth: 4, speedRetention: template.speedRetention,
           lane: 'center', safeCenter: 0, safeWidth: track.halfWidth * 1.1 });
       } else {
-        pads.push({ routeId: route.id, distance: at(80), lane: 'center', center: 0, width: track.halfWidth, length: 14 });
+        pads.push({ routeId: route.id, distance: at(terrace ? 130 : 80), lane: 'center', center: 0, width: track.halfWidth, length: 14 });
       }
     }
   }
