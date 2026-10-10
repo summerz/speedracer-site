@@ -1,4 +1,5 @@
 import { createDrivingTutorial } from './game/driving/drivingTutorial';
+import { createTutorialCoach } from './game/driving/createTutorialCoach';
 import type { TutorialMode } from './game/driving/drivingTutorial';
 import { createTutorialProgress } from './game/driving/tutorialProgress';
 import { RACE_CHALLENGES, challengeStars, challengeStarPenalty, type RaceChallengeId } from './game/track/raceChallenge';
@@ -187,6 +188,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
   let tutorialStorage: Storage | undefined;
   try { tutorialStorage = window.localStorage; } catch { /* Optional tutorial persistence. */ }
   const tutorialProgress = createTutorialProgress(tutorialStorage);
+  const coach = createTutorialCoach(screen, () => race?.skipTutorial(), () => race?.skipAllTutorial());
   const defaultEnvironment = selectRaceEnvironment(campaign?.track.district);
   const rainToggle = root.querySelector<HTMLButtonElement>('#dev-rain-toggle');
   let previewRain = true;
@@ -272,6 +274,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
       difficulty: campaign ? challenge : selectedDifficulty, ship_id: configuration.id,
       control_type: coarsePointer.matches ? 'touch' : 'desktop', tutorial_mode: tutorialMode ?? 'off',
       tutorial_history: tutorialProgress.outcome() ?? 'unseen', practice: isTraining() });
+    coach.render(state.phase === 'running' ? state.tutorial : null, tutorialMode === 'practice' ? '연습 주행' : '첫 주행 연습');
     const viewKey = `${state.view}/${state.trackDisplay}`;
     if (lastViewKey && lastViewKey !== viewKey && ['ready', 'paused', 'finished'].includes(state.phase) && !lost) previewing = true;
     lastViewKey = viewKey;
@@ -836,5 +839,5 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
     const enabled = hapticsButton.getAttribute('aria-pressed') !== 'true';
     hapticsButton.setAttribute('aria-pressed', String(enabled)); race?.setHapticsEnabled(enabled);
   }, listen);
-  return () => { analytics.quit(lost ? 'render_error' : 'navigation'); screenDisposed = true; preferences.close(); restartConfirm.close(); impactAnimation?.cancel(); boostFlashAnimation?.cancel(); events.abort(); race?.dispose(); window.dispatchEvent(new CustomEvent('speedracer:phase', { detail: 'hangar' })); };
+  return () => { analytics.quit(lost ? 'render_error' : 'navigation'); screenDisposed = true; preferences.close(); restartConfirm.close(); impactAnimation?.cancel(); boostFlashAnimation?.cancel(); events.abort(); race?.dispose(); coach.dispose(); window.dispatchEvent(new CustomEvent('speedracer:phase', { detail: 'hangar' })); };
 }
