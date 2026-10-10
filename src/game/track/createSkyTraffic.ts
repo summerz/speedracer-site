@@ -18,7 +18,7 @@ uniform vec3 uColor; varying vec2 vUv; varying vec3 vN; varying vec3 vP;
 void main() {
   float fade = pow(clamp(vUv.y, 0.0, 1.0), 1.3);
   float fres = pow(abs(dot(normalize(vN), normalize(vP))), 1.6);
-  float near = smoothstep(25.0, 110.0, length(vP)); // fade beams that sweep past the camera
+  float near = smoothstep(60.0, 260.0, length(vP)); // fade beams that sweep past the camera
   gl_FragColor = vec4(uColor, 0.22 * fade * fres * near);
 }`;
 const SPOT_VERTEX = `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
