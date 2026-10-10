@@ -53,7 +53,22 @@
 .overall b { color:#e0f5ef; font-weight:500; }
 .overall .stat-stars b { color:#ffe29a; }
 .view-districts { display:flex; flex-direction:column; }
-.district-list { flex:1; display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); grid-auto-rows:minmax(210px,1fr); gap:14px; }
+.district-list { flex:1; display:flex; flex-direction:column; gap:30px; }
+.city-group { display:grid; gap:14px; }
+.city-head { display:flex; align-items:flex-end; justify-content:space-between; gap:12px 24px; flex-wrap:wrap; padding-bottom:10px; border-bottom:1px solid #58717d40; }
+.city-title .eyebrow { margin:0 0 2px; font-size:10px; color:#80ffe0; }
+.city-group[data-city=marine] .city-title .eyebrow { color:#5ff5e6; }
+.city-title h2 { margin:0; font:600 clamp(22px,2.4vw,30px)/1.1 'Barlow Condensed',sans-serif; letter-spacing:.06em; color:#e6f4f1; }
+.city-ko { margin-left:8px; font-size:.62em; letter-spacing:.02em; color:#8ea5b1; font-weight:500; }
+.city-progress { display:grid; gap:6px; min-width:min(220px,100%); }
+.city-progress p { display:flex; justify-content:space-between; gap:16px; margin:0; font-size:12px; color:#b2c6ce; }
+.city-progress .meter { height:3px; }
+.city-lock { margin:0; font-size:12px; color:#99adb9; line-height:1.4; }
+.district-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); grid-auto-rows:minmax(210px,1fr); gap:14px; }
+.zone-preview { display:flex; flex-direction:column; gap:8px; min-width:0; padding:16px; cursor:default; opacity:.55; filter:saturate(.5); background:radial-gradient(120% 90% at 0% 0%,color-mix(in srgb,var(--district-color) 20%,#0b1c28),#0b1c28 62%); border:1px dashed color-mix(in srgb,var(--district-color) 35%,#58717d50); border-radius:10px; }
+.zone-swatch { position:relative; height:34px; border-radius:6px; overflow:hidden; border:1px solid #58717d50; }
+.zone-swatch i { position:absolute; bottom:6px; width:9px; height:9px; border-radius:50%; right:8px; box-shadow:0 0 8px currentColor; }
+.zone-swatch i:first-child { right:22px; }
 .district-card { appearance:none; position:relative; display:flex; flex-direction:column; gap:8px; min-width:0; padding:16px; text-align:left; color:#c9dadf; font:inherit; cursor:pointer; overflow:hidden; background:radial-gradient(120% 90% at 0% 0%,color-mix(in srgb,var(--district-color) 26%,#0b1c28),#0b1c28 62%); border:1px solid color-mix(in srgb,var(--district-color) 42%,#58717d50); border-radius:10px; transition:transform 140ms,border-color 140ms,box-shadow 140ms; }
 .district-card:hover { transform:translateY(-2px); border-color:var(--district-color); box-shadow:0 8px 28px color-mix(in srgb,var(--district-color) 22%,transparent); }
 .district-card[data-next=true] { border-color:var(--district-color); box-shadow:0 0 0 1px var(--district-color),0 8px 30px color-mix(in srgb,var(--district-color) 30%,transparent); }
@@ -82,7 +97,7 @@
 .dt-row[data-status=locked] { opacity:.5; }
 .dt-row[data-next=true] { background:color-mix(in srgb,var(--district-color) 22%,transparent); color:#f0fbf8; box-shadow:inset 2px 0 var(--district-color); }
 .dt-row[data-next=true] .dt-mark { color:var(--district-color); font-weight:600; }
-@media (min-width:640px) and ((min-width:761px) or (orientation:landscape)) { .district-dots { display:none; } .district-tracklist { display:grid; } .district-list { grid-auto-rows:auto; align-content:start; } .district-card { min-height:0; } }
+@media (min-width:640px) and ((min-width:761px) or (orientation:landscape)) { .district-dots { display:none; } .district-tracklist { display:grid; } .district-grid { grid-auto-rows:auto; align-content:start; } .district-card { min-height:0; } }
 .district-stats { display:flex; justify-content:space-between; gap:8px; font-size:12px; color:#b2c6ce; }
 
 /* Tracks */
@@ -242,7 +257,7 @@
 /* D narrower than 1100px: tracks 2x2, districts 2 columns */
 @media (max-width:1099px) {
   .track-list { grid-template-columns:repeat(2,minmax(0,1fr)); }
-  .district-list { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .district-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
 }
 @media (max-width:899px) { .campaign-modes button { padding-inline:10px; } .view-detail { gap:18px; } }
 
@@ -261,7 +276,11 @@
   .continue-banner strong { font-size:17px; }
   .continue-button { min-height:34px; padding:4px 12px; }
   .view-districts { display:flex; flex-direction:column; overflow:hidden; }
-  .district-list { flex:1; min-height:0; display:flex; gap:12px; overflow-x:auto; overflow-y:hidden; scroll-snap-type:x mandatory; scroll-padding-inline:var(--pad); padding-bottom:6px; scrollbar-width:thin; overscroll-behavior-x:contain; }
+  .district-list { flex:1; min-height:0; overflow-y:auto; gap:12px; scrollbar-width:thin; }
+  .city-group { gap:8px; }
+  .city-head { padding-bottom:6px; }
+  .district-grid { display:flex; gap:12px; overflow-x:auto; scroll-snap-type:x mandatory; scroll-padding-inline:var(--pad); padding-bottom:6px; scrollbar-width:thin; overscroll-behavior-x:contain; }
+  .zone-preview { flex:0 0 220px; }
   .district-card { flex:0 0 220px; scroll-snap-align:start; padding:14px; }
   .district-description { -webkit-line-clamp:4; }
   .view-tracks { display:flex; flex-direction:column; overflow:hidden; }
@@ -329,7 +348,11 @@
   .districts-summary { grid-template-columns:1fr; gap:10px; margin-bottom:12px; }
   .continue-banner { padding:10px 12px; }
   .continue-banner strong { font-size:17px; white-space:normal; }
-  .district-list { grid-template-columns:repeat(2,minmax(0,1fr)); grid-auto-rows:auto; gap:10px; }
+  .district-list { gap:24px; }
+  .city-progress { flex:1 1 100%; }
+  .district-grid { grid-template-columns:repeat(2,minmax(0,1fr)); grid-auto-rows:auto; gap:10px; }
+  .zone-preview { padding:12px; gap:6px; min-height:130px; }
+  .zone-preview .district-description { display:none; }
   .district-card { padding:12px; gap:6px; min-height:150px; }
   .district-name { font-size:20px; }
   .district-description { display:none; }
