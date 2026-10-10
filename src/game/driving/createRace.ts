@@ -7,7 +7,8 @@ import { createRaceWeather } from '../environment/createRaceWeather';
 import { createNightSky } from '../environment/createNightSky';
 import { NIGHT_ENVIRONMENTS } from '../environment/raceEnvironment';
 import type { RaceEnvironment } from '../environment/raceEnvironment';
-import { marinePaletteFor } from '../environment/marineZones';
+import { marinePaletteFor, MARINE_ZONES } from '../environment/marineZones';
+import { createMarineGiant } from '../track/createMarineGiant';
 import { createCatalogTrack } from '../track/trackRuntime';
 import type { TrackDefinition } from '../track/trackCatalog';
 import { createDistrictScenery } from '../track/createDistrictScenery';
@@ -159,6 +160,9 @@ export function createRace(
   container.dataset.rainIntensity = environment.rain ? weather.intensity : 'none';
   const scenery = course ? (palette ? createAbyssScenery(track, course, palette) : createDistrictScenery(track, course)) : undefined;
   if (scenery) scene.add(scenery.object);
+  const zoneId = MARINE_ZONES.find(z => z.environments.some(e => e.id === environment.id))?.id ?? 'trench';
+  const giant = palette ? createMarineGiant(zoneId, track, palette, environment) : undefined;
+  if (giant) scene.add(giant.object);
   const trackVisual = createTrackVisual(track, config.boostStyle.pulseColor);
   scene.add(trackVisual.object);
   // Underwater the seabed replaces the grid and the dark ground plane (0.15 m below the seabed: it z-fights at flyover range).
@@ -688,7 +692,7 @@ export function createRace(
     if (replaying) speedLines.update(replayClock + replayT, replayPose.speed, replayPick.shot === 1 && replayPose.mode >= 2, reducedMotion.matches, replayPose.mode === 3);
     else speedLines.update(state.elapsed, state.speed, awake || state.boosting, reducedMotion.matches, awake || state.boostStage === 2);
     views.prepareDriving();
-    scenery?.setOverview(false); scenery?.update(drone.position, reducedMotion.matches ? 0 : performance.now() / 1000); sky.update(camera.position, reducedMotion.matches ? 0 : performance.now() / 1000);
+    scenery?.setOverview(false); scenery?.update(drone.position, reducedMotion.matches ? 0 : performance.now() / 1000); giant?.update(camera.position, reducedMotion.matches ? 0 : performance.now() / 1000); sky.update(camera.position, reducedMotion.matches ? 0 : performance.now() / 1000);
     const weatherFrame = weather.update(camera.position, state.distance, (guidance.tutorial ? worldDelta : delta) * slow, phase === 'running' && !tutorialFrozen(), reducedMotion.matches);
     ambient.intensity = environment.ambientIntensity + weatherFrame.flash * 5;
     sun.intensity = environment.lightIntensity + weatherFrame.flash * 10;
@@ -699,7 +703,7 @@ export function createRace(
     if (layout.track) {
       const linesVisible = speedLines.object.visible;
       speedLines.object.visible = false;
-      views.prepareOverview(); scenery?.setOverview(true); sky.setOverview(true); weather.setOverview(true); overviewComposer.render(delta); scenery?.setOverview(false); sky.setOverview(false); weather.setOverview(false);
+      views.prepareOverview(); giant?.setOverview(true); scenery?.setOverview(true); sky.setOverview(true); weather.setOverview(true); overviewComposer.render(delta); scenery?.setOverview(false); giant?.setOverview(false); sky.setOverview(false); weather.setOverview(false);
       speedLines.object.visible = linesVisible;
       views.prepareDriving();
     }
@@ -727,7 +731,7 @@ export function createRace(
   renderer.domElement.addEventListener('webglcontextlost', (event) => {
     event.preventDefault(); lost = true; pause(); cancelAnimationFrame(animation); onError();
   }, listen);
-  const applyQuality = (quality: RenderQuality) => { scenery?.setQuality(quality); weather.setQuality(quality); renderQuality = quality; resize(); };
+  const applyQuality = (quality: RenderQuality) => { scenery?.setQuality(quality); giant?.setQuality(quality); weather.setQuality(quality); renderQuality = quality; resize(); };
   const unsubscribeQuality = autoQuality.onChange(status => applyQuality(status.quality));
   notify(); animation = requestAnimationFrame(tick);
   return {
@@ -760,7 +764,7 @@ export function createRace(
       render.dispose(); bloom.dispose(); exhaustHaze.pass.dispose(); boostWarp.pass.dispose(); output.dispose(); composer.dispose();
       overviewRender.dispose(); overviewOutput.dispose(); overviewComposer.dispose();
       blitGeometry.dispose(); blitMaterial.dispose(); pipFrame.remove();
-      renderer.dispose(); renderer.forceContextLoss(); renderer.domElement.remove(); delete container.dataset.environment;
+      giant?.dispose(); renderer.dispose(); renderer.forceContextLoss(); renderer.domElement.remove(); delete container.dataset.environment;
     },
   };
 }
