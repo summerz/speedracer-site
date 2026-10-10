@@ -51,5 +51,5 @@ export function tutorialPrompt(step: TutorialStepId, check: string, device: Tuto
   const p = PROMPTS[`${step}/${check}`];
   return p ? { title: p.title, prompt: device === 'touch' ? p.touch : p.keys } : null;
 }
-export const NEAR_MISS_FREEZE = { title: '이렇게 스치면 니어미스', body: '상대 기체 옆을 아슬아슬하게 지나가면 부스트가 채워져요. 가까울수록 많이 채워져요.', tag: '가까울수록 부스트 +' };
+export const NEAR_MISS_FREEZE = { title: '이렇게 스치면 니어미스', body: '벽이나 상대 기체 옆을 아슬아슬하게 지나가면 부스트가 채워져요. 가까울수록 많이 채워져요.', tag: '가까울수록 부스트 +' };
 export const STEP_NAMES: Record<TutorialStepId, string> = { throttle: '가속', steer: '조향', altitude: '고도', boost: '부스트', brake: '감속', hazard: '위험 표시', 'near-miss': '니어미스' };

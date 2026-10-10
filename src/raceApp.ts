@@ -188,7 +188,8 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
   let tutorialStorage: Storage | undefined;
   try { tutorialStorage = window.localStorage; } catch { /* Optional tutorial persistence. */ }
   const tutorialProgress = createTutorialProgress(tutorialStorage);
-  const coach = createTutorialCoach(screen, () => race?.skipTutorial(), () => race?.skipAllTutorial());
+  const coach = createTutorialCoach(screen, { skip: () => race?.skipTutorial(), skipAll: () => race?.skipAllTutorial(), continue: () => { race?.continueTutorial(); } });
+  let tutorialCompleteShown = false;
   const defaultEnvironment = selectRaceEnvironment(campaign?.track.district);
   const rainToggle = root.querySelector<HTMLButtonElement>('#dev-rain-toggle');
   let previewRain = true;
@@ -274,7 +275,11 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
       difficulty: campaign ? challenge : selectedDifficulty, ship_id: configuration.id,
       control_type: coarsePointer.matches ? 'touch' : 'desktop', tutorial_mode: tutorialMode ?? 'off',
       tutorial_history: tutorialProgress.outcome() ?? 'unseen', practice: isTraining() });
-    coach.render(state.phase === 'running' ? state.tutorial : null, tutorialMode === 'practice' ? '연습 주행' : '첫 주행 연습');
+    const tutorialView = state.phase === 'running' ? state.tutorial : null;
+    coach.render(tutorialView, tutorialMode === 'practice' ? '연습 주행' : '첫 주행 연습', tutorialView && (tutorialView.phase === 'freeze' || tutorialView.phase === 'await') ? state.tutorialTargetScreen ?? undefined : undefined);
+    if (state.phase === 'finished' && tutorialMode && state.tutorialStatus?.outcome) {
+      if (!tutorialCompleteShown) { tutorialCompleteShown = true; screen.classList.add('is-tutorial-complete'); coach.showComplete(state.tutorialStatus.steps, () => startFirstCourse(), () => restartTutorialPractice()); }
+    } else if (tutorialCompleteShown && state.phase !== 'finished') { tutorialCompleteShown = false; screen.classList.remove('is-tutorial-complete'); coach.hideComplete(); }
     const viewKey = `${state.view}/${state.trackDisplay}`;
     if (lastViewKey && lastViewKey !== viewKey && ['ready', 'paused', 'finished'].includes(state.phase) && !lost) previewing = true;
     lastViewKey = viewKey;
@@ -722,6 +727,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
     if (course) { const zone = document.createElement('span'); zone.className = 'result-zone'; zone.textContent = ` · ${DISTRICTS[course.district].name} · ${String(course.order ?? 0).padStart(2, '0')}`; get('race-mode-title').append(zone); }
     get('race-loadout').textContent = isTraining() ? '첫 코스 조작 연습 · 기록과 보상을 저장하지 않습니다' : `${selectedMode === 'competition' ? `상대 기체 ${AI_OPPONENT_COUNT}대와 경쟁` : '타임어택'} · ${focusSlots || equippedRivalSlots.length ? `장착 아이템 ${focusSlots + equippedRivalSlots.length}개 · 기본 보상 80%` : '코스에서 각성 코어 획득'}`;
     rewardInput = undefined; campaignOutcome = undefined; get('result-reward').textContent = ''; get('reward-retry').hidden = true; get('result-shop').hidden = true; get('campaign-next').hidden = true;
+    tutorialCompleteShown = false; screen.classList.remove('is-tutorial-complete'); coach.hideComplete();
     race?.dispose(); lastPhase = ''; lastViewKey = ''; previewing = false; lastCollisions = 0; lastBoostStage = 0; lastAnnouncement = 0; lastCallout = 0; lastNearMisses = 0; lastStreak = 0; impactAnimation?.cancel(); boostFlashAnimation?.cancel();
     get('difficulty-description').textContent = `${course?.features ?? DIFFICULTIES[selectedDifficulty].description} · ${environment.label}${environment.rainIntensity ? ` · ${RAIN_INTENSITIES[environment.rainIntensity].label}` : ''}`;
     try {

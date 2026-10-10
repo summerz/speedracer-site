@@ -66,6 +66,7 @@ export type DrivingPhase = RacePhase;
 export interface RaceSnapshot extends DrivingState {
   tutorial: TutorialSnapshot | null;
   tutorialStatus: TutorialStatus | null;
+  tutorialTargetScreen: { x: number; y: number; visible: boolean } | null;
   competition: CompetitionSnapshot | null;
   altitudeProfile: AltitudeProfile;
   announcement: RaceAnnouncement | null;
@@ -179,6 +180,12 @@ export function createRace(
   const model = timeAttack.model;
   const tutorialRuntime = guidance.tutorial && createTutorialRuntime(track, timeAttack, guidance.tutorial);
   const tutorialFrozen = () => !!guidance.tutorial?.snapshot()?.frozen;
+  const targetPoint = new THREE.Vector3();
+  const tutorialTargetScreen = () => {
+    const target = guidance.tutorial?.snapshot()?.target; if (!target || views.trackDisplay === 'primary') return null;
+    const d = layout.driving; targetPoint.set(target.worldPosition.x, target.worldPosition.y, target.worldPosition.z).project(camera);
+    return { x: d.x + (targetPoint.x + 1) / 2 * d.width, y: d.height - (targetPoint.y + 1) / 2 * d.height, visible: targetPoint.z < 1 && Math.abs(targetPoint.x) < 1.1 && Math.abs(targetPoint.y) < 1.1 };
+  };
   const coreVisual = createAwakeningCoreVisual(track, model); scene.add(coreVisual.object);
   const raceGates = createRaceGates(track, timeAttack.snapshot().gatesPerLap);
   scene.add(raceGates.object);
@@ -298,7 +305,7 @@ export function createRace(
     const selected = choosing ? undefined : junction?.routes.find(r => r.id === model.state.routeId);
     const fork = junction ? { kind: junction.kind, names: junction.routes.map(r => r.name), level: verticalThreshold(track) + 1, selected: selected?.name ?? null,
       distance: physicalDistance(track, model.state.distance, (selected ? junction.end : junction.start + junction.junctionLength) - model.state.distance % track.length, model.state.routeId) } : null;
-    onUpdate({ ...model.state, tutorial: timeAttack.phase === 'finished' ? null : guidance.tutorial?.snapshot() ?? null, tutorialStatus: guidance.tutorial?.status() ?? null, competition: session.competition, announcement: feedback.announcement, boostStage2Seconds: model.boostStage2Seconds, altitudeProfile: model.altitudeProfile, phase: timeAttack.phase, timeAttack: session, cinematic: cinematic && { kind: cinematic.kind, reduced: cinematic.reduced, seconds: cinematic.duration, shot: currentShot() }, callout, ghostDelta: ghost && timeAttack.phase !== 'finished' && model.state.elapsed > 0 ? ghostDelta(ghost, model.state.elapsed, model.state.distance) : null, view: views.view, trackDisplay: views.trackDisplay, trackLength: track.length, upcomingCurvature: upcoming.curvature, upcomingSection: upcoming.section, heightObstacle, corridor, mineField, boostPad, arcRail, boostRing, fork });
+    onUpdate({ ...model.state, tutorial: timeAttack.phase === 'finished' ? null : guidance.tutorial?.snapshot() ?? null, tutorialStatus: guidance.tutorial?.status() ?? null, tutorialTargetScreen: timeAttack.phase === 'finished' ? null : tutorialTargetScreen(), competition: session.competition, announcement: feedback.announcement, boostStage2Seconds: model.boostStage2Seconds, altitudeProfile: model.altitudeProfile, phase: timeAttack.phase, timeAttack: session, cinematic: cinematic && { kind: cinematic.kind, reduced: cinematic.reduced, seconds: cinematic.duration, shot: currentShot() }, callout, ghostDelta: ghost && timeAttack.phase !== 'finished' && model.state.elapsed > 0 ? ghostDelta(ghost, model.state.elapsed, model.state.distance) : null, view: views.view, trackDisplay: views.trackDisplay, trackLength: track.length, upcomingCurvature: upcoming.curvature, upcomingSection: upcoming.section, heightObstacle, corridor, mineField, boostPad, arcRail, boostRing, fork });
   };
   const heightRequests: { lift: number; targetAltitudeLevel?: number }[] = [];
   const touchControls = createTouchControls(container.parentElement ?? container, {

@@ -486,7 +486,9 @@ button:focus-visible { outline:2px solid #c9f9f2; outline-offset:3px; }
 @media (max-width:600px) { .drive-screen[data-phase='finished'] .drive-overlay { padding-bottom:0; } .drive-screen[data-phase='finished'] .drive-dialog { padding-bottom:calc(200px + env(safe-area-inset-bottom)); } }
 @media (max-width:600px) { .drive-screen[data-phase='finished'] .drive-dialog { align-self:flex-start; height:auto; } }
 .tutorial-coach { position:absolute; z-index:6; top:max(96px, calc(env(safe-area-inset-top) + 84px)); left:50%; transform:translateX(-50%); width:min(360px, calc(100% - 32px)); padding:12px 14px; border-radius:10px; background:#081620e6; border:1px solid #56dacf66; box-shadow:0 8px 30px #0008, 0 0 24px #56dacf22; backdrop-filter:blur(8px); pointer-events:none; color:#e9f2f4; }
+@media (min-width:1000px) and (pointer:fine) { .drive-screen .tutorial-coach { top:120px; left:24px; transform:none; } }
 .tutorial-coach[hidden] { display:none; }
+.drive-screen.is-tutorial-complete .drive-overlay { display:none; }
 .tutorial-coach .coach-eyebrow { display:flex; justify-content:space-between; font:500 10px 'IBM Plex Mono',monospace; letter-spacing:1.6px; color:#56dacf; }
 .tutorial-coach .coach-eyebrow span:last-child { color:#6f8590; margin-right:64px; }
 .tutorial-coach h3 { margin:6px 0 4px; font:700 24px/1.05 'Barlow Condensed',sans-serif; }

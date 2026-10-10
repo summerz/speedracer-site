@@ -50,7 +50,7 @@ export function createTutorialCoach(container: HTMLElement, actions: TutorialCoa
     ring.style.transform = `translate(${target.x}px,${target.y}px)`;
     if (freeze) {
       if (!tag) { tag = document.createElement('div'); tag.className = 'coach-world-tag'; tag.textContent = NEAR_MISS_FREEZE.tag; container.appendChild(tag); }
-      tag.style.transform = `translate(${target.x + 56}px,${target.y - 10}px)`;
+      tag.style.transform = target.x + 220 > container.clientWidth ? `translate(${target.x - 56}px,${target.y - 10}px) translateX(-100%)` : `translate(${target.x + 56}px,${target.y - 10}px)`;
     } else if (tag) { tag.remove(); tag = null; }
   };
 
@@ -81,7 +81,7 @@ export function createTutorialCoach(container: HTMLElement, actions: TutorialCoa
       if (phase === 'intro') inner = `${eyebrow}<h3>${copy.title}</h3><p>${copy.body}</p><div class="coach-foot">${off}${go}</div>`;
       else if (phase === 'freeze') inner = `${eyebrow}<h3>${NEAR_MISS_FREEZE.title}</h3><p>${NEAR_MISS_FREEZE.body}</p><div class="coach-foot">${off}${go}</div>`;
       else if (phase === 'demo') inner = `${eyebrow}<h3>${copy.title}</h3><p>${copy.body}</p><div class="coach-foot">${off}<span class="coach-auto">자동 주행 중</span></div>`;
-      else if (phase === 'await' && prompt) inner = `${eyebrow}<h3>${prompt.title}</h3><div class="coach-prompt">${prompt.prompt} — ${device === 'touch' ? '하면' : '누르면'} 다시 달려요</div><div class="coach-foot"><div class="coach-checks">${checks}</div><button type="button" class="coach-skip">건너뛰기</button></div>`;
+      else if (phase === 'await' && prompt) inner = `${eyebrow}<h3>${prompt.title}</h3><div class="coach-prompt">${prompt.prompt} — ${device === 'touch' ? '그러면' : '누르면'} 다시 달려요</div><div class="coach-foot"><div class="coach-checks">${checks}</div><button type="button" class="coach-skip">건너뛰기</button></div>`;
       else inner = `${eyebrow}<h3>${copy.title}</h3><p>${copy.body}</p><div class="coach-checks">${checks}${off}</div><button type="button" class="coach-skip">건너뛰기</button><div class="coach-bar"><i></i></div>${next >= 0 ? '<p class="coach-toast">좋아요 ✓</p>' : ''}`;
       root.innerHTML = chip + inner;
       bar = root.querySelector('.coach-bar i');
