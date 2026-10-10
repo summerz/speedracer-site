@@ -305,6 +305,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
       button.disabled = !status.canUse || focusPending;
       button.innerHTML = status.active > 1e-8 ? `${item.name} <small class="item-count">${status.active.toFixed(1)}s</small>` : `${item.name} <small class="item-count">${status.remaining}</small><small class="item-note">${attack.itemCooldown > 0 ? ` · ${attack.itemCooldown.toFixed(1)}s` : status.remaining > 0 && !status.targets.length ? ' · 대상 없음' : ''}</small>`;
     }
+    let slot = 0; for (const button of screen.querySelectorAll<HTMLButtonElement>('.race-items .race-focus')) if (!button.hidden) button.style.setProperty('--slot', String(slot++));
     get('focus-feedback').hidden = !focusPending && performance.now() >= focusMessageUntil;
     screen.classList.toggle('is-focused', attack.focusRemaining > 0 && state.phase === 'running');
     const deadline = get('lap-deadline'); deadline.hidden = !campaign || selectedMode !== 'time-attack';
