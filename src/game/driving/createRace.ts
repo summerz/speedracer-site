@@ -1,3 +1,4 @@
+import type { DailyChallenge, DailyCounters } from '../progression/dailyChallenge.js';
 import type { SupportMissileSnapshot } from './supportMissile.js';
 import { readForkCue, type ForkCue } from '../track/forkCue.js';
 import { upcomingTrackJump, type JumpCue } from '../track/trackJump.js';
@@ -73,6 +74,7 @@ import { boostPadGuide, configureExtraObstacles, corridorCanPass, mineFieldGuide
 
 export type DrivingPhase = RacePhase;
 export interface RaceSnapshot extends DrivingState {
+  daily: { challenge: DailyChallenge; counters: DailyCounters } | null;
   supportMissile: SupportMissileSnapshot | null;
   jump: JumpCue | null;
   tutorial: TutorialSnapshot | null;
@@ -141,7 +143,7 @@ export function createRace(
   environment: RaceEnvironment = NIGHT_ENVIRONMENTS[0],
   challenge: RaceChallengeId = 'normal',
   intro = false,
-  guidance: { tutorial?: ReturnType<typeof createDrivingTutorial>; practice?: boolean } = {},
+  guidance: { daily?: DailyChallenge; beforeStart?: () => boolean; tutorial?: ReturnType<typeof createDrivingTutorial>; practice?: boolean } = {},
 ): Race {
   const config = resolveDroneConfiguration(configuration);
   const visuals = config.speedEffects;
@@ -194,12 +196,12 @@ export function createRace(
   let storage: Storage | undefined;
   try { storage = window.localStorage; } catch { /* Private browsing can deny storage. */ }
   const trackId = course ? `${course.id}:v${course.revision}` : `neon-circuit-v2:${difficulty?.id ?? 'beginner'}`;
-  const records = createRaceRecords({ laps: course?.laps, trackId, configurationId: JSON.stringify({ ...(challenge !== 'normal' ? { challenge } : {}), performance: config.performance, altitude: track.altitudeProfile, ...(focusSlots || rivalSlots.length ? { assisted: true } : {}), ...(rivalSlots.includes('support-missile') ? { rivalItems: [...rivalSlots].sort(), focusSlots } : {}), ...(mode === 'competition' ? { mode } : {}) }) }, storage);
+  const records = createRaceRecords({ laps: course?.laps, trackId, configurationId: JSON.stringify({ ...(challenge !== 'normal' ? { challenge } : {}), performance: config.performance, altitude: track.altitudeProfile, ...(focusSlots || rivalSlots.length ? { assisted: true } : {}), ...(rivalSlots.includes('support-missile') ? { rivalItems: [...rivalSlots].sort(), focusSlots } : {}), ...(mode === 'competition' ? { mode } : {}) }) }, guidance.daily ? undefined : storage);
   const training = !!guidance.practice || !!guidance.tutorial;
-  const timeAttack = createRaceSession(track, config, records, focusSlots, mode, Math.random, coarsePointer.matches ? 'touch' : 'desktop', { practice: training, parry: !guidance.tutorial, drift: !guidance.tutorial, ...(course ? { laps: course.laps, ...(mode === 'time-attack' ? { lapLimit: challengeLapLimit(course, challenge) } : {}) } : {}) }, course?.rating, rivalSlots, challenge);
+  const timeAttack = createRaceSession(track, config, records, focusSlots, mode, Math.random, coarsePointer.matches ? 'touch' : 'desktop', { daily: guidance.daily, practice: training, parry: !guidance.tutorial, drift: !guidance.tutorial, ...(course ? { laps: course.laps, ...(mode === 'time-attack' ? { lapLimit: challengeLapLimit(course, challenge) } : {}) } : {}) }, course?.rating, rivalSlots, challenge);
   const rivalVisuals = createRivalVisuals(scene, track, timeAttack.rivals);
   const ghostStorageKey = ghostKey(trackId, challenge);
-  const ghost = mode === 'time-attack' && !guidance.tutorial ? loadGhost(storage, ghostStorageKey) : null;
+  const ghost = mode === 'time-attack' && !guidance.tutorial && !guidance.daily ? loadGhost(storage, ghostStorageKey) : null;
   const ghostVisual = ghost && createGhostVisual(scene, track, ghost, config.modelVariant);
   const ghostRecorder = createGhostRecorder();
   const model = timeAttack.model;
@@ -330,7 +332,7 @@ export function createRace(
     const selected = choosing ? undefined : junction?.routes.find(r => r.id === model.state.routeId);
     const fork = junction ? { kind: junction.kind, names: junction.routes.map(r => r.name), level: verticalThreshold(track) + 1, selected: selected?.name ?? null,
       distance: physicalDistance(track, model.state.distance, (selected ? junction.end : junction.start + junction.junctionLength) - model.state.distance % track.length, model.state.routeId) } : null;
-    onUpdate({ ...model.state, jump: upcomingTrackJump(track, model.state.distance, model.state.routeId), tutorial: timeAttack.phase === 'finished' ? null : guidance.tutorial?.snapshot() ?? null, tutorialStatus: guidance.tutorial?.status() ?? null, tutorialTargetScreen: timeAttack.phase === 'finished' ? null : tutorialTargetScreen(), competition: session.competition, supportMissile: session.supportMissile, announcement: feedback.announcement, boostStage2Seconds: model.boostStage2Seconds, altitudeProfile: model.altitudeProfile, phase: timeAttack.phase, timeAttack: session, cinematic: cinematic && { kind: cinematic.kind, reduced: cinematic.reduced, seconds: cinematic.duration, shot: currentShot() }, callout, ghostDelta: ghost && timeAttack.phase !== 'finished' && model.state.elapsed > 0 ? ghostDelta(ghost, model.state.elapsed, model.state.distance) : null, view: views.view, trackDisplay: views.trackDisplay, trackLength: track.length, upcomingCurvature: upcoming.curvature, upcomingSection: upcoming.section, heightObstacle, corridor, mineField, boostPad, arcRail, boostRing, fork, forkCue: readForkCue(track, model.state) });
+    onUpdate({ ...model.state, daily: session.daily, jump: upcomingTrackJump(track, model.state.distance, model.state.routeId), tutorial: timeAttack.phase === 'finished' ? null : guidance.tutorial?.snapshot() ?? null, tutorialStatus: guidance.tutorial?.status() ?? null, tutorialTargetScreen: timeAttack.phase === 'finished' ? null : tutorialTargetScreen(), competition: session.competition, supportMissile: session.supportMissile, announcement: feedback.announcement, boostStage2Seconds: model.boostStage2Seconds, altitudeProfile: model.altitudeProfile, phase: timeAttack.phase, timeAttack: session, cinematic: cinematic && { kind: cinematic.kind, reduced: cinematic.reduced, seconds: cinematic.duration, shot: currentShot() }, callout, ghostDelta: ghost && timeAttack.phase !== 'finished' && model.state.elapsed > 0 ? ghostDelta(ghost, model.state.elapsed, model.state.distance) : null, view: views.view, trackDisplay: views.trackDisplay, trackLength: track.length, upcomingCurvature: upcoming.curvature, upcomingSection: upcoming.section, heightObstacle, corridor, mineField, boostPad, arcRail, boostRing, fork, forkCue: readForkCue(track, model.state) });
   };
   const heightRequests: { lift: number; targetAltitudeLevel?: number }[] = [];
   const touchControls = createTouchControls(container.parentElement ?? container, {
@@ -354,12 +356,13 @@ export function createRace(
   const finishGhost = () => {
     if (training) return;
     const { result, disqualified } = timeAttack.snapshot();
-    if (result && shouldSaveGhost({ mode, disqualified, isNewBest: result.isNewBest })) saveGhost(storage, ghostStorageKey, ghostRecorder.finish(model.state, model.state.elapsed, model.state.distance));
+    if (!guidance.daily && result && shouldSaveGhost({ mode, disqualified, isNewBest: result.isNewBest })) saveGhost(storage, ghostStorageKey, ghostRecorder.finish(model.state, model.state.elapsed, model.state.distance));
   };
   const endCinematic = () => { if (cinematic) { cinematic = null; notify(); } };
   const start = () => {
     if (lost || disposed) return;
     if (cinematic) { endCinematic(); return; }
+    if ((timeAttack.phase === 'ready' || timeAttack.phase === 'finished') && guidance.beforeStart?.() === false) return;
     clearInput(); raceAudio.activate();
     if (timeAttack.phase === 'ready' || timeAttack.phase === 'finished') { feedback.reset(); raceAudio.reset(); }
     const fresh = timeAttack.phase === 'ready' || timeAttack.phase === 'finished';

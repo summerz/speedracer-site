@@ -1,3 +1,4 @@
+import { settleDailyResult, type DailyResultInput, type DailySettlement } from './dailyChallenge.js';
 import { applyCommand, initialProgress, validateProgress, previewRelock } from './progress.js';
 import type { Progress, ProgressCommand } from './progress.js';
 import { campaignRecordKeys, type CampaignRecordStorage } from './campaignRecordCleanup.js';
@@ -60,30 +61,37 @@ export function createProgressStore(repository: ProgressRepository, recordStorag
     publish();
   };
   if (channel) channel.onmessage = () => { void refresh(); };
+  const command = async (command: ProgressCommand, inspect?: (current: Progress) => void) => {
+    try {
+      let removeKeys: string[] = [];
+      const saved = await repository.transact(value => {
+        const current = value === undefined ? initialProgress() : validateProgress(value);
+        inspect?.(current);
+        if (command.kind === 'campaign-unlock-all' && !command.on && recordStorage)
+          removeKeys = campaignRecordKeys(previewRelock(current, recordStorage), recordStorage);
+        return applyCommand(current, command);
+      });
+      if (saved.revision >= state.revision) state = saved;
+      if (!closed) channel?.postMessage('changed');
+      // Never discard caches if the profile transaction failed. All variants
+      // are collected before removing keys, since localStorage indices shift.
+      try { if (recordStorage) for (const key of removeKeys) recordStorage.removeItem(key); }
+      catch (error) { throw new Error(`해금 설정은 저장됐지만 주행 기록 정리를 완료하지 못했습니다. 다시 잠금을 시도해주세요. ${error instanceof Error ? error.message : ''}`); }
+      issue = ''; publish(); return structuredClone(saved);
+    } catch (error) { issue = error instanceof Error ? error.message : '저장하지 못했습니다.'; publish(); throw error; }
+  };
   return {
     snapshot: () => structuredClone(state),
+    command,
+    async settleDaily(input: DailyResultInput): Promise<DailySettlement> {
+      let settlement: DailySettlement;
+      await command({ kind: 'daily-result', input }, current => { settlement = settleDailyResult(current.daily, input).settlement; });
+      return settlement!;
+    },
     previewRelock: () => previewRelock(state, recordStorage),
     get issue() { return issue; },
     refresh,
     subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; },
-    async command(command: ProgressCommand) {
-      try {
-        let removeKeys: string[] = [];
-        const saved = await repository.transact(value => {
-          const current = value === undefined ? initialProgress() : validateProgress(value);
-          if (command.kind === 'campaign-unlock-all' && !command.on && recordStorage)
-            removeKeys = campaignRecordKeys(previewRelock(current, recordStorage), recordStorage);
-          return applyCommand(current, command);
-        });
-        if (saved.revision >= state.revision) state = saved;
-        if (!closed) channel?.postMessage('changed');
-        // Never discard caches if the profile transaction failed. All variants
-        // are collected before removing keys, since localStorage indices shift.
-        try { if (recordStorage) for (const key of removeKeys) recordStorage.removeItem(key); }
-        catch (error) { throw new Error(`해금 설정은 저장됐지만 주행 기록 정리를 완료하지 못했습니다. 다시 잠금을 시도해주세요. ${error instanceof Error ? error.message : ''}`); }
-        issue = ''; publish(); return structuredClone(saved);
-      } catch (error) { issue = error instanceof Error ? error.message : '저장하지 못했습니다.'; publish(); throw error; }
-    },
     close() { closed = true; channel?.close(); repository.close(); listeners.clear(); },
   };
 }

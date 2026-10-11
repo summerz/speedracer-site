@@ -1,3 +1,4 @@
+import type { DailyChallenge } from '../progression/dailyChallenge.js';
 import { createDrivingModel } from './createDrivingModel.js';
 import type { DrivingInput } from './createDrivingModel.js';
 import type { DronePerformance } from '../drone/droneConfiguration.js';
@@ -10,7 +11,7 @@ import { createCleanHalfLaps } from './raceScoring.js';
 
 export type RacePhase = 'ready' | 'countdown' | 'running' | 'paused' | 'finished';
 
-export interface RaceRules { laps?: number; lapLimit?: number; practice?: boolean; drift?: boolean; parry?: boolean }
+export interface RaceRules { laps?: number; lapLimit?: number; practice?: boolean; daily?: DailyChallenge; drift?: boolean; parry?: boolean }
 
 /** Owns race timing and transitions; the renderer only steps and displays it. */
 export function createTimeAttack(track: Track, performance: DronePerformance, records: ReturnType<typeof createRaceRecords>, focusSlots = 0, rules: RaceRules = {}) {

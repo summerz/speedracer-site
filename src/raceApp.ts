@@ -1,3 +1,6 @@
+import { dailyChallengeFor, dailyDateKey, dailySnapshot, dailyGoalCurrent, type DailyChallenge, type DailyResultInput, type DailySnapshot } from './game/progression/dailyChallenge';
+import { DRONE_CATALOG } from './game/drone/droneCatalog';
+import { dailyGoalLabel, renderDailyHud, renderDailySettlement } from './dailyChallengeView';
 import { reserveSupportMissile } from './game/progression/supportMissileUse';
 import type { ForkCue } from './game/track/forkCue';
 import { LANE_HUES } from './game/track/createForkLanes';
@@ -8,7 +11,7 @@ import { createTutorialCoach } from './game/driving/createTutorialCoach';
 import type { TutorialMode } from './game/driving/drivingTutorial';
 import { createTutorialProgress } from './game/driving/tutorialProgress';
 import { RACE_CHALLENGES, challengeStars, challengeStarPenalty, type RaceChallengeId } from './game/track/raceChallenge';
-import { RAIN_INTENSITIES, previewRaceEnvironment, selectRaceEnvironment, selectRainIntensity } from './game/environment/raceEnvironment';
+import { RAIN_INTENSITIES, previewRaceEnvironment, selectRaceEnvironment, selectRainIntensity, raceEnvironmentsForDistrict } from './game/environment/raceEnvironment';
 import { hazardEdgeAlert } from './game/driving/hazardEdgeAlert';
 import { raceResultData } from './game/driving/raceResultData';
 import { AI_OPPONENT_COUNT } from './game/driving/aiRoster';
@@ -35,7 +38,7 @@ import type { RaceMode } from './game/driving/createRaceSession';
 import type { Race, RaceSnapshot } from './game/driving/createRace';
 import './race.css';
 import './campaign.css';
-import { TRACK_CATALOG, DISTRICTS, campaignRankLimit } from './game/track/trackCatalog';
+import { TRACK_CATALOG, DISTRICTS, campaignRankLimit, trackDefinition } from './game/track/trackCatalog';
 import { trackPreset } from './game/track/trackRuntime';
 import type { TrackDefinition } from './game/track/trackCatalog';
 import type { CampaignOutcome } from './game/progression/campaign';
@@ -59,7 +62,7 @@ const BOOST_ICON = '<svg viewBox="0 0 16 20" aria-hidden="true"><path d="M9 1 2 
 interface SectorDelta { checkpoint: number; lap: number; gate: number; time: number; bestTime: number; delta: number; cumulativeDelta: number }
 interface ResultData { previousBestTotal: number | null; lapDeltas: (number | null)[]; sectors?: SectorDelta[]; collisions: number; nearMisses: number; bestStreak: number; offTrackExits: number; boostUses?: number }
 
-export function mountRace(root: HTMLDivElement, onExit: () => void, configuration: DroneConfiguration = DEFAULT_DRONE_CONFIGURATION, store?: ProgressStore, onShop?: () => void, campaign?: { track: TrackDefinition; mode: RaceMode; challenge: RaceChallengeId; test?: boolean; zone?: string }): () => void {
+export function mountRace(root: HTMLDivElement, onExit: () => void, configuration: DroneConfiguration = DEFAULT_DRONE_CONFIGURATION, store?: ProgressStore, onShop?: () => void, campaign?: { track: TrackDefinition; mode: RaceMode; challenge: RaceChallengeId; test?: boolean; zone?: string; daily?: DailyChallenge }): () => void {
   let focusSlots = store ? Math.min(store.snapshot().focusSlots, store.snapshot().focus) : 0;
   document.title = 'Speedracer — 타임어택';
   root.innerHTML = `
@@ -186,7 +189,8 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
   const awakeningDuration = awakeningButton.querySelector<HTMLElement>('.awakening-duration')!;
   const awakeningDurationFill = awakeningDuration.querySelector('i')!;
   let selectedDifficulty: DifficultyId = campaign ? trackPreset(campaign.track).id : 'beginner';
-  const challenge = campaign?.challenge ?? 'normal';
+  let challenge = campaign?.challenge ?? 'normal';
+  let daily = campaign?.daily;
   let selectedMode: RaceMode = campaign?.mode ?? 'time-attack';
   let practice = false;
   let tutorialMode: TutorialMode | null = null;
@@ -219,6 +223,41 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
   let introPending = true; let cinematicKind = ''; let shotKey = ''; let cinematicEndedAt = 0;
   let rewardInput: RewardInput | undefined; let rewardPending = false; let focusPending = false; let canFocus = false; let activeRaceId = '';
   let screenDisposed = false; let focusSerial = 0; let focusMessageUntil = 0; let lastMissileHit = -1; let lastParrySuccess = -1; let parryCalloutUntil = 0;
+  const dailyHud = document.createElement('div'); dailyHud.className = 'daily-hud'; dailyHud.hidden = true;
+  root.querySelector('.race-telemetry')!.append(dailyHud);
+  let dailyProfile = store?.snapshot();
+  const unsubscribeDaily = store?.subscribe(() => { dailyProfile = store.snapshot(); });
+  let dailyInput: DailyResultInput | undefined; let dailyPending = false;
+  const readDaily = (state: RaceSnapshot): DailySnapshot | null => {
+    if (!state.daily || !dailyProfile) return null;
+    const snapshot = dailySnapshot(dailyProfile, state.daily.challenge);
+    snapshot.current = dailyGoalCurrent(state.daily.challenge, state.daily.counters);
+    snapshot.done = snapshot.current >= snapshot.target;
+    snapshot.status = state.phase === 'finished' ? snapshot.done && !state.timeAttack.disqualified ? 'success' : 'failed' : state.phase === 'ready' ? 'ready' : 'running';
+    return snapshot;
+  };
+  const saveDaily = async () => {
+    if (!store || !dailyInput || dailyPending) return;
+    const input = dailyInput; dailyPending = true; get('reward-retry').hidden = true;
+    try {
+      const settlement = await store.settleDaily(input);
+      if (screenDisposed || dailyInput?.raceId !== input.raceId) return;
+      const snapshot = dailySnapshot(store.snapshot(), input.challenge);
+      snapshot.current = dailyGoalCurrent(input.challenge, input.counters); snapshot.done = snapshot.current >= snapshot.target;
+      renderDailySettlement(get('result-reward'), snapshot, settlement, store.snapshot().balance);
+      if (settlement.awarded) gameAnalytics.send('daily_reward', { daily_date: input.challenge.dateKey, daily_goal: input.challenge.goal.id, reward_points: settlement.awarded, track_id: input.challenge.trackId });
+      get('campaign-result').textContent = settlement.success ? '오늘의 도전 성공' : '목표를 달성하고 제한시간 안에 완주하세요.';
+      get('campaign-result').dataset.passed = String(settlement.success);
+      get('result-status').textContent = settlement.success ? settlement.isNewBest ? 'NEW DAILY BEST' : 'CHALLENGE CLEAR' : 'TRY AGAIN';
+      get('result-status').dataset.kind = settlement.success ? settlement.isNewBest ? 'best' : 'finish' : 'limit';
+      get('result-sub').textContent = settlement.best ? `오늘 최고 ${formatTime(settlement.best.total)}` : '오늘 최고 기록 없음';
+    } catch (error) {
+      if (!screenDisposed && dailyInput?.raceId === input.raceId) {
+        get('result-reward').textContent = `도전 결과를 저장하지 못했습니다. ${error instanceof Error ? error.message : ''}`;
+        get('reward-retry').hidden = false;
+      }
+    } finally { dailyPending = false; if (!screenDisposed && dailyInput && dailyInput.raceId !== input.raceId) void saveDaily(); }
+  };
   const saveReward = async () => {
     if (!store || !rewardInput || rewardPending) return;
     const input = rewardInput; rewardPending = true; get('reward-retry').hidden = true;
@@ -231,7 +270,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
       get('result-reward').innerHTML = `<div class="reward-total"><strong>+${r.total.toLocaleString()} <small>P</small></strong><span>보유 ${profile.balance.toLocaleString()} P</span></div>${rank ? `<p class="reward-placement">${rank}위 · 순위 보너스 +${r.placement ?? 0} P</p>` : ''}<dl class="reward-breakdown"><div><dt>${outcome?.disqualified ? '실격' : '완주'}${r.assisted ? ' · 보조 80%' : ''}</dt><dd>+${r.base} P</dd></div><div><dt>클린 · 장애물 통과</dt><dd>+${r.clean + (r.obstacles ?? 0)} P</dd></div>${r.best ? `<div><dt>신기록</dt><dd>+${r.best} P</dd></div>` : ''}${r.bonus ? `<div><dt>첫 통과</dt><dd>+${r.bonus} P</dd></div>` : ''}${r.placement ? `<div><dt>순위 ${rank ?? ''}${rank ? '위' : ''}</dt><dd>+${r.placement} P</dd></div>` : ''}${r.penalty ? `<div class="neg"><dt>벌점${input.collisions ? ` · 충돌 ${input.collisions}회` : ''}</dt><dd>−${r.penalty} P</dd></div>` : ''}</dl>`;
       if (campaign) {
         const passed = !!outcome && !outcome.disqualified && outcome.laps.length === campaign.track.laps && (selectedMode === 'competition' ? outcome.rank <= campaignRankLimit(campaign.track) : outcome.laps.every(lap => lap <= outcome.lapLimit));
-        const next = TRACK_CATALOG.find(t => t.predecessor === campaign.track.id);
+        const next = TRACK_CATALOG.find(t => t.predecessor === campaign!.track.id);
         const stars = outcome ? challengeStars(selectedMode, campaign.track, challenge, outcome) : 0;
         const verdict = get('campaign-result');
         if (passed && outcome) verdict.innerHTML = `<b class="pass">${next ? '트랙 통과' : '캠페인 완주'}</b> · ${next ? '다음 코스가 열렸습니다.' : '모든 코스를 통과했습니다.'}<small>별점 감점 ${challengeStarPenalty(outcome, campaign.track.laps).toFixed(1)}점/랩</small>`;
@@ -300,6 +339,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
   let overlayLayout = '';
   const analytics = createRaceAnalytics(gameAnalytics.send);
   const update = (state: RaceSnapshot) => {
+    renderDailyHud(dailyHud, readDaily(state));
     const attackResult = state.timeAttack;
     const stars = campaign && !isTraining() && state.phase === 'finished' ? challengeStars(selectedMode, campaign.track, challenge, {
       laps: attackResult.lapTimes, rank: state.competition?.playerRank ?? 1, disqualified: attackResult.disqualified,
@@ -307,13 +347,13 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
     }) : 0;
     analytics.observe({ id: attackResult.raceId, phase: state.phase, seconds: state.elapsed,
       laps: attackResult.lapTimes.length, collisions: state.collisions, exits: state.offTrackExits,
-      obstacles: state.obstaclesPassed, success: campaign && !isTraining() ? stars > 0 : !attackResult.disqualified,
+      obstacles: state.obstaclesPassed, success: daily ? !!readDaily(state)?.done && !attackResult.disqualified : campaign && !isTraining() ? stars > 0 : !attackResult.disqualified,
       disqualified: attackResult.disqualified, rank: state.competition?.playerRank ?? 1, stars,
       tutorial: state.tutorial, tutorialStatus: state.tutorialStatus,
     }, { track_id: isTraining() && !featureTest ? TRACK_CATALOG[0].id : campaign?.track.id ?? 'practice', race_mode: selectedMode,
       difficulty: campaign ? challenge : selectedDifficulty, ship_id: configuration.id,
       control_type: coarsePointer.matches ? 'touch' : 'desktop', tutorial_mode: tutorialMode ?? 'off',
-      tutorial_history: tutorialProgress.outcome() ?? 'unseen', practice: isTraining() });
+      tutorial_history: tutorialProgress.outcome() ?? 'unseen', practice: isTraining(), ...(daily ? { daily_date: daily.dateKey, daily_goal: daily.goal.id } : {}) });
     const tutorialView = state.phase === 'running' ? state.tutorial : null;
     coach.render(tutorialView, tutorialMode === 'practice' ? '연습 주행' : '첫 주행 연습', tutorialView && (tutorialView.phase === 'freeze' || tutorialView.phase === 'await') ? state.tutorialTargetScreen ?? undefined : undefined);
     if (state.phase === 'finished' && tutorialMode && state.tutorialStatus?.outcome) {
@@ -396,7 +436,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
     if (attack.lapLimit) deadline.textContent = `남은 시간 ${Math.max(0, attack.lapLimit - (state.elapsed - attack.lapTimes.reduce((a, b) => a + b, 0))).toFixed(1)}s`;
     get('race-lap').textContent = `LAP ${attack.lap}/${attack.totalLaps}`;
     get('race-lap').setAttribute('aria-label', `${attack.totalLaps}랩 중 ${attack.lap}랩`);
-    get('ready-best').textContent = attack.bestRecord ? `최고 기록 ${formatTime(attack.bestRecord.total)}` : `${attack.totalLaps}랩 · 아직 최고 기록이 없습니다`;
+    get('ready-best').textContent = daily && dailyProfile ? (() => { const best = dailySnapshot(dailyProfile, daily).best; return best ? `오늘 최고 ${formatTime(best.total)}` : '오늘 최고 기록 없음'; })() : attack.bestRecord ? `최고 기록 ${formatTime(attack.bestRecord.total)}` : `${attack.totalLaps}랩 · 아직 최고 기록이 없습니다`;
     get('race-countdown').hidden = state.phase !== 'countdown' && !(state.phase === 'running' && state.elapsed < 0.65);
     get('race-countdown').querySelector('strong')!.textContent = state.phase === 'running' ? 'GO' : String(attack.countdown);
     get('race-countdown').querySelector('span')!.textContent = state.phase === 'running' ? 'RACE START' : 'READY';
@@ -405,7 +445,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
       const resultStatus = get('result-status'); const resultTotal = get('result-total'); const resultSub = get('result-sub');
       const timeLimit = !competition && attack.disqualified;
       resultStatus.dataset.kind = timeLimit ? 'limit' : !competition && attack.result?.isNewBest ? 'best' : 'finish';
-      resultStatus.textContent = timeLimit ? 'TIME LIMIT' : !competition && attack.result?.isNewBest ? 'NEW BEST' : 'FINISH';
+      resultStatus.textContent = timeLimit ? 'TIME LIMIT' : daily ? 'DAILY CHALLENGE' : !competition && attack.result?.isNewBest ? 'NEW BEST' : 'FINISH';
       get('result-stars').hidden = true;
       get('result-card-title').textContent = '순위';
       const data = readResultData(attack);
@@ -419,13 +459,14 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
         resultTotal.textContent = formatTime(state.elapsed);
         const result = attack.result;
         const prior = result?.isNewBest && !result.improvedExistingBest ? null : result && !result.isNewBest ? result.best : priorBest;
-        const previousTotal = data ? data.previousBestTotal : prior?.total ?? null;
+        const dailyBest = daily && store ? dailySnapshot(store.snapshot(), daily).best : null;
+        const previousTotal = daily ? dailyBest?.total ?? null : data ? data.previousBestTotal : prior?.total ?? null;
         resultSub.innerHTML = isTraining() ? `${featureTest ? '기능 테스트' : '연습'} 기록 · 저장하지 않습니다` : timeLimit ? '랩 제한시간 초과 · 실격' : previousTotal == null ? '첫 기록' : `이전 최고 ${formatTime(previousTotal)} · ${gainLoss(state.elapsed - previousTotal)}`;
         const priorLaps = prior && prior.laps.length === attack.lapTimes.length ? prior.laps : null;
-        const lapDeltas = attack.lapTimes.map((lap, i) => data ? data.lapDeltas[i] ?? null : priorLaps ? lap - priorLaps[i] : null);
+        const lapDeltas = attack.lapTimes.map((lap, i) => daily ? dailyBest ? lap - dailyBest.laps[i] : null : data ? data.lapDeltas[i] ?? null : priorLaps ? lap - priorLaps[i] : null);
         const fastest = Math.min(...attack.lapTimes);
         // Sector bars: flat SectorDelta[] grouped by lap, ordered by gate then checkpoint. Absent data renders nothing.
-        const sectorLaps = [...new Set((data?.sectors ?? []).map(d => d.lap))].sort((a, b) => a - b);
+        const sectorLaps = [...new Set((daily ? [] : data?.sectors ?? []).map(d => d.lap))].sort((a, b) => a - b);
         const sectorBars = (i: number) => (data?.sectors ?? []).filter(d => d.lap === sectorLaps[i]).sort((a, b) => a.gate - b.gate || a.checkpoint - b.checkpoint);
         get('result-card-title').textContent = '랩 · 구간';
         get('result-card-note').textContent = lapDeltas.some(d => d != null) ? '최고 기록 대비' : '';
@@ -440,14 +481,20 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
       get('result-best').textContent = !competition && attack.disqualified ? '제한시간 안에 매 랩을 완주해야 합니다.' : '';
       get('result-penalties').textContent = state.penaltyPoints ? `코스 이탈 ${state.offTrackExits}회 · 충돌 ${state.collisions}회 · 벌점 -${state.penaltyPoints}P` : '';
       get('result-penalties').hidden = state.penaltyPoints === 0;
-      get('record-warning').hidden = !attack.result || attack.result.saved;
+      get('record-warning').hidden = !!daily || !attack.result || attack.result.saved;
       get('campaign-next').hidden = true;
       get('campaign-result').textContent = isTraining() ? `${featureTest ? '기능 테스트' : '연습 주행'} · 기록과 보상은 저장하지 않습니다.` : campaign ? '캠페인 결과를 저장하고 있습니다…' : '';
-      campaignOutcome = campaign && !isTraining() ? { mode: selectedMode, trackId: campaign.track.id, revision: campaign.track.revision, total: state.elapsed, laps: attack.lapTimes, rank: competition?.playerRank ?? 1, disqualified: attack.disqualified, assisted: attack.assisted, lapLimit: attack.lapLimit ?? 1, challenge, collisions: state.collisions, offTrackExits: state.offTrackExits } : undefined;
+      campaignOutcome = campaign && !daily && !isTraining() ? { mode: selectedMode, trackId: campaign.track.id, revision: campaign.track.revision, total: state.elapsed, laps: attack.lapTimes, rank: competition?.playerRank ?? 1, disqualified: attack.disqualified, assisted: attack.assisted, lapLimit: attack.lapLimit ?? 1, challenge, collisions: state.collisions, offTrackExits: state.offTrackExits } : undefined;
       get('result-shop').hidden = isTraining() || !onShop;
-      rewardInput = isTraining() ? undefined : { raceId: attack.raceId, mode: selectedMode, rank: selectedMode === 'competition' ? competition?.playerRank : undefined, difficulty: selectedDifficulty, collisions: state.collisions, offTrackExits: state.offTrackExits, recoveries: state.recoveries, penaltyPoints: state.penaltyPoints, obstaclesPassed: state.obstaclesPassed, cleanHalfLaps: attack.cleanHalfLaps, improvedExistingBest: !!attack.result?.improvedExistingBest, assisted: attack.assisted };
+      rewardInput = daily || isTraining() ? undefined : { raceId: attack.raceId, mode: selectedMode, rank: selectedMode === 'competition' ? competition?.playerRank : undefined, difficulty: selectedDifficulty, collisions: state.collisions, offTrackExits: state.offTrackExits, recoveries: state.recoveries, penaltyPoints: state.penaltyPoints, obstaclesPassed: state.obstaclesPassed, cleanHalfLaps: attack.cleanHalfLaps, improvedExistingBest: !!attack.result?.improvedExistingBest, assisted: attack.assisted };
       get('result-reward').textContent = isTraining() ? (featureTest ? '기능 테스트' : '연습 주행') : store ? '완주 보상을 저장하고 있습니다…' : '';
-      void saveReward();
+      if (state.daily) {
+        dailyInput = { challenge: state.daily.challenge, raceId: attack.raceId, laps: [...attack.lapTimes], counters: { ...state.daily.counters }, disqualified: attack.disqualified, recordedAt: new Date().toISOString(), controlMode: window.matchMedia('(any-pointer: coarse)').matches ? 'touch' : [...navigator.getGamepads()].some(p => p?.connected) ? 'gamepad' : 'keyboard' };
+        get('result-penalties').hidden = true;
+        get('campaign-result').textContent = '오늘의 도전 결과를 저장하고 있습니다…';
+        get('result-reward').textContent = '도전 기록과 보상을 저장하고 있습니다…';
+        void saveDaily();
+      } else void saveReward();
     }
     if (state.collisions > lastCollisions && (state.notice === 'height-collision' || state.notice === 'craft-collision' || state.notice === 'corridor-collision' || state.notice === 'jump-missed')) {
       const flash = get('race-impact');
@@ -705,7 +752,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
       if (rainToggle) get('dev-weather').hidden = state.phase !== 'ready';
       get('pause-summary').hidden = state.phase !== 'paused';
       get('race-restart').hidden = state.phase !== 'paused';
-      get('race-practice').hidden = state.phase !== 'paused' || featureTest;
+      get('race-practice').hidden = state.phase !== 'paused' || featureTest || !!daily;
       get('race-result').hidden = state.phase !== 'finished';
       get('ready-best').hidden = state.phase !== 'ready';
       screen.dataset.phase = state.phase;
@@ -713,7 +760,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
       get('drive-overlay-title').textContent = state.phase === 'paused' ? '일시정지' : state.phase === 'finished' ? attack.disqualified ? '타임어택 실격' : '레이스 완료' : '레이스 준비';
       get('drive-overlay-copy').textContent = state.phase === 'ready' && featureTest ? featureInstructions : state.phase === 'ready' && isTraining() ? '자동 가속부터 다시 연습합니다. 제한시간 없이 달리며 기록과 보상을 저장하지 않습니다.' : state.phase === 'ready' && campaign ? selectedMode === 'competition' ? `${campaign.track.laps}랩 경기에서 ${campaignRankLimit(campaign.track)}위 이내로 완주하면 다음 트랙이 열립니다.` : `매 랩 ${attack.lapLimit}초 안에 ${attack.totalLaps}랩을 완주하세요. 제한시간이 지나면 실격됩니다.` : state.phase === 'ready' ? (selectedMode === 'competition' ? `상대 기체 ${AI_OPPONENT_COUNT}대와 3랩을 겨룹니다. 직선에서 추월하고 급한 코너에서는 감속하세요.` : '3랩을 완주해 기록에 도전하세요. 자동으로 가속하며 급한 코너에서는 감속합니다.') : '';
       startButton.innerHTML = `${state.phase === 'paused' ? '계속하기' : state.phase === 'finished' ? '다시 도전' : '레이스 시작'} <span aria-hidden="true">↗</span>`;
-      get('race-hangar').textContent = featureRecipe ? state.phase === 'paused' ? '포기하고 격납고로' : '격납고로' : state.phase === 'paused' ? '포기하고 캠페인으로' : '캠페인으로';
+      get('race-hangar').textContent = daily || featureRecipe ? state.phase === 'paused' ? '포기하고 격납고로' : '격납고로' : state.phase === 'paused' ? '포기하고 캠페인으로' : '캠페인으로';
     }
     paintMenu();
     if (phaseChanged || cinematicEnded) menuDialog.scrollTop = 0;
@@ -739,7 +786,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
   };
   get('race-hangar').addEventListener('click', onExit, listen);
   get('result-shop').addEventListener('click', () => onShop?.(), listen);
-  get('reward-retry').addEventListener('click', () => { void saveReward(); }, listen);
+  get('reward-retry').addEventListener('click', () => { if (dailyInput) void saveDaily(); else void saveReward(); }, listen);
   async function fireSupportMissile(requestId: number) {
     if (!store || focusPending || !race || screenDisposed) return;
     focusPending = true;
@@ -794,32 +841,46 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
   }, listen);
   get('drive-retry').addEventListener('click', () => location.reload(), listen);
   const prepareRace = () => {
+    if (daily) {
+      daily = dailyChallengeFor(dailyDateKey());
+      campaign = { ...campaign!, track: trackDefinition(daily.trackId)!, challenge: daily.challenge, mode: 'time-attack', daily };
+      configuration = DRONE_CATALOG.find(entry => entry.configuration.id === daily!.craftId)!.configuration;
+      challenge = daily.challenge; selectedMode = 'time-attack'; selectedDifficulty = trackPreset(campaign.track).id;
+    }
     const weather = previewRaceEnvironment(defaultEnvironment, import.meta.env.DEV ? previewRain : undefined);
-    const environment = weather.rain ? { ...weather, rainIntensity: selectRainIntensity() } : weather;
+    const dailyEnvironment = daily ? raceEnvironmentsForDistrict(campaign!.track.district).find(env => env.id === daily!.environmentId)! : undefined;
+    const environment = dailyEnvironment ? { ...dailyEnvironment, rainIntensity: daily!.rainIntensity } : weather.rain ? { ...weather, rainIntensity: selectRainIntensity() } : weather;
     if (rainToggle) {
-      rainToggle.hidden = defaultEnvironment.underwater;
+      rainToggle.hidden = !!daily || defaultEnvironment.underwater;
       rainToggle.setAttribute('aria-pressed', String(previewRain));
       get('dev-rain-state').textContent = previewRain ? '켜짐' : '꺼짐';
     }
     standingsKey = '';
-    tutorialMode = featureTest ? null : practice ? 'practice' : tutorialProgress.shouldStart(campaign?.track.predecessor === null) ? 'first-run' : null;
+    tutorialMode = daily || featureTest ? null : practice ? 'practice' : tutorialProgress.shouldStart(campaign?.track.predecessor === null) ? 'first-run' : null;
     const course = isTraining() && !featureTest ? TRACK_CATALOG[0] : campaign?.track;
     if (isTraining()) { selectedMode = 'time-attack'; introPending = false; }
     const profile = store?.snapshot();
-    focusSlots = !isTraining() && profile ? Math.min(profile.focusSlots, profile.focus) : 0;
-    equippedRivalSlots = !isTraining() && selectedMode === 'competition' && profile ? profile.rivalSlots.filter((item, index, slots) => slots.slice(0, index + 1).filter(id => id === item).length <= profile.rivalInventory[item]) : [];
+    focusSlots = !daily && !isTraining() && profile ? Math.min(profile.focusSlots, profile.focus) : 0;
+    equippedRivalSlots = !daily && !isTraining() && selectedMode === 'competition' && profile ? profile.rivalSlots.filter((item, index, slots) => slots.slice(0, index + 1).filter(id => id === item).length <= profile.rivalInventory[item]) : [];
     const tutorial = tutorialMode ? createDrivingTutorial({ mode: tutorialMode, onFinish: status => { if (status.outcome) tutorialProgress.finish(status.outcome); } }) : undefined;
-    document.title = `Speedracer — ${selectedMode === 'competition' ? '경쟁 레이스' : '타임어택'}`;
+    document.title = `Speedracer — ${daily ? '오늘의 도전' : selectedMode === 'competition' ? '경쟁 레이스' : '타임어택'}`;
+    screen.classList.toggle('is-daily', !!daily);
     get('race-course-name').textContent = course?.name ?? 'NEON CIRCUIT';
-    get('race-mode-title').textContent = `${featureTest ? `FEATURE TEST · ${previewZone ? `${previewZone.name} · ` : ''}` : isTraining() ? 'PRACTICE · ' : ''}${selectedMode === 'competition' ? 'COMPETITION RACE' : 'TIME ATTACK'} · ${campaign ? RACE_CHALLENGES[challenge].label : DIFFICULTIES[selectedDifficulty].label}`;
+    get('race-mode-title').textContent = `${daily ? 'DAILY CHALLENGE · ' : ''}${featureTest ? `FEATURE TEST · ${previewZone ? `${previewZone.name} · ` : ''}` : isTraining() ? 'PRACTICE · ' : ''}${selectedMode === 'competition' ? 'COMPETITION RACE' : 'TIME ATTACK'} · ${campaign ? RACE_CHALLENGES[challenge].label : DIFFICULTIES[selectedDifficulty].label}`;
     if (course) { const zone = document.createElement('span'); zone.className = 'result-zone'; zone.textContent = ` · ${DISTRICTS[course.district].name} · ${String(course.order ?? 0).padStart(2, '0')}`; get('race-mode-title').append(zone); }
     get('race-loadout').textContent = featureTest ? featureRecipe ? '수중 도시 기능 테스트 · 기록과 보상을 저장하지 않습니다' : '기능 테스트 · 끊긴 도로 점프 — 갈림길에서 위쪽 송전 우회로 · 기록과 보상을 저장하지 않습니다' : isTraining() ? '첫 코스 조작 연습 · 기록과 보상을 저장하지 않습니다' : `${selectedMode === 'competition' ? `상대 기체 ${AI_OPPONENT_COUNT}대와 경쟁` : '타임어택'} · ${focusSlots || equippedRivalSlots.length ? `장착 아이템 ${focusSlots + equippedRivalSlots.length}개 · 기본 보상 80%` : '코스에서 각성 코어 획득'}`;
+    if (daily && profile) {
+      const status = dailySnapshot(profile, daily);
+      const craft = DRONE_CATALOG.find(entry => entry.configuration.id === daily!.craftId)!;
+      get('race-loadout').textContent = `${craft.name} 대여 · ${dailyGoalLabel(daily.goal.id)} ${daily.goal.target}회 + 완주 · ${status.rewardClaimed ? '오늘 보상 수령 완료' : '첫 성공 150P'}`;
+    }
+    dailyInput = undefined;
     rewardInput = undefined; campaignOutcome = undefined; get('result-reward').textContent = ''; get('reward-retry').hidden = true; get('result-shop').hidden = true; get('campaign-next').hidden = true;
     tutorialCompleteShown = false; screen.classList.remove('is-tutorial-complete'); coach.hideComplete();
     race?.dispose(); lastPhase = ''; lastViewKey = ''; previewing = false; lastCollisions = 0; lastBoostStage = 0; lastAnnouncement = 0; lastCallout = 0; lastNearMisses = 0; lastStreak = 0; impactAnimation?.cancel(); boostFlashAnimation?.cancel();
     get('difficulty-description').textContent = `${course?.features ?? DIFFICULTIES[selectedDifficulty].description} · ${environment.label}${environment.rainIntensity ? ` · ${RAIN_INTENSITIES[environment.rainIntensity].label}` : ''}`;
     try {
-      race = createRace(get<HTMLDivElement>('race-scene'), update, showError, configuration, undefined, course ? trackPreset(course) : DIFFICULTIES[selectedDifficulty], focusSlots, selectedMode, course, equippedRivalSlots, environment, challenge, introPending, { tutorial, practice: isTraining() });
+      race = createRace(get<HTMLDivElement>('race-scene'), update, showError, configuration, undefined, course ? trackPreset(course) : DIFFICULTIES[selectedDifficulty], focusSlots, selectedMode, course, equippedRivalSlots, environment, challenge, introPending, { tutorial, practice: isTraining(), daily, beforeStart: () => { if (daily && daily.dateKey !== dailyDateKey()) { prepareRace(); race?.start(); return false; } return true; } });
       introPending = false;
       race.setQuality(qualitySelect.value as QualityPreference);
       race.onQualityChange(status => { qualityStatus.textContent = status.preference === 'auto' ? `자동 · 지금 ${RENDER_QUALITIES[status.quality].label}` : ''; });
@@ -933,7 +994,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
     const enabled = hapticsButton.getAttribute('aria-pressed') !== 'true';
     hapticsButton.setAttribute('aria-pressed', String(enabled)); race?.setHapticsEnabled(enabled);
   }, listen);
-  return () => { analytics.quit(lost ? 'render_error' : 'navigation'); screenDisposed = true; preferences.close(); restartConfirm.close(); impactAnimation?.cancel(); boostFlashAnimation?.cancel(); events.abort(); race?.dispose(); coach.dispose(); window.dispatchEvent(new CustomEvent('speedracer:phase', { detail: 'hangar' })); };
+  return () => { unsubscribeDaily?.(); analytics.quit(lost ? 'render_error' : 'navigation'); screenDisposed = true; preferences.close(); restartConfirm.close(); impactAnimation?.cancel(); boostFlashAnimation?.cancel(); events.abort(); race?.dispose(); coach.dispose(); window.dispatchEvent(new CustomEvent('speedracer:phase', { detail: 'hangar' })); };
 }
 
 const FORK_ARROWS: Record<string, string> = { left: '←', center: '↑', right: '→', lower: '↓', upper: '↑' };

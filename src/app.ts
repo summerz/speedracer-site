@@ -1,3 +1,5 @@
+import { dailyChallengeFor, dailyDateKey } from './game/progression/dailyChallenge';
+import { trackDefinition } from './game/track/trackCatalog';
 import { raceChallenge } from './game/track/raceChallenge';
 import { sfxPreference } from './game/audio/sfxPreference';
 import { soundtrack } from './game/audio/soundtrack';
@@ -80,19 +82,20 @@ export function mountApp(root: HTMLDivElement): () => void {
     if (disposed || id !== renderId) return;
     const [screen, query = ''] = location.hash.slice(1).split('?');
     const params = new URLSearchParams(query);
-    const track = resolveDriveTrack(params.get('track') ?? '', params.get('test') === '1');
-    const challenge = raceChallenge(params.get('challenge'));
-    const mode = params.get('mode') === 'competition' ? 'competition' : 'time-attack';
+    const daily = screen === 'drive' && params.get('daily') === '1' ? dailyChallengeFor(dailyDateKey()) : undefined;
+    const track = daily ? trackDefinition(daily.trackId) : resolveDriveTrack(params.get('track') ?? '', params.get('test') === '1');
+    const challenge = daily?.challenge ?? raceChallenge(params.get('challenge'));
+    const mode = !daily && params.get('mode') === 'competition' ? 'competition' : 'time-attack';
     if (import.meta.env.DEV && screen === 'sound-lab') soundtrack.suspend();
     else soundtrack.setScene(screen === 'drive' ? 'ready' : 'menu');
     const profile = store.snapshot();
-    const entry = DRONE_CATALOG.find(craft => craft.configuration.id === profile.equipped)!;
-    const selected = { ...entry, configuration: upgradedConfiguration(profile.equipped, profile.upgrades[profile.equipped]) };
-    if (screen === 'drive' && params.has('track') && (!track || (params.get('test') !== '1' && campaignStatus(profile.campaign, mode, track) === 'locked'))) { location.hash = 'campaign'; return; }
+    const entry = DRONE_CATALOG.find(craft => craft.configuration.id === (daily?.craftId ?? profile.equipped))!;
+    const selected = { ...entry, configuration: daily ? entry.configuration : upgradedConfiguration(profile.equipped, profile.upgrades[profile.equipped]) };
+    if (screen === 'drive' && !daily && params.has('track') && (!track || (params.get('test') !== '1' && campaignStatus(profile.campaign, mode, track) === 'locked'))) { location.hash = 'campaign'; return; }
     const mount = import.meta.env.DEV && screen === 'sound-lab'
       ? () => import('./devAudioApp').then(({ mountDevAudio }) => () => mountDevAudio(root, profile.balance, params.get('view') === 'library' ? 'library' : 'assignments'))
       : screen === 'drive'
-      ? () => import('./raceApp').then(({ mountRace }) => () => mountRace(root, () => { location.hash = track && isFeatureTestTrack(track.id) ? '' : track ? `campaign?track=${track.id}&mode=${mode}&challenge=${challenge}` : 'campaign'; }, selected.configuration, store, () => { location.hash = 'shop'; }, track ? { track, mode, challenge, test: params.get('test') === '1', zone: params.get('zone') ?? undefined } : undefined))
+      ? () => import('./raceApp').then(({ mountRace }) => () => mountRace(root, () => { location.hash = daily ? '' : track && isFeatureTestTrack(track.id) ? '' : track ? `campaign?track=${track.id}&mode=${mode}&challenge=${challenge}` : 'campaign'; }, selected.configuration, store, () => { location.hash = 'shop'; }, track ? { track, mode, challenge, daily, test: !daily && params.get('test') === '1', zone: daily ? undefined : params.get('zone') ?? undefined } : undefined))
       : screen === 'campaign' ? () => import('./campaignApp').then(({ mountCampaign }) => () => mountCampaign(root, store, params.has('mode') ? { mode, trackId: params.get('track') ?? undefined, challenge } : undefined, params.get('test') === '1'))
       : screen === 'shop' ? () => import('./shopApp').then(({ mountShop }) => () => mountShop(root, store, () => { location.hash = ''; }))
       : () => import('./hangarApp').then(({ mountHangar }) => () => mountHangar(root, selected, () => {}, () => { location.hash = 'campaign'; }, store));

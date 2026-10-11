@@ -1,7 +1,7 @@
 import type { TutorialSnapshot, TutorialStatus } from '../game/driving/drivingTutorial.js';
 
 export type AnalyticsScreen = 'hangar' | 'campaign' | 'shop' | 'race';
-export type AnalyticsEvent = 'page_view' | 'level_start' | 'level_end' | 'race_quit' | 'tutorial_begin' | 'tutorial_step' | 'tutorial_complete';
+export type AnalyticsEvent = 'page_view' | 'level_start' | 'level_end' | 'race_quit' | 'tutorial_begin' | 'tutorial_step' | 'tutorial_complete' | 'daily_reward';
 export type AnalyticsParams = Record<string, string | number | boolean>;
 export interface AnalyticsTransport {
   send(event: AnalyticsEvent, params: AnalyticsParams): void;
@@ -46,6 +46,7 @@ export interface RaceAnalyticsContext {
   track_id: string; race_mode: string; difficulty: string; ship_id: string;
   control_type: 'touch' | 'desktop';
   tutorial_mode?: 'off' | 'first-run' | 'practice'; practice?: boolean;
+  daily_date?: string; daily_goal?: string;
   tutorial_history?: 'unseen' | 'completed' | 'skipped';
 }
 export interface RaceAnalyticsSnapshot {

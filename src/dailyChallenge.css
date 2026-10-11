@@ -1,0 +1,34 @@
+.daily-card { margin:14px 0; padding:16px 18px; border-left:3px solid var(--accent,#27eaff); background:#10232dcc; color:#edf8ff; }
+.daily-card-heading,.daily-card-footer { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.daily-card-heading { font-size:12px; letter-spacing:.03em; }
+.daily-prize { color:#a7f5bf; font-variant-numeric:tabular-nums; font-size:12px; }
+.daily-card h2 { margin:9px 0 5px; font-size:20px; letter-spacing:.05em; }
+.daily-card p { margin:0; font-size:12px; line-height:1.5; color:#c2d3df; }
+.daily-card-footer { margin-top:12px; }
+.daily-start { flex-shrink:0; display:flex; align-items:center; gap:12px; min-height:44px; padding:0 12px; text-decoration:none; color:#e8fcff; background:#254554; font-size:13px; font-weight:700; }
+.daily-start:hover { background:#326275; }.daily-start:focus-visible { outline:2px solid #8befff; outline-offset:3px; }
+.daily-hud { width:fit-content; max-width:100%; padding:5px 9px; background:#091822db; border-left:2px solid #62dcff; font-size:12px; color:#d6f7ff; font-variant-numeric:tabular-nums; }
+.daily-hud.is-done { color:#b4f4c5; border-color:#b4f4c5; }
+.daily-result-goal { color:#c9f5ff; }.daily-result-best { font-variant-numeric:tabular-nums; color:#b4f4c5; }
+.daily-result-note { font-size:12px; color:#b8c9d8; }
+@media(max-width:600px) { .daily-card { padding:12px; }.daily-card h2 { font-size:17px; }.daily-card-footer { align-items:flex-end; }.daily-summary { max-width:60%; }.daily-hud { font-size:10px; padding:3px 6px; } }
+@media (min-width:601px) and (max-height:500px) {
+  .drive-screen.is-daily[data-phase='finished'] .drive-overlay { padding: max(12px,env(safe-area-inset-top)) max(20px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(20px,env(safe-area-inset-left)); }
+  .drive-screen.is-daily[data-phase='finished'] .drive-dialog { grid-template-rows:auto auto minmax(120px,1fr) auto; gap:8px 12px; }
+  .drive-screen.is-daily[data-phase='finished'] .result-hero { margin-top:0; }
+  .drive-screen.is-daily[data-phase='finished'] .drive-dialog .race-course-name { font-size:26px; }
+  .drive-screen.is-daily[data-phase='finished'] .result-total { margin-top:6px; font-size:48px; }
+  .drive-screen.is-daily[data-phase='finished'] .result-sub { margin:3px 0; font-size:11px; }
+  .drive-screen.is-daily[data-phase='finished'] .result-card { grid-row:3; padding:10px 12px; }
+  .drive-screen.is-daily[data-phase='finished'] .result-card h3 { margin-bottom:6px; }
+  .drive-screen.is-daily[data-phase='finished'] .race-flow-actions { grid-row:4; }
+  .drive-screen.is-daily[data-phase='finished'] .reward-total strong { font-size:24px; }
+  .drive-screen.is-daily[data-phase='finished'] .reward-summary p { margin:0 0 5px; font-size:11px; }
+  .drive-screen.is-daily[data-phase='finished'] .result-stats .stat b { font-size:22px; }
+}
+@media (max-width:600px) {
+  .drive-screen.is-daily[data-phase='finished'] .result-hero { margin-bottom:24px; }
+  .drive-screen.is-daily[data-phase='finished'] .card-reward { order:4; }
+  .drive-screen.is-daily[data-phase='finished'] .card-laps { order:5; }
+  .drive-screen.is-daily[data-phase='finished'] .card-stats { order:6; }
+}

@@ -1,3 +1,5 @@
+import { dailyObstacleRandom } from '../progression/dailyChallenge.js';
+import { createDailyRun } from './dailyRun.js';
 import { PARRY_TUNING, type ParryTarget } from './parry.js';
 import { parryWorldPosition, predictCraftParryThreat } from './parryThreat.js';
 import { createSupportMissile } from './supportMissile.js';
@@ -200,6 +202,8 @@ export function createRaceSession(track: Track, configuration: DroneConfiguratio
   let missile = rivalSlots.includes('support-missile') ? createSupportMissile() : null;
   let itemCooldown = 0;
   const itemUsed: RivalItemId[] = [];
+  const dailyRun = rules.daily ? createDailyRun() : null;
+  const obstacleRandom = () => rules.daily ? dailyObstacleRandom(rules.daily) : random;
   const player = createTimeAttack(track, configuration.performance, records, focusSlots, rules);
   const craft = DRONE_CATALOG.find(c => c.configuration.modelVariant === configuration.modelVariant);
   const playerColor = craft?.lineColor ?? configuration.boostStyle.pulseColor;
@@ -237,7 +241,7 @@ export function createRaceSession(track: Track, configuration: DroneConfiguratio
   const nextContactId = (key: string) => `craft:${key}:${(contactGenerations.get(key) ?? 0) + 1}`;
   let clock = 0;
   const grid = () => {
-    contacts.clear(); contactEpisodes.clear(); contactGenerations.clear(); missile = rivalSlots.includes('support-missile') ? createSupportMissile() : null; clock = 0; track.obstacleTime = 0; itemCooldown = 0; itemUsed.length = 0;
+    dailyRun?.reset(); contacts.clear(); contactEpisodes.clear(); contactGenerations.clear(); missile = rivalSlots.includes('support-missile') ? createSupportMissile() : null; clock = 0; track.obstacleTime = 0; itemCooldown = 0; itemUsed.length = 0;
     rivals.forEach((rival, index) => {
       rival.finishCoast = null;
       rival.effects.freeze = 0; rival.effects.jam = 0;
@@ -281,13 +285,14 @@ export function createRaceSession(track: Track, configuration: DroneConfiguratio
     model: player.model, rivals, controlMode,
     get phase() { return player.phase; },
     snapshot() { const snapshot = player.snapshot(), supportMissile = missileSnapshot(); return { ...snapshot, mode, competition: competition(),
+      daily: rules.daily && dailyRun ? { challenge: rules.daily, counters: dailyRun.snapshot(player.model.state) } : null,
       supportMissile, assisted: snapshot.assisted || rivalSlots.length > 0, canFocus: snapshot.canFocus && itemCooldown <= 1e-8, itemCooldown,
       items: RIVAL_ITEMS.map(item => ({ id: item.id, remaining: itemRemaining(item.id), canUse: canUseRivalItem(item.id),
         active: item.id === 'support-missile' ? supportMissile?.stopRemaining ?? 0 : Math.max(0, ...rivals.map(rival => item.id === 'time-stop' ? rival.effects.freeze : rival.effects.jam)),
         targets: targets(item.id).map(rival => rival.name) })) }; },
     start() {
       const fresh = player.phase === 'ready' || player.phase === 'finished';
-      if (fresh) track.randomizeObstacles?.(random);
+      if (fresh) track.randomizeObstacles?.(obstacleRandom());
       player.start();
       rivals.forEach(p => {
         if (fresh) p.controller.restart();
@@ -295,7 +300,7 @@ export function createRaceSession(track: Track, configuration: DroneConfiguratio
       });
       if (fresh) grid();
     },
-    restart() { track.randomizeObstacles?.(random); player.restart(); rivals.forEach(p => p.controller.restart()); grid(); },
+    restart() { track.randomizeObstacles?.(obstacleRandom()); player.restart(); rivals.forEach(p => p.controller.restart()); grid(); },
     finishPractice() { return player.finishPractice(); },
     pause() { player.pause(); rivals.forEach(p => p.controller.pause()); },
     recover() { player.recover(); },
@@ -356,7 +361,7 @@ export function createRaceSession(track: Track, configuration: DroneConfiguratio
           });
         }
         player.model.setParryThreat(craftThreat);
-        player.step(step, { ...input, lift: firstStep ? input.lift : 0 }); firstStep = false;
+        player.step(step, { ...input, lift: firstStep ? input.lift : 0 }); dailyRun?.observe(player.model.state); firstStep = false;
         rivals.forEach((rival, index) => {
           const opponents = participants.filter(p => p !== rival && p.controller.phase !== 'finished' && !missile?.stopped(p.id)).map(p => p.controller.model.state);
           const gap = Math.max(0, ...opponents.map(o => o.distance)) - rival.controller.model.state.distance;

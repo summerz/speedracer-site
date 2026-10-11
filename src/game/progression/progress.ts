@@ -1,3 +1,4 @@
+import { emptyDailyProgress, validateDailyProgress, settleDailyResult, type DailyProgress, type DailyResultInput } from './dailyChallenge.js';
 import { initialCampaign, validateCampaign, completeCampaign, campaignTrackUnlocked } from './campaign.js';
 import type { CampaignProgress, CampaignOutcome } from './campaign.js';
 import { trackDefinition, TRACK_CATALOG } from '../track/trackCatalog.js';
@@ -21,13 +22,14 @@ export interface Progress {
   upgrades: Record<string, UpgradeLevels>; focus: number; focusSlots: number;
   rewards: Record<string, Reward>;
   campaign: CampaignProgress;
+  daily: DailyProgress;
   focusUses: Record<string, 'pending' | 'used' | 'refunded'>;
   rivalInventory: Record<RivalItemId, number>;
   rivalSlots: RivalItemId[];
   rivalUses: Record<string, { item: RivalItemId; state: 'pending' | 'used' | 'refunded' }>;
 }
 export const initialProgress = (): Progress => ({ version: 1, revision: 0, balance: 0, owned: [STARTER_ID], equipped: STARTER_ID,
-  upgrades: { [STARTER_ID]: emptyLevels() }, focus: 0, focusSlots: 0, rewards: {}, focusUses: {}, campaign: initialCampaign(),
+  upgrades: { [STARTER_ID]: emptyLevels() }, focus: 0, focusSlots: 0, rewards: {}, focusUses: {}, campaign: initialCampaign(), daily: emptyDailyProgress(),
   rivalInventory: { 'time-stop': 0, interference: 0, 'support-missile': 0 }, rivalSlots: [], rivalUses: {} });
 export function isCampaignUnlockAll(profile: Progress): boolean { return profile.campaign.unlockAll === true; }
 
@@ -63,6 +65,7 @@ const integer = (n: unknown, max = Number.MAX_SAFE_INTEGER): n is number => Numb
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
 const own = (object: object, key: string) => Object.hasOwn(object, key);
 export function validateProgress(value: unknown): Progress {
+  if (record(value) && value.daily === undefined) value = { ...value, daily: emptyDailyProgress() };
   if (record(value) && value.campaign === undefined) value = { ...value, campaign: initialCampaign() };
   if (record(value) && value.focusUses === undefined) value = { ...value, focusUses: {} };
   if (record(value) && value.rivalInventory === undefined && value.rivalSlots === undefined && value.rivalUses === undefined)
@@ -108,6 +111,7 @@ export function validateProgress(value: unknown): Progress {
     if (r.bonus !== undefined && !integer(r.bonus)) throw new Error('잘못된 첫 클리어 보상');
     if (r.placement !== undefined && !integer(r.placement, PLACEMENT_POINTS[0])) throw new Error('잘못된 순위 보상');
   }
+  value.daily = validateDailyProgress(value.daily);
   value.campaign = validateCampaign(value.campaign);
   return structuredClone(value) as unknown as Progress;
 }
@@ -126,6 +130,7 @@ export function calculateReward(input: RewardInput): Reward {
   return { base, clean, best, obstacles, placement, penalty: input.penaltyPoints, total: Math.max(0, base + clean + best + obstacles + placement - input.penaltyPoints), assisted: input.assisted };
 }
 export type ProgressCommand = { kind: 'campaign-select'; mode: CampaignOutcome['mode']; trackId: string; challenge?: CampaignOutcome['challenge'] }
+  | { kind: 'daily-result'; input: DailyResultInput }
   | { kind: 'campaign-unlock-all'; on: boolean }
   | { kind: 'campaign-result'; input: RewardInput; outcome: CampaignOutcome } | { kind: 'reward'; input: RewardInput } | { kind: 'craft'; id: string }
   | { kind: 'equip'; id: string } | { kind: 'sell-craft'; id: string } | { kind: 'upgrade'; id: string; upgrade: UpgradeId }
@@ -138,6 +143,11 @@ export function applyCommand(current: Progress, command: ProgressCommand): Progr
   const next = validateProgress(current);
   const charge = (cost: number) => { if (next.balance < cost) throw new Error(`${cost - next.balance}P가 부족합니다.`); next.balance -= cost; };
   switch (command.kind) {
+    case 'daily-result': {
+      const result = settleDailyResult(next.daily, command.input);
+      if (!Number.isSafeInteger(next.balance + result.settlement.awarded)) throw new Error('포인트 한도를 초과했습니다.');
+      next.daily = result.daily; next.balance += result.settlement.awarded; break;
+    }
     case 'campaign-unlock-all': {
       if (typeof command.on !== 'boolean') throw new Error('잘못된 캠페인 테스트 설정');
       next.campaign = command.on ? { ...next.campaign, unlockAll: true } : relockCampaign(next.campaign).campaign;

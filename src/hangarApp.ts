@@ -1,3 +1,4 @@
+import { mountDailyChallengeCard } from './dailyChallengeView';
 import { featureTestTrackHref } from './game/track/featureTestTracks';
 import { DRONE_CATALOG, droneStats } from './game/drone/droneCatalog';
 import type { DroneCatalogEntry } from './game/drone/droneCatalog';
@@ -167,9 +168,14 @@ export function mountHangar(root: HTMLDivElement, selected: DroneCatalogEntry, o
     showError();
   }
 
+  const dailyHost = document.createElement('div');
+  root.querySelector('.home-actions')!.before(dailyHost);
+  const disposeDaily = mountDailyChallengeCard(dailyHost, store);
+
   const focusFrame = requestAnimationFrame(() => focusPrimary(root));
 
   return () => {
+    disposeDaily();
     cancelAnimationFrame(focusFrame);
     eventController.abort();
     hangar?.dispose();
