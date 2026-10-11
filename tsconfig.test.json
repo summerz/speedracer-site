@@ -23,6 +23,7 @@
     "src/game/driving/createRaceSession.ts",
     "src/game/driving/createRivalVisuals.ts",
     "src/game/progression/progressStore.ts",
+    "src/game/progression/supportMissileUse.ts",
     "src/game/driving/createDrivingModel.ts",
     "src/game/track/createTrack.ts",
     "src/game/track/createRaceGates.ts",

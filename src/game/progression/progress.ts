@@ -28,7 +28,7 @@ export interface Progress {
 }
 export const initialProgress = (): Progress => ({ version: 1, revision: 0, balance: 0, owned: [STARTER_ID], equipped: STARTER_ID,
   upgrades: { [STARTER_ID]: emptyLevels() }, focus: 0, focusSlots: 0, rewards: {}, focusUses: {}, campaign: initialCampaign(),
-  rivalInventory: { 'time-stop': 0, interference: 0 }, rivalSlots: [], rivalUses: {} });
+  rivalInventory: { 'time-stop': 0, interference: 0, 'support-missile': 0 }, rivalSlots: [], rivalUses: {} });
 export function isCampaignUnlockAll(profile: Progress): boolean { return profile.campaign.unlockAll === true; }
 
 function relockCampaign(current: CampaignProgress) {
@@ -66,7 +66,11 @@ export function validateProgress(value: unknown): Progress {
   if (record(value) && value.campaign === undefined) value = { ...value, campaign: initialCampaign() };
   if (record(value) && value.focusUses === undefined) value = { ...value, focusUses: {} };
   if (record(value) && value.rivalInventory === undefined && value.rivalSlots === undefined && value.rivalUses === undefined)
-    value = { ...value, rivalInventory: { 'time-stop': 0, interference: 0 }, rivalSlots: [], rivalUses: {} };
+    value = { ...value, rivalInventory: { 'time-stop': 0, interference: 0, 'support-missile': 0 }, rivalSlots: [], rivalUses: {} };
+  // Only the complete legacy inventory is migrated; malformed partial records still fail.
+  if (record(value) && record(value.rivalInventory) && Object.keys(value.rivalInventory).length === 2
+    && own(value.rivalInventory, 'time-stop') && own(value.rivalInventory, 'interference'))
+    value = { ...value, rivalInventory: { ...value.rivalInventory, 'support-missile': 0 } };
   // v0.12 profiles have four upgrades. Add only the new stabilizer, preserving
   // all purchased levels; incomplete or unknown upgrade records still fail below.
   if (record(value) && record(value.upgrades)) {
@@ -83,7 +87,7 @@ export function validateProgress(value: unknown): Progress {
   if (!record(value.rivalInventory) || Object.keys(value.rivalInventory).length !== RIVAL_ITEMS.length
     || !RIVAL_ITEMS.every(item => integer((value.rivalInventory as Record<string, unknown>)[item.id], INVENTORY_LIMIT))
     || !Array.isArray(value.rivalSlots) || !value.rivalSlots.every(isRivalItem) || value.rivalSlots.length + Number(value.focusSlots) > 2
-    || !record(value.rivalUses)) throw new Error('잘못된 상대 아이템 데이터');
+    || value.rivalSlots.filter(id => id === 'support-missile').length > 1 || !record(value.rivalUses)) throw new Error('잘못된 상대 아이템 데이터');
   for (const [id, use] of Object.entries(value.rivalUses))
     if (!id || id.length > 200 || !record(use) || !isRivalItem(use.item) || !['pending', 'used', 'refunded'].includes(use.state as string)) throw new Error('잘못된 아이템 사용 데이터');
   for (const item of RIVAL_ITEMS) {
@@ -216,6 +220,7 @@ export function applyCommand(current: Progress, command: ProgressCommand): Progr
     case 'rival-slots': {
       if (command.mode !== 'competition' || !Array.isArray(command.slots) || !command.slots.every(isRivalItem)) throw new Error('경쟁 레이스 전용 아이템입니다.');
       if (command.slots.length + next.focusSlots > 2) throw new Error('최대 2개를 장착할 수 있습니다.');
+      if (command.slots.filter(id => id === 'support-missile').length > 1) throw new Error('지원 미사일은 경기당 1발만 장착할 수 있습니다.');
       for (const item of RIVAL_ITEMS) if (command.slots.filter(id => id === item.id).length > next.rivalInventory[item.id]) throw new Error('아이템 수량이 부족합니다.');
       next.rivalSlots = [...command.slots]; break;
     }

@@ -1,3 +1,4 @@
+import type { SupportMissileSnapshot } from './supportMissile.js';
 import { readForkCue, type ForkCue } from '../track/forkCue.js';
 import { upcomingTrackJump, type JumpCue } from '../track/trackJump.js';
 import { createTutorialTrack, createTutorialRuntime } from './scriptedTutorial';
@@ -70,6 +71,7 @@ import { boostPadGuide, configureExtraObstacles, corridorCanPass, mineFieldGuide
 
 export type DrivingPhase = RacePhase;
 export interface RaceSnapshot extends DrivingState {
+  supportMissile: SupportMissileSnapshot | null;
   jump: JumpCue | null;
   tutorial: TutorialSnapshot | null;
   tutorialStatus: TutorialStatus | null;
@@ -109,6 +111,8 @@ export interface Race {
   useFocus(): boolean;
   useAwakening(): boolean;
   useRivalItem(item: RivalItemId): boolean;
+  launchSupportMissile(requestId: number): boolean;
+  rejectSupportMissile(requestId: number): void;
   recover(): void;
   toggleCockpit(): void;
   cycleTrack(): void;
@@ -185,7 +189,7 @@ export function createRace(
   let storage: Storage | undefined;
   try { storage = window.localStorage; } catch { /* Private browsing can deny storage. */ }
   const trackId = course ? `${course.id}:v${course.revision}` : `neon-circuit-v1:${difficulty?.id ?? 'beginner'}`;
-  const records = createRaceRecords({ laps: course?.laps, trackId, configurationId: JSON.stringify({ ...(challenge !== 'normal' ? { challenge } : {}), performance: config.performance, altitude: track.altitudeProfile, ...(focusSlots || rivalSlots.length ? { assisted: true } : {}), ...(mode === 'competition' ? { mode } : {}) }) }, storage);
+  const records = createRaceRecords({ laps: course?.laps, trackId, configurationId: JSON.stringify({ ...(challenge !== 'normal' ? { challenge } : {}), performance: config.performance, altitude: track.altitudeProfile, ...(focusSlots || rivalSlots.length ? { assisted: true } : {}), ...(rivalSlots.includes('support-missile') ? { rivalItems: [...rivalSlots].sort(), focusSlots } : {}), ...(mode === 'competition' ? { mode } : {}) }) }, storage);
   const training = !!guidance.practice || !!guidance.tutorial;
   const timeAttack = createRaceSession(track, config, records, focusSlots, mode, Math.random, coarsePointer.matches ? 'touch' : 'desktop', { practice: training, drift: !guidance.tutorial, ...(course ? { laps: course.laps, ...(mode === 'time-attack' ? { lapLimit: challengeLapLimit(course, challenge) } : {}) } : {}) }, course?.rating, rivalSlots, challenge);
   const rivalVisuals = createRivalVisuals(scene, track, timeAttack.rivals);
@@ -321,7 +325,7 @@ export function createRace(
     const selected = choosing ? undefined : junction?.routes.find(r => r.id === model.state.routeId);
     const fork = junction ? { kind: junction.kind, names: junction.routes.map(r => r.name), level: verticalThreshold(track) + 1, selected: selected?.name ?? null,
       distance: physicalDistance(track, model.state.distance, (selected ? junction.end : junction.start + junction.junctionLength) - model.state.distance % track.length, model.state.routeId) } : null;
-    onUpdate({ ...model.state, jump: upcomingTrackJump(track, model.state.distance, model.state.routeId), tutorial: timeAttack.phase === 'finished' ? null : guidance.tutorial?.snapshot() ?? null, tutorialStatus: guidance.tutorial?.status() ?? null, tutorialTargetScreen: timeAttack.phase === 'finished' ? null : tutorialTargetScreen(), competition: session.competition, announcement: feedback.announcement, boostStage2Seconds: model.boostStage2Seconds, altitudeProfile: model.altitudeProfile, phase: timeAttack.phase, timeAttack: session, cinematic: cinematic && { kind: cinematic.kind, reduced: cinematic.reduced, seconds: cinematic.duration, shot: currentShot() }, callout, ghostDelta: ghost && timeAttack.phase !== 'finished' && model.state.elapsed > 0 ? ghostDelta(ghost, model.state.elapsed, model.state.distance) : null, view: views.view, trackDisplay: views.trackDisplay, trackLength: track.length, upcomingCurvature: upcoming.curvature, upcomingSection: upcoming.section, heightObstacle, corridor, mineField, boostPad, arcRail, boostRing, fork, forkCue: readForkCue(track, model.state) });
+    onUpdate({ ...model.state, jump: upcomingTrackJump(track, model.state.distance, model.state.routeId), tutorial: timeAttack.phase === 'finished' ? null : guidance.tutorial?.snapshot() ?? null, tutorialStatus: guidance.tutorial?.status() ?? null, tutorialTargetScreen: timeAttack.phase === 'finished' ? null : tutorialTargetScreen(), competition: session.competition, supportMissile: session.supportMissile, announcement: feedback.announcement, boostStage2Seconds: model.boostStage2Seconds, altitudeProfile: model.altitudeProfile, phase: timeAttack.phase, timeAttack: session, cinematic: cinematic && { kind: cinematic.kind, reduced: cinematic.reduced, seconds: cinematic.duration, shot: currentShot() }, callout, ghostDelta: ghost && timeAttack.phase !== 'finished' && model.state.elapsed > 0 ? ghostDelta(ghost, model.state.elapsed, model.state.distance) : null, view: views.view, trackDisplay: views.trackDisplay, trackLength: track.length, upcomingCurvature: upcoming.curvature, upcomingSection: upcoming.section, heightObstacle, corridor, mineField, boostPad, arcRail, boostRing, fork, forkCue: readForkCue(track, model.state) });
   };
   const heightRequests: { lift: number; targetAltitudeLevel?: number }[] = [];
   const touchControls = createTouchControls(container.parentElement ?? container, {
@@ -738,6 +742,8 @@ export function createRace(
   const unsubscribeQuality = autoQuality.onChange(status => applyQuality(status.quality));
   notify(); animation = requestAnimationFrame(tick);
   return {
+    launchSupportMissile(requestId) { if (guidance.tutorial?.snapshot()) return false; const used = timeAttack.launchSupportMissile(requestId); if (used) notify(); return used; },
+    rejectSupportMissile(requestId) { timeAttack.rejectSupportMissile(requestId); },
     start, togglePause, restart, continueTutorial, skipTutorial() { guidance.tutorial?.skip(); notify(); }, skipAllTutorial() { guidance.tutorial?.skipAll(); notify(); }, skipCinematic: endCinematic, useAwakening, useFocus() { if (guidance.tutorial?.snapshot()) return false; const used = timeAttack.useFocus(); if (used) notify(); return used; }, useRivalItem(item) { if (guidance.tutorial?.snapshot()) return false; const used = timeAttack.useRivalItem(item); if (used) notify(); return used; }, recover, toggleCockpit, cycleTrack,
     setBloom(enabled) { bloom.enabled = enabled; },
     setQuality(preference) { autoQuality.setPreference(preference); },

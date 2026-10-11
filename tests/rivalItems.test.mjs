@@ -17,7 +17,7 @@ test('existing profiles migrate AI inventories without losing ownership, balance
   const old = funded(); delete old.rivalInventory; delete old.rivalSlots; delete old.rivalUses;
   const restored = validateProgress(old);
   assert.equal(restored.balance,2000); assert.deepEqual(restored.owned, old.owned);
-  assert.deepEqual(restored.rivalInventory, {'time-stop':0,interference:0});
+  assert.deepEqual(restored.rivalInventory, {'time-stop':0,interference:0,'support-missile':0});
   assert.deepEqual(restored.rivalSlots, []);
 });
 

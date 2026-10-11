@@ -1,3 +1,4 @@
+import { reserveSupportMissile } from './game/progression/supportMissileUse';
 import type { ForkCue } from './game/track/forkCue';
 import { LANE_HUES } from './game/track/createForkLanes';
 import { marineZone } from './game/environment/marineZones';
@@ -352,14 +353,16 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
         get('race-standings').innerHTML = competition.standings.map(p => `<li class="${p.player ? 'is-player' : ''}${cutoff && p.rank === cutoff ? ' is-cutoff' : ''}"><strong>${p.rank}</strong><span class="standing-name"><i style="background:${p.color}"></i><span>${p.name}${p.player ? ' · 나' : `<small>${p.craftName} · ${p.style}</small>`}</span></span><time>${p.finishTime === null ? `LAP ${Math.min(attack.totalLaps, p.completedLaps + 1)}/${attack.totalLaps}` : formatTime(p.finishTime)}</time></li>`).join('');
       }
     }
-    activeRaceId = attack.raceId; canFocus = attack.canFocus; itemStates = attack.items;
+    activeRaceId = attack.raceId;
+    if (state.phase === 'running' && attack.supportMissile?.canLaunch) void fireSupportMissile(attack.supportMissile.requestId!);
+    canFocus = attack.canFocus; itemStates = attack.items;
     const focus = get<HTMLButtonElement>('race-focus');
     focus.hidden = !focusSlots || state.phase !== 'running'; focus.disabled = !canFocus || focusPending;
     focus.innerHTML = `집중 <small class="item-count">${attack.focusRemaining > 0 ? `${attack.focusRemaining.toFixed(1)}s` : focusSlots - attack.focusUsed}</small><kbd class="key-badge">V</kbd>`;
     for (const item of RIVAL_ITEMS) {
       const status = attack.items.find(entry => entry.id === item.id)!;
       const button = get<HTMLButtonElement>(`race-${item.id}`);
-      button.hidden = !equippedRivalSlots.includes(item.id) || state.phase !== 'running';
+      button.hidden = item.id === 'support-missile' || !equippedRivalSlots.includes(item.id) || state.phase !== 'running';
       button.disabled = !status.canUse || focusPending;
       button.innerHTML = status.active > 1e-8 ? `${item.name} <small class="item-count">${status.active.toFixed(1)}s</small>` : `${item.name} <small class="item-count">${status.remaining}</small><small class="item-note">${attack.itemCooldown > 0 ? ` · ${attack.itemCooldown.toFixed(1)}s` : status.remaining > 0 && !status.targets.length ? ' · 대상 없음' : ''}</small>`;
     }
@@ -714,6 +717,20 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
   get('race-hangar').addEventListener('click', onExit, listen);
   get('result-shop').addEventListener('click', () => onShop?.(), listen);
   get('reward-retry').addEventListener('click', () => { void saveReward(); }, listen);
+  async function fireSupportMissile(requestId: number) {
+    if (!store || focusPending || !race || screenDisposed) return;
+    focusPending = true;
+    const requestedRace = race, requestedRaceId = activeRaceId, receipt = `${requestedRaceId}:${++focusSerial}`;
+    try {
+      await reserveSupportMissile({ store, receipt, requestId,
+        valid: () => !screenDisposed && race === requestedRace && activeRaceId === requestedRaceId && lastPhase === 'running',
+        launch: id => requestedRace.launchSupportMissile(id), reject: id => {
+          if (activeRaceId === requestedRaceId) requestedRace.rejectSupportMissile(id);
+        } });
+    } catch (error) {
+      if (!screenDisposed) { get('focus-feedback').textContent = error instanceof Error ? error.message : '아이템을 사용할 수 없습니다.'; focusMessageUntil = performance.now() + 2500; }
+    } finally { focusPending = false; }
+  }
   const useFocus = async () => {
     if (!store || focusPending || lastPhase !== 'running' || !canFocus) return;
     focusPending = true; get<HTMLButtonElement>('race-focus').disabled = true;
