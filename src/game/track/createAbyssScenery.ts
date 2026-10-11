@@ -66,12 +66,12 @@ function declareAttributes(m: THREE.ShaderMaterial, vertexDecl: string, vertexIn
 const tagged = (g: THREE.BufferGeometry, name: string, v: number) => { g.setAttribute(name, new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count).fill(v), 1)); return g; };
 
 /**
- * ABYSS: glass domes, tubes, kelp, rocks, light shafts, a caustic seabed and a per-zone mix of jellyfish, whales, mantas, sharks and fish schools.
+ * ABYSS: glass domes, tubes, kelp, rocks, light shafts, a matte seabed and a per-zone mix of jellyfish, whales, mantas, sharks and fish schools.
  * Same return shape as createDistrictScenery. `hidesGround` tells the caller to hide the GridHelper
  * (the seabed plane at y=0.05 would otherwise z-fight with it at distance).
  */
 export function createAbyssScenery(track: Track, definition: TrackDefinition, palette: MarinePalette = MARINE_ZONES[0].palette) {
-  paletteKey = [palette.glow, palette.accent, palette.kelp.join(), palette.sand, palette.caustic, palette.feature].join();
+  paletteKey = [palette.glow, palette.accent, palette.rock, palette.kelp.join(), palette.sand, palette.caustic, palette.feature].join();
   const CYAN = new THREE.Color(palette.glow), PINK = new THREE.Color(palette.accent);
   const glowHue = CYAN.getHSL({ h: 0, s: 0, l: 0 }).h, accentHue = PINK.getHSL({ h: 0, s: 0, l: 0 }).h;
   const glow = (k = 1) => sceneryV3(palette.glow, k), accent = () => sceneryV3(palette.accent);
@@ -291,23 +291,28 @@ export function createAbyssScenery(track: Track, definition: TrackDefinition, pa
     float fade=pow(clamp(vUv.y,0.,1.),1.3);
     float fres=pow(abs(dot(normalize(vN),normalize(vView))),1.6);
     float near=smoothstep(60.,260.,length(vView));
-    gl_FragColor=fogOut(${sceneryV3(new THREE.Color(palette.glow).lerp(new THREE.Color('#ffffff'), .35).getHexString())},.2*fade*fres*near);`, { additive: true });
+    gl_FragColor=fogOut(${sceneryV3('#' + new THREE.Color(palette.glow).lerp(new THREE.Color('#ffffff'), .35).getHexString())},.2*fade*fres*near);`, { additive: true });
   const shaftMesh = add(new THREE.InstancedMesh(shaftGeometry, shaftMaterial, SHAFTS.high), 'abyss-light-shafts');
 
   // --- Seabed ---
-  const groundSize = Math.max(1800, routeSize.x + 600, routeSize.z + 600);
+  // Extend to the flyover horizon so the seabed never reads as a rectangular water surface.
+  const groundSize = Math.max(32000, routeSize.x + 600, routeSize.z + 600);
   const seabedMaterial = shader('abyss-seabed', '', '', `
-    float t=uTime*.6;
-    vec2 p=vWorld.xz*.033;
-    float cA=caustic(p,t), cB=caustic(p*1.9+7.3,t*1.3+3.);
-    float fadeD=(1.-smoothstep(140.,520.,vDepth))*(1.-smoothstep(45.,230.,length(vView)));
-    vec3 c=${sceneryV3(palette.sand,.55)}+${sceneryV3(palette.caustic)}*(cA*.3+cB*.18)*fadeD+${sceneryV3(palette.sand,.3)}*(1.-fadeD);
-    gl_FragColor=fogOut(c,1.);`, { side: THREE.FrontSide });
+    vec2 p=vWorld.xz;
+    float rock=sediment(p*.014), sand=sediment(p*.045+19.);
+    float detail=1.-smoothstep(.15,.65,length(fwidth(p*.045)));
+    // Static, broad patches stay matte at both driving and flyover distances.
+    vec3 c=${sceneryV3(palette.rock,.10)}+${sceneryV3(palette.sand,.07)};
+    c*=.88+.12*rock+(sand-.5)*.06*detail;
+    // Keep the nearby bottom clear; only distant terrain fades into the water.
+    float haze=smoothstep(260.,1800.,length(vView))*.72;
+    gl_FragColor=vec4(mix(c,fogColor,haze),1.);`, { side: THREE.FrontSide });
   seabedMaterial.fragmentShader = seabedMaterial.fragmentShader.replace('void main(){', `
-    float caustic(vec2 uv,float t){
-      vec2 p=mod(uv*6.28318,6.28318)-250., i=p; float c=1., inten=.005;
-      for(int n=0;n<4;n++){ float tt=t*(1.-3.5/float(n+1)); i=p+vec2(cos(tt-i.x)+sin(tt+i.y),sin(tt-i.y)+cos(tt+i.x)); c+=1./length(vec2(p.x/(sin(i.x+tt)/inten),p.y/(cos(i.y+tt)/inten))); }
-      c/=4.; c=1.17-pow(c,1.4); return pow(abs(c),8.);
+    float sedimentHash(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
+    float sediment(vec2 p){
+      vec2 cell=floor(p), f=fract(p); f=f*f*(3.-2.*f);
+      return mix(mix(sedimentHash(cell),sedimentHash(cell+vec2(1.,0.)),f.x),
+        mix(sedimentHash(cell+vec2(0.,1.)),sedimentHash(cell+vec2(1.,1.)),f.x),f.y);
     }
     void main(){`);
   const seabed = new THREE.Mesh(new THREE.PlaneGeometry(groundSize, groundSize), seabedMaterial);

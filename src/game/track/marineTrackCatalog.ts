@@ -42,13 +42,15 @@ export const MARINE_TRACK_CATALOG: readonly TrackDefinition[] = Object.freeze(re
   const id = name.toLowerCase().replaceAll(' ', '-');
   const rating = index % 4 + 1;
   const altitudeLevels = rating <= 2 ? 2 : rating === 3 ? 3 : 4;
+  const fork = forkRecipes[index];
+  const jumps = Object.freeze(fork && index !== 9 ? [Object.freeze({ id: `${id}-drop`, branchId: `${id}-fork`, routeIndex: fork.variety === 'arena-three' ? 2 as const : 1 as const })] : []);
   return Object.freeze({
-    id, name, district, order: 33 + index, revision: 5, rating,
+    id, name, district, order: 33 + index, revision: 5 + (fork?.kind === 'vertical' || index === 15 ? 1 : 0) + (jumps.length && index !== 15 ? 1 : 0), rating,
     predecessor: index ? recipes[index - 1][0].toLowerCase().replaceAll(' ', '-') : null,
     laps: 3, lapLimit, halfWidth: rating <= 3 ? 14 : 13, altitudeLevels,
     obstacleLevels: Object.freeze(altitudeLevels === 2 ? [1, 0, 1, 0] : altitudeLevels === 3 ? [2, 0, 1, 2, 1, 0] : [3, 0, 1, 2, 3, 1, 2, 0]),
     layout: course,
     branches: Object.freeze(forkRecipes[index] ? [Object.freeze({ ...forkRecipes[index]!, id: `${id}-fork` }) as BranchRecipe] : []),
-    jumps: Object.freeze(index === 15 ? [Object.freeze({ id: 'surface-rush-drop', branchId: `${id}-fork`, routeIndex: 1 as const })] : []), features,
+    jumps, features: features + (jumps.length && index !== 15 ? ' · 하강 점프 분기' : ''),
   });
 }));

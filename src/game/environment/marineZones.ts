@@ -8,7 +8,7 @@ export interface MarinePalette {
   rock: string;
   kelp: [dark: string, light: string, glow: string];
   sand: string;      // seabed base
-  caustic: string;   // seabed light pattern and surface shimmer
+  caustic: string;   // water surface shimmer (the seabed stays matte)
   whale: string;      // creature silhouette body
   fauna: MarineFauna;
   /** One signature scenery object per zone (trench has none). */
@@ -36,19 +36,19 @@ export const MARINE_ZONES: readonly MarineZone[] = [
     glow: '#c6ff6e', accent: '#ffb347', rock: '#1f2a17', kelp: ['#0b1606', '#34470f', '#8fb02a'],
     sand: '#2b2a17', caustic: '#e8f08a', whale: '#0a1206', feature: 'giant-kelp',
     fauna: { jellyfish: 2, whale: 1, manta: 2, shark: 10, fish: 6, glow: .15 } },
-    environments: [{ ...base, id: 'kelp-forest', label: '켈프 숲', zenith: '#5d8a4a', horizon: '#24452e', fog: '#142a1c', fogDensity: .002,
+    environments: [{ ...base, id: 'kelp-forest', label: '켈프 숲', zenith: '#5d8a4a', horizon: '#24452e', fog: '#102218', fogDensity: .0013,
       ambient: '#c4dca0', ambientIntensity: 2.5, light: '#f6e7a2', lightIntensity: 2.4 }] },
   { id: 'coral', name: '산호 정원', palette: {
     glow: '#ff9466', accent: '#ffd36b', rock: '#2a1b2a', kelp: ['#0b0a1c', '#3a1e46', '#e0604f'],
     sand: '#2c2534', caustic: '#9fc2ff', whale: '#070a1c', feature: 'coral-reef',
     fauna: { jellyfish: 3, whale: 1, manta: 10, shark: 2, fish: 4, glow: .12 } },
-    environments: [{ ...base, id: 'coral-garden', label: '산호 정원', zenith: '#4a7fd0', horizon: '#1d3f80', fog: '#10224a', fogDensity: .0018,
+    environments: [{ ...base, id: 'coral-garden', label: '산호 정원', zenith: '#4a7fd0', horizon: '#1d3f80', fog: '#0b1930', fogDensity: .0012,
       ambient: '#a9bcff', ambientIntensity: 2.7, light: '#ffd9b4', lightIntensity: 2.4 }] },
   { id: 'lagoon', name: '햇빛 라군', palette: {
     glow: '#ffd27a', accent: '#ff6f61', rock: '#4a5a52', kelp: ['#0c3328', '#1f6e4f', '#5fd6a0'],
     sand: '#8f8466', caustic: '#fff6da', whale: '#123c46', feature: 'fish-school',
     fauna: { jellyfish: 2, whale: 3, manta: 2, shark: 2, fish: 12, glow: 0 } },
-    environments: [{ ...base, id: 'sun-lagoon', label: '햇빛 라군', zenith: '#9ef0ea', horizon: '#3fb7c4', fog: '#2a95a6', fogDensity: .0016,
+    environments: [{ ...base, id: 'sun-lagoon', label: '햇빛 라군', zenith: '#9ef0ea', horizon: '#3fb7c4', fog: '#123740', fogDensity: .0011,
       ambient: '#e6fff8', ambientIntensity: 3, light: '#fff3d2', lightIntensity: 3.2 }] },
 ];
 

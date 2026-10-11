@@ -1,20 +1,23 @@
 import * as THREE from 'three';
-import { forkRouteCues, type ForkChoice, type ForkRoadHeight } from './forkCue.js';
+import { forkRouteCues, forkCountdownText, type ForkCue, type ForkChoice, type ForkRoadHeight } from './forkCue.js';
 import { LANE_HUES } from './createForkLanes.js';
-import type { TrackFork } from './trackBranches.js';
+import { defaultBranchRoute, type TrackFork } from './trackBranches.js';
+import type { Track } from './createTrack.js';
 
 const ARROWS: Record<ForkChoice, string> = { left: '←', center: '↑', right: '→', lower: '↓', upper: '↑' };
 const HEIGHT_STEPS: Record<ForkRoadHeight, number> = { low: 1, middle: 2, high: 3, variable: 2 };
 const HEIGHT_LABEL: Record<ForkRoadHeight, string> = { low: '낮은 도로', middle: '중간 도로', high: '높은 도로', variable: '높이 변화' };
 const PANEL_W = 512, PANEL_H = 256;
 
-/** Overhead sign for forks whose routes carry display cues; one panel per route in left-to-right order. Null when cues are missing. */
-export function createForkSign(fork: TrackFork, lineColor: string | undefined, y: number): THREE.Mesh | null {
-  const cues = forkRouteCues(fork);
+export type ForkSign = THREE.Mesh & { updateCue(cue: ForkCue | null): void };
+
+/** Every fork gets one panel per route; vertical forks use altitude arrows. */
+export function createForkSign(fork: TrackFork, lineColor: string | undefined, y: number, track?: Track): ForkSign | null {
+  const cues = forkRouteCues(fork, track);
   if (cues.length < 2 || cues.length !== fork.routes.length || typeof document === 'undefined') return null;
   const canvas = document.createElement('canvas'); canvas.width = PANEL_W * cues.length; canvas.height = PANEL_H;
   const g = canvas.getContext('2d'); if (!g) return null;
-  const line = lineColor ?? '#67dcd0', defaultId = fork.routes.find(r => r.id === fork.defaultRouteId)?.id ?? cues[Math.floor(cues.length / 2)].id;
+  const line = lineColor ?? '#67dcd0', defaultId = defaultBranchRoute(fork).id;
   g.fillStyle = '#07131ef2'; g.fillRect(0, 0, canvas.width, PANEL_H);
   g.strokeStyle = line; g.lineWidth = 6; g.strokeRect(3, 3, canvas.width - 6, PANEL_H - 6);
   g.textAlign = 'left'; g.textBaseline = 'middle';
@@ -34,11 +37,12 @@ export function createForkSign(fork: TrackFork, lineColor: string | undefined, y
     for (let s = 0; s < 3; s++) {
       const h = 14 + s * 12; g.fillStyle = s < steps ? '#7fffe6' : '#2b4a56'; g.fillRect(x + 30 + s * 24, 190 - h, 18, h);
     }
-    g.fillStyle = '#c8e4ee'; g.font = 'bold 28px sans-serif'; g.fillText(HEIGHT_LABEL[cue.roadHeight], x + 118, 160);
+    g.fillStyle = '#c8e4ee'; g.font = 'bold 28px sans-serif'; g.fillText(cue.altitudeHint ? `고도 ${cue.altitudeHint}로 선택` : HEIGHT_LABEL[cue.roadHeight], x + 118, 160);
     const chips: [string, string][] = [];
     if (cue.hazards.includes('height')) chips.push(['⇕', '고도 장애물']);
     if (cue.hazards.includes('corridor')) chips.push(['▥', '통로 게이트']);
     if (cue.features.some(f => f.includes('부스트'))) chips.push(['⚡', '부스트']);
+    if (cue.features.some(f => f.includes('점프'))) chips.unshift(['↗', '하강 점프']);
     if (!chips.length) chips.push(['✓', '장애물 없음']);
     chips.slice(0, 2).forEach(([icon, label], k) => {
       const cy = 198 + k * 34 - (chips.length > 1 ? 0 : -8);
@@ -49,5 +53,23 @@ export function createForkSign(fork: TrackFork, lineColor: string | undefined, y
   const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace;
   const width = 12 * cues.length;
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(width, width * PANEL_H / canvas.width), new THREE.MeshBasicMaterial({ map: texture, transparent: true, side: THREE.DoubleSide, toneMapped: false }));
-  mesh.position.y = y; return mesh;
+  mesh.name = `junction-sign-panel-${fork.id}`;
+  mesh.position.y = y;
+  const clockCanvas = document.createElement('canvas'); clockCanvas.width = 512; clockCanvas.height = 112;
+  const clockContext = clockCanvas.getContext('2d');
+  const clockTexture = new THREE.CanvasTexture(clockCanvas); clockTexture.colorSpace = THREE.SRGBColorSpace;
+  const clock = new THREE.Mesh(new THREE.PlaneGeometry(16, 3.5), new THREE.MeshBasicMaterial({ map: clockTexture, transparent: true, side: THREE.DoubleSide, toneMapped: false }));
+  clock.name = `junction-sign-clock-${fork.id}`; clock.position.y = 5; mesh.add(clock);
+  let previous = '';
+  const updateCue = (cue: ForkCue | null) => {
+    const text = cue?.id === fork.id ? forkCountdownText(cue) : '갈림길 · 선택 준비';
+    if (!clockContext || text === previous) return;
+    previous = text;
+    clockContext.clearRect(0, 0, 512, 112); clockContext.fillStyle = '#07131ef2'; clockContext.fillRect(0, 0, 512, 112);
+    clockContext.strokeStyle = '#ffd86a'; clockContext.lineWidth = 4; clockContext.strokeRect(2, 2, 508, 108);
+    clockContext.fillStyle = '#ffe9a8'; clockContext.textAlign = 'center'; clockContext.textBaseline = 'middle';
+    clockContext.font = 'bold 48px sans-serif'; clockContext.fillText(text, 256, 56, 490); clockTexture.needsUpdate = true;
+  };
+  updateCue(null);
+  return Object.assign(mesh, { updateCue });
 }

@@ -1,7 +1,7 @@
 import { createTrackFrame, type Track, type TrackFrame } from './createTrack.js';
 import { physicalDistance, routeDistanceScale } from './trackBranches.js';
 
-export interface JumpRecipe { readonly id: string; readonly branchId: string; readonly routeIndex: 0 | 1 }
+export interface JumpRecipe { readonly id: string; readonly branchId: string; readonly routeIndex: 0 | 1 | 2 }
 /** Shared course distances, repeated each lap. The landing surface is `drop` world metres lower. */
 export interface TrackJump {
   readonly id: string; readonly routeId: string;
@@ -47,11 +47,19 @@ export function withTrackJumps(track: Track, recipes: readonly JumpRecipe[] = []
     ids.add(recipe.id); routes.add(route.id);
     const centre = (route.mouthEnd + route.mergeStart) / 2, scale = routeDistanceScale(track, centre, route.id);
     const start = centre - 30 / scale, end = start + 60 / scale;
-    const jump: TrackJump = Object.freeze({ id: recipe.id, routeId: route.id, approachStart: start - 100 / scale,
+    let jump: TrackJump = Object.freeze({ id: recipe.id, routeId: route.id, approachStart: start - 100 / scale,
       start, end, landingEnd: end + 50 / scale, rejoinEnd: end + 150 / scale, drop: 12,
       launchLevel: track.altitudeProfile.levels.length - 1, landingLevel: 0 });
-    if (jump.approachStart < route.mouthEnd || jump.rejoinEnd > route.mergeStart)
-      throw new Error(`Jump does not fit clear branch: ${recipe.id}`);
+    if (jump.approachStart < route.mouthEnd || jump.rejoinEnd > route.mergeStart) {
+      // Shorter bodies keep the full 100m warning, 60m flight and 50m landing.
+      // Only the return ramp can shorten (at least 60m); both mouths retain 10m clearance.
+      const available = physicalDistance(track, route.mouthEnd, route.mergeStart - route.mouthEnd, route.id);
+      const ramp = Math.min(100, available - 230);
+      if (ramp < 60) throw new Error(`Jump does not fit clear branch: ${recipe.id}`);
+      const approachStart = route.mouthEnd + (available - 210 - ramp) / (2 * scale);
+      const start = approachStart + 100 / scale, end = start + 60 / scale, landingEnd = end + 50 / scale;
+      jump = Object.freeze({ ...jump, approachStart, start, end, landingEnd, rejoinEnd: landingEnd + ramp / scale });
+    }
     return jump;
   });
   const baseSample = track.sample.bind(track);
@@ -105,9 +113,13 @@ export function withTrackJumps(track: Track, recipes: readonly JumpRecipe[] = []
     while (lo + 1 < hi) { const mid = (lo + hi) >>> 1; if (curve.arcs[mid] <= arc) lo = mid; else hi = mid; }
     const old = curve.start + (lo + (arc - curve.arcs[lo]) / (curve.arcs[hi] - curve.arcs[lo])) * curve.step;
     const frame = adjust(baseSample(old, target, routeId), curve.jump, old);
-    adjust(baseSample(old - .25, before, routeId), curve.jump, old - .25);
-    adjust(baseSample(old + .25, after, routeId), curve.jump, old + .25);
-    frame.curvature = after.tangent.sub(before.tangent).dot(frame.right) / (.5 * (frame.distanceScale ?? 1));
+    // Preserve authored steering on unchanged road, especially intertwined mouths
+    // whose roll is deliberately excluded from lateral steering curvature.
+    if (old >= curve.jump.start && old <= curve.jump.rejoinEnd) {
+      adjust(baseSample(old - .25, before, routeId), curve.jump, old - .25);
+      adjust(baseSample(old + .25, after, routeId), curve.jump, old + .25);
+      frame.curvature = after.tangent.sub(before.tangent).dot(frame.right) / (.5 * (frame.distanceScale ?? 1));
+    }
     frame.distanceScale = curve.scale;
     return frame;
   };

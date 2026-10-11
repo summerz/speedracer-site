@@ -1,5 +1,6 @@
 /** Pure timing and copy for the race intro and finish cinematics; no DOM or three.js. */
-export const INTRO_SECONDS = 5, INTRO_REDUCED_SECONDS = 1.5;
+export const INTRO_APPROACH_SECONDS = 5, INTRO_LINGER_SECONDS = 1.5;
+export const INTRO_SECONDS = INTRO_APPROACH_SECONDS + INTRO_LINGER_SECONDS, INTRO_REDUCED_SECONDS = 1.5;
 export const FINISH_SECONDS = 1.6, FINISH_REDUCED_SECONDS = 1;
 export const SLOWMO_SECONDS = .8, SLOWMO_SCALE = .25, SWING_SECONDS = 1.2;
 
@@ -10,9 +11,9 @@ export const cinematicSeconds = (kind: CinematicKind, reduced: boolean, rivals =
 
 const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
 /** Smootherstep: zero velocity and acceleration at both ends. */
-export const ease = (u: number) => { const x = clamp01(u); return x * x * x * (x * (x * 6 - 15) + 10); };
+export const ease = (u: number) => { const x = clamp01(u); return clamp01(x * x * x * (x * (x * 6 - 15) + 10)); };
 /** Eased 0..1 progress of the intro flythrough. */
-export const introProgress = (seconds: number, duration = INTRO_SECONDS) => ease(seconds / duration);
+export const introProgress = (seconds: number, duration = INTRO_APPROACH_SECONDS) => ease(seconds / duration);
 /** Real-time to simulation scale for rivals and effects after the player finishes. */
 export const finishTimeScale = (seconds: number, reduced: boolean) => !reduced && seconds < SLOWMO_SECONDS ? SLOWMO_SCALE : 1;
 /** Chase camera (directly behind) swings around the right side to a front three-quarter view. */
@@ -21,7 +22,7 @@ export function finishSwing(seconds: number, reduced: boolean) {
   return { azimuth: Math.PI + (.87 - Math.PI) * u, radius: 8.5 - .5 * u, height: 3.5 - 1.3 * u };
 }
 
-export const SHOWCASE_PLAYER_ATTACK = 2.2, SHOWCASE_PLAYER_COMPETITION = 2, SHOWCASE_RIVAL = .7, SHOWCASE_MAX = 6.5, SHOWCASE_BLEND = .5;
+export const SHOWCASE_PLAYER_ATTACK = 2.55, SHOWCASE_PLAYER_COMPETITION = 2.35, SHOWCASE_RIVAL = .7, SHOWCASE_MAX = 6.85, SHOWCASE_BLEND = .7;
 /** `index` is 0 for the player and the grid-order rival index (nearest first) for rivals. */
 export interface ShowcaseShot { kind: 'player' | 'rival'; index: number; start: number; duration: number }
 export interface ShowcasePlan { shots: ShowcaseShot[]; total: number }

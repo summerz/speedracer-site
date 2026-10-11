@@ -648,3 +648,20 @@ button:focus-visible { outline:2px solid #c9f9f2; outline-offset:3px; }
 .focus-feedback.parry-callout[hidden] { display:none; }
 @keyframes parry-callout { 0% { transform:translateX(-50%) scale(1.5); opacity:0; } 18% { transform:translateX(-50%) scale(1); opacity:1; } 80% { opacity:1; } 100% { transform:translateX(-50%) scale(1); opacity:0; } }
 @media (prefers-reduced-motion:reduce) { .focus-feedback.parry-callout { animation:none; } }
+
+/* Position is legible at a glance, with a compact version on phones. */
+.rank-readout { display:inline-flex; align-items:center; gap:5px; color:#ffe9a8; font-variant-numeric:tabular-nums; }
+.rank-readout[hidden] { display:none; }
+.rank-readout strong { font:600 24px/1 'Barlow Condensed',sans-serif; }
+.rank-context { display:grid; gap:2px; }
+.rank-context b { font-size:9px; font-weight:500; color:#c9d8dc; }
+.rank-context small { font-size:10px; color:#c9d8dc; }
+.fork-timer { width:max-content; max-width:100%; margin:0 auto 5px; padding:4px 12px; color:#ffe9a8; background:#07131ef2; border:1px solid #ffd86a99; border-radius:4px; font-size:15px; font-weight:600; font-variant-numeric:tabular-nums; }
+.fork-cue[data-phase='route'] .fork-timer { color:#7fffe6; border-color:#7fffe677; }
+@media (min-width:900px) and (pointer:fine) {
+  .rank-readout { gap:9px; padding:3px 16px 3px 4px; border-right:1px solid #ffd86a55; }
+  .rank-readout strong { font-size:58px; min-width:1ch; text-align:center; text-shadow:0 2px 10px #000; }
+  .rank-context b { font-size:12px; letter-spacing:1px; }
+  .rank-context small { font-size:17px; }
+  .fork-timer { font-size:21px; padding:4px 16px; }
+}

@@ -74,8 +74,12 @@ const NEON_TRACK_CATALOG: readonly TrackDefinition[] = Object.freeze(recipes.map
   const branches: readonly BranchRecipe[] = branchCourses.includes(i) ? Object.freeze([Object.freeze({ id: `${id}-fork`,
     kind: i % 4 === 1 ? 'vertical' as const : 'horizontal' as const, experience, direction: i % 2 ? -1 as const : 1 as const,
     intertwined: [6, 13, 17, 23].includes(i), ...(i === 8 ? { variety: 'arena-three' as const } : i === 1 ? { variety: 'terrace-height' as const } : {}), ...(i === 6 ? { groundClearance: 12 } : {}) })]) : [];
-  const jumps: readonly JumpRecipe[] = i === 5 ? Object.freeze([Object.freeze({ id: 'voltage-yard-drop', branchId: `${id}-fork`, routeIndex: 1 as const })]) : [];
-  return Object.freeze({ id, name: r[0], jumps, revision: 3 + (r[4] ? (r[4].stunts.some(s => s.direction === -1) ? 3 : 2) : 1) + (branches.length ? 4 : 0) + ([1, 6, 8].includes(i) ? 1 : 0) + (jumps.length ? 1 : 0), order: i + 1, district: r[1], rating: r[2], branches,
+  // Keep the first course and the technical coil routes continuous. Every district
+  // offers an optional jump, once per lap on the upper/right (outer in a three-way) route.
+  const jumpCourses = [1, 5, 9, 15, 16, 17, 21, 24, 25, 28, 29];
+  const jumps: readonly JumpRecipe[] = jumpCourses.includes(i) ? Object.freeze([Object.freeze({ id: `${id}-drop`, branchId: `${id}-fork`, routeIndex: branches[0].variety === 'arena-three' ? 2 as const : 1 as const })]) : [];
+  const addedJump = jumps.length > 0 && i !== 5;
+  return Object.freeze({ id, name: r[0], jumps, revision: 3 + (r[4] ? (r[4].stunts.some(s => s.direction === -1) ? 3 : 2) : 1) + (branches.length ? 4 : 0) + ([1, 6, 8].includes(i) ? 1 : 0) + (i === 5 ? 1 : 0) + (branches.some(f => f.kind === 'vertical') || i === 5 ? 1 : 0) + (addedJump ? 1 : 0), order: i + 1, district: r[1], rating: r[2], branches,
     predecessor: i ? recipes[i - 1][0].toLowerCase().replaceAll(' ', '-') : null,
     laps: 3, lapLimit: lapLimits[i], halfWidth: r[2] <= 3 ? 14 : 13,
     altitudeLevels: levels, obstacleLevels: Object.freeze(pattern), layout: r[4] ? Object.freeze({ ...r[4], stunts: Object.freeze(r[4].stunts.map(s => Object.freeze(s))) }) : null, features: r[3] + (jumps.length ? ' · 하강 점프' : '') + (branches.length ? ` · ${branches[0].variety === 'terrace-height' ? '상하 갈림길 · 고도 대응/안전 부스트' : branches[0].variety === 'arena-three' ? '3갈래 · 낮은 길/중간 길/높은 길' : branches[0].intertwined ? '입체 교차 분기' : branches[0].kind === 'horizontal' ? '좌우 갈림길' : '상하 갈림길'}` : '') });
@@ -103,7 +107,9 @@ export function validateTrackCatalog(catalog: readonly TrackDefinition[]) {
     const jumpIds = new Set<string>(), jumpRoutes = new Set<string>();
     for (const j of t.jumps ?? []) {
       const route = `${j.branchId}:${j.routeIndex}`;
-      if (!j.id || jumpIds.has(j.id) || jumpRoutes.has(route) || !branchIds.has(j.branchId) || ![0, 1].includes(j.routeIndex)) throw new Error('Invalid course jump');
+      const branch = t.branches?.find(b => b.id === j.branchId);
+      if (!j.id || jumpIds.has(j.id) || jumpRoutes.has(route) || !branch || !Number.isInteger(j.routeIndex)
+        || j.routeIndex < 0 || j.routeIndex >= (branch.variety === 'arena-three' ? 3 : 2)) throw new Error('Invalid course jump');
       jumpIds.add(j.id); jumpRoutes.add(route);
     }
     if (!/^[a-z][a-z0-9-]*$/.test(t.id) || !t.name || !Number.isInteger(t.revision) || t.revision < 1 || !Number.isInteger(t.laps) || t.laps < 1 || t.laps > 10 || !Number.isInteger(t.rating) || t.rating < 1 || t.rating > 6 || !Number.isFinite(t.halfWidth) || t.halfWidth <= 4 || !Number.isFinite(t.lapLimit) || t.lapLimit <= 0 || ![2,3,4].includes(t.altitudeLevels) || t.obstacleLevels.some(n => !Number.isInteger(n) || n < 0 || n >= t.altitudeLevels)) throw new Error('Invalid track definition');

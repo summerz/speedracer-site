@@ -1,6 +1,8 @@
 import type { BoostPad, CorridorObstacle, HeightObstacle, Track } from './createTrack.js';
 import { safePlacement } from './obstaclePlacement.js';
+import { forkDecisionPlacementClear } from './forkDecisionSafety.js';
 import { advanceTrackDistance } from './trackBranches.js';
+import { jumpPlacementClear } from './trackJump.js';
 
 /** Pilot forks own their complete layout; run randomization must preserve these sites. */
 export function isAuthoredForkRoute(track: Track | undefined, routeId?: string | null): boolean {
@@ -20,12 +22,20 @@ export function authoredForkLayout(track: Track, template: HeightObstacle) {
       };
       if (route.cue?.choice === 'left' || route.cue?.choice === 'lower') {
         const levels = track.altitudeProfile.levels;
-        for (const [i, level] of [levels.length - 1, 0].entries()) {
+        let previousDistance: number | undefined;
+        for (const level of [levels.length - 1, 0]) {
           const height = levels[level];
-          heights.push({ ...template, motion: undefined, routeId: route.id, distance: at(terrace ? 65 + i * 140 : 20 + i * 120),
+          let distance = previousDistance === undefined ? at(terrace ? 65 : 20)
+            : advanceTrackDistance(track, previousDistance, terrace ? 140 : 120, route.id);
+          while (!forkDecisionPlacementClear(track, distance, route.id, template.depth / 2 + 3)) {
+            distance = advanceTrackDistance(track, distance, 10, route.id);
+            if (distance > route.mergeStart - 15) throw new Error(`No clear altitude-fork site: ${route.id}`);
+          }
+          heights.push({ ...template, motion: undefined, routeId: route.id, distance,
             kind: level === 0 ? 'descend' : 'rise',
             minAltitude: level === 0 ? height : height - .45,
             maxAltitude: level === 0 ? height + .45 : height });
+          previousDistance = distance;
         }
       } else if (route.cue?.choice === 'center') {
         // A new footprint can bend the neutral route; keep the corridor on gentle pavement.
@@ -37,7 +47,14 @@ export function authoredForkLayout(track: Track, template: HeightObstacle) {
         corridors.push({ routeId: route.id, distance, depth: 4, speedRetention: template.speedRetention,
           lane: 'center', safeCenter: 0, safeWidth: track.halfWidth * 1.1 });
       } else {
-        pads.push({ routeId: route.id, distance: at(terrace ? 130 : 80), lane: 'center', center: 0, width: track.halfWidth, length: 14 });
+        let distance = at(terrace ? 130 : 80);
+        if (!jumpPlacementClear(track, distance, route.id, 7)) {
+          // Keep the authored boost route's reward on pavement, after the landing.
+          while (!jumpPlacementClear(track, distance, route.id, 7) && distance < route.mergeStart - 15)
+            distance = advanceTrackDistance(track, distance, 10, route.id);
+          if (distance > route.mergeStart - 15) throw new Error(`No clear jump boost site: ${route.id}`);
+        }
+        pads.push({ routeId: route.id, distance, lane: 'center', center: 0, width: track.halfWidth, length: 14 });
       }
     }
   }

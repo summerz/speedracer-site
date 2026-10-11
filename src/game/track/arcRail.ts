@@ -31,6 +31,21 @@ export function stuntSections(track: Track): StuntSection[] {
   return list;
 }
 
+/** Keep stunt hazards and pickups outside the complete jump instruction/landing window. */
+function jumpClearStuntSections(track: Track): StuntSection[] {
+  return stuntSections(track).flatMap(section => {
+    let parts = [section];
+    for (const jump of track.jumps ?? []) {
+      if (jump.routeId !== section.routeId) continue;
+      parts = parts.flatMap(part => jump.landingEnd <= part.start || jump.approachStart >= part.end ? [part] : [
+        { ...part, end: Math.min(part.end, jump.approachStart) },
+        { ...part, start: Math.max(part.start, jump.landingEnd) },
+      ].filter(part => part.end > part.start));
+    }
+    return parts;
+  });
+}
+
 /** The segment (absolute distances) of a rail on this route that covers `distance`, if any. */
 export function activeArcSegment(rails: readonly ArcRail[], routeId: string | undefined, distance: number) {
   for (const rail of rails) {
@@ -45,7 +60,7 @@ export function activeArcSegment(rails: readonly ArcRail[], routeId: string | un
 
 /** `ARC_RAILS_PER_TRACK` rails on randomly chosen stunt sections (fewer if fewer fit), trimmed 30+ m at both ends; random first side, segment lengths and switch count, every gap >= `arcGap`. */
 export function createArcRails(track: Track, challenge: RaceChallengeId, random: () => number): ArcRail[] {
-  const fits = stuntSections(track).flatMap(section => {
+  const fits = jumpClearStuntSections(track).flatMap(section => {
     // Hands-off craft drift to the centre in the 150 m before a fork (see forkApproachDrift), so a rail never runs into that approach.
     const fork = section.routeId ? undefined : track.branches?.find(f => f.start >= section.start && f.start - 150 < section.end);
     // A forked helix includes its Y mouths in the section classification, but
@@ -81,8 +96,9 @@ export function createArcRails(track: Track, challenge: RaceChallengeId, random:
 
 /** Every stunt-section ring mark: 1 per section (2 beyond 400 m) at its middle (loop apex / helix centre). */
 export function ringMarks(track: Track) {
-  return stuntSections(track).flatMap(section => {
+  return jumpClearStuntSections(track).flatMap(section => {
     const span = section.end - section.start;
+    if (span < 30) return [];
     return (span > 400 ? [1 / 3, 2 / 3] : [.5]).map(mark => ({ routeId: section.routeId, start: section.start, end: section.end, at: section.start + span * mark }));
   });
 }
