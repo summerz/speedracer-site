@@ -3,7 +3,7 @@
 .race-scene { position:absolute; inset:0; }
 .race-scene canvas { display:block; width:100%; height:100%; }
 .drive-keys kbd { font:10px 'IBM Plex Mono',monospace; color:#9dbac6; }
-.race-header { position:absolute; top:0; left:0; right:0; z-index:4; display:flex; justify-content:space-between; align-items:flex-start; padding:max(16px,env(safe-area-inset-top)) max(20px,env(safe-area-inset-right)) 20px max(20px,env(safe-area-inset-left)); pointer-events:none; background:linear-gradient(#080f19bb,transparent); }
+.race-header { position:absolute; top:0; left:0; right:0; z-index:4; display:flex; justify-content:space-between; align-items:flex-start; padding:max(16px,env(safe-area-inset-top)) max(20px,env(safe-area-inset-right)) 20px max(20px,env(safe-area-inset-left)); pointer-events:none; }
 .race-telemetry { display:grid; gap:5px; font-variant-numeric:tabular-nums; text-shadow:0 2px 6px #000; }
 .telemetry-row { display:flex; align-items:center; gap:24px; }
 .lap-readout { font-size:11px; color:var(--accent); white-space:nowrap; }
