@@ -43,7 +43,7 @@ export const MARINE_TRACK_CATALOG: readonly TrackDefinition[] = Object.freeze(re
   const rating = index % 4 + 1;
   const altitudeLevels = rating <= 2 ? 2 : rating === 3 ? 3 : 4;
   return Object.freeze({
-    id, name, district, order: 33 + index, revision: 4, rating,
+    id, name, district, order: 33 + index, revision: 5, rating,
     predecessor: index ? recipes[index - 1][0].toLowerCase().replaceAll(' ', '-') : null,
     laps: 3, lapLimit, halfWidth: rating <= 3 ? 14 : 13, altitudeLevels,
     obstacleLevels: Object.freeze(altitudeLevels === 2 ? [1, 0, 1, 0] : altitudeLevels === 3 ? [2, 0, 1, 2, 1, 0] : [3, 0, 1, 2, 3, 1, 2, 0]),

@@ -1,5 +1,5 @@
 import { createTouchInput } from './touchInput';
-import type { ParrySnapshot } from './parry';
+import { PARRY_TUNING, type ParrySnapshot } from './parry';
 export type { TouchDrivingInput } from './touchInput';
 
 /** Pointer capture plus window-level termination prevents controls staying held. */
@@ -144,7 +144,7 @@ export function createTouchControls(container: HTMLElement, actions: {
       if (!show || !parry) return;
       const cooling = parry.phase === 'cooldown', guarding = parry.phase === 'window';
       const warning = parry.phase === 'ready' && !!parry.target && usableNow;
-      const sweep = cooling ? Math.min(1, Math.max(0, parry.cooldownRemaining / 3)) : 0;
+      const sweep = cooling ? Math.min(1, Math.max(0, parry.cooldownRemaining / PARRY_TUNING.cooldownSeconds)) : 0;
       const angle = `${(Math.round(sweep * 360 / 4) * 4) % 361}deg`;
       if (parryButton.style.getPropertyValue('--cd') !== angle) parryButton.style.setProperty('--cd', angle);
       for (const [name, on] of [['is-cooldown', cooling], ['is-window', guarding], ['is-warning', warning], ['is-ready', !cooling && !guarding && !warning]] as const) {

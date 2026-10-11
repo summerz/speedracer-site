@@ -249,7 +249,7 @@ export function createParryEffect(drone: THREE.Object3D, scene: THREE.Scene): Pa
       }
 
       // Guard window shell (cyan-white), or the grey fizzle after a missed window.
-      fizzleAge += dt;
+      fizzleAge = parry.interrupted ? 1 : fizzleAge + dt;
       const guarding = parry.phase === 'window';
       const fizzleSeconds = reducedMotion ? FIZZLE_SECONDS * 0.6 : FIZZLE_SECONDS;
       const uniforms = shellMaterial.uniforms;

@@ -151,6 +151,7 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
   };
   const damageBoost = (loss: number) => {
     if (state.awakeningRemaining > 0) return;
+    parry.damage(); publishParry();
     const appliedLoss = state.boosting ? loss : loss * .25;
     state.charge = Math.max(0, state.charge - appliedLoss);
     rechargeDelay = Math.max(rechargeDelay, .45);
