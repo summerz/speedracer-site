@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { TRACK_CATALOG } from '../output/test/game/track/trackCatalog.js';
 import { createCatalogTrack } from '../output/test/game/track/trackRuntime.js';
-import { readForkCue, forkRouteCues } from '../output/test/game/track/forkCue.js';
-import { advanceTrackDistance, physicalDistance, selectBranch } from '../output/test/game/track/trackBranches.js';
+import { readForkCue, forkRouteCues, forkCountdownText } from '../output/test/game/track/forkCue.js';
+import { advanceTrackDistance, defaultBranchRoute, physicalDistance, selectBranch, verticalThreshold } from '../output/test/game/track/trackBranches.js';
 import { createDrivingModel, NEUTRAL_INPUT } from '../output/test/game/driving/createDrivingModel.js';
 import { aiDrivingInput } from '../output/test/game/driving/createRaceSession.js';
 import { DRONE_CATALOG } from '../output/test/game/drone/droneCatalog.js';
@@ -12,6 +12,57 @@ const definition = TRACK_CATALOG.find(d => d.id === 'arena-ring');
 const pose = (distance, extra = {}) => ({ distance, offset: 0, altitudeLevel: 0, speed: 100, ...extra });
 const controls = { ...NEUTRAL_INPUT, throttle: true };
 const withoutHazards = track => ({ ...track, heightObstacles: [], corridorObstacles: [], mineFields: [], arcRails: [], boostPads: [], boostRings: [] });
+
+test('every campaign fork exposes advance guidance matching its real selection rules', () => {
+  for (const definition of TRACK_CATALOG) {
+    const track = createCatalogTrack(definition);
+    for (const fork of track.branches ?? []) {
+      const cue = readForkCue(track, pose(fork.start - 100));
+      assert.equal(cue.id, fork.id);
+      assert.equal(cue.phase, 'approach');
+      assert.equal(cue.defaultRouteId, defaultBranchRoute(fork).id);
+      assert.deepEqual(cue.routes.map(r => r.id), fork.routes.map(r => r.id));
+      for (const [index, route] of cue.routes.entries()) {
+        const vertical = fork.kind === 'vertical';
+        const offset = index === 0 ? -track.halfWidth : index === fork.routes.length - 1 ? track.halfWidth : 0;
+        const level = vertical && index ? verticalThreshold(track) : 0;
+        const preview = readForkCue(track, pose(fork.start - 100, { offset, altitudeLevel: level }));
+        assert.equal(preview.previewRouteId, route.id, `${definition.id}: ${route.name}`);
+        assert.equal(preview.previewRouteId, selectBranch(track, fork.start + 1, offset, level));
+        if (vertical) assert.ok(route.altitudeHint);
+      }
+    }
+  }
+});
+
+test('VOLTAGE YARD upper jump route is clearly marked and reachable with one up tap in every difficulty', () => {
+  for (const challenge of ['easy', 'normal', 'hard']) for (const craft of DRONE_CATALOG) {
+    const track = createCatalogTrack(TRACK_CATALOG.find(d => d.id === 'voltage-yard'), challenge), fork = track.branches[0];
+    const model = createDrivingModel(track, craft.configuration.performance), s = model.state;
+    Object.assign(s, { distance: fork.start - 180, speed: craft.configuration.performance.topSpeed,
+      altitudeLevel: 0, altitude: track.altitudeProfile.levels[0], targetAltitude: track.altitudeProfile.levels[0] });
+    const before = readForkCue(track, s);
+    assert.equal(before.kind, 'vertical');
+    assert.equal(before.previewRouteId, fork.routes[0].id);
+    assert.equal(before.routes[1].altitudeHint, '2단 이상');
+    assert.ok(before.routes[1].features.includes('하강 점프'));
+    model.step(1 / 60, { ...controls, lift: 1 });
+    assert.equal(readForkCue(track, s).previewRouteId, fork.routes[1].id);
+    for (let tick = 0; tick < 600 && s.distance < fork.start + fork.junctionLength + .1; tick++) model.step(1 / 60, controls);
+    assert.equal(s.routeId, fork.routes[1].id, `${craft.name} ${challenge}`);
+    assert.equal(s.collisions, 0);
+    assert.equal(s.offTrackExits, 0);
+  }
+});
+
+test('advance guidance across the lap boundary remains approach with the correct distance', () => {
+  const original = createCatalogTrack(definition), fork = original.branches[0];
+  const track = { ...original, branches: [{ ...fork, start: 80, end: 80 + fork.end - fork.start }] };
+  const cue = readForkCue(track, pose(track.length - 100, { offset: 6 }));
+  assert.equal(cue.phase, 'approach');
+  assert.equal(cue.distance, 180);
+  assert.equal(cue.previewRouteId, fork.routes[2].id);
+});
 
 test('ARENA RING cue exposes ordered choices, default middle, physical lengths and three distinct hazards', () => {
   const track = createCatalogTrack(definition), fork = track.branches[0], routes = forkRouteCues(fork);
@@ -161,5 +212,29 @@ test('awakening takes the middle at entry and follows any already locked route w
     }
     assert.ok(s.distance >= fork.end);
     assert.equal(s.collisions, 0); assert.equal(s.offTrackExits, 0);
+  }
+});
+
+
+test('every fork countdown targets the real lock boundary, stays continuous across entry, and repeats next lap', () => {
+  for (const definition of TRACK_CATALOG) {
+    const track = createCatalogTrack(definition);
+    for (const fork of track.branches ?? []) for (const lap of [0, 1]) {
+      const base = lap * track.length, before = readForkCue(track, pose(base + fork.start - 20));
+      const entry = readForkCue(track, pose(base + fork.start));
+      const justBefore = readForkCue(track, pose(base + fork.start + fork.junctionLength - .01));
+      const locked = readForkCue(track, pose(base + fork.start + fork.junctionLength + 1e-6));
+      assert.ok(Math.abs(before.selectionDistance - (20 + fork.junctionLength)) < 1e-6);
+      assert.ok(Math.abs(entry.selectionDistance - fork.junctionLength) < 1e-6);
+      assert.equal(before.selectionSeconds, before.selectionDistance / 100);
+      assert.ok(justBefore.selectionSeconds > 0);
+      assert.equal(forkCountdownText(justBefore), '확정까지 0.1초');
+      assert.equal(locked.selectionDistance, 0);
+      assert.equal(locked.selectionSeconds, null);
+      assert.equal(forkCountdownText(locked), '✓ 경로 확정');
+      const stopped = readForkCue(track, pose(base + fork.start - 20, { speed: 0 }));
+      assert.equal(stopped.selectionSeconds, null);
+      assert.equal(forkCountdownText(stopped), '선택 대기');
+    }
   }
 });

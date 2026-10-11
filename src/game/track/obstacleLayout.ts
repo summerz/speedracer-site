@@ -1,5 +1,6 @@
 import { authoredForkLayout, isAuthoredForkRoute } from './authoredForkLayout.js';
 import { jumpPlacementClear } from './trackJump.js';
+import { forkDecisionPlacementClear } from './forkDecisionSafety.js';
 import type { BoostPad, BoostRing, CorridorObstacle, HeightObstacle, MineField, Track } from './createTrack.js';
 import { BOOSTS_PER_KM, HAZARD_GAP, HAZARD_SHARE, hazardEnabled } from './hazardCatalog.js';
 import { RING_RADIUS, ringMarks } from './arcRail.js';
@@ -127,6 +128,8 @@ function slotPaths(track: Track): SlotPath[] {
     for (let d = Math.ceil(lo / 10) * 10; d <= hi; d += 10) {
       if (!fork && forks.some(f => d >= f.start - 125 && d <= f.end + 100)) continue;
       if (!jumpPlacementClear(track, d, path.routeId, 100)) continue;
+      // 90m is the largest minefield; reserve its full extent plus craft clearance.
+      if (!forkDecisionPlacementClear(track, d, path.routeId, 48)) continue;
       const course = track.sample(d, undefined, path.routeId).section === 'course';
       entry.slots.push({ index: entry.slots.length, distance: d, physical: physicalDistance(track, 0, d, path.routeId),
         plain: course, course, gentle: safePlacement(track, { distance: d, routeId: path.routeId ?? undefined }) });

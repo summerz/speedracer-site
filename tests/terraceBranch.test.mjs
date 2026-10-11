@@ -4,6 +4,8 @@ import { TRACK_CATALOG } from '../output/test/game/track/trackCatalog.js';
 import { createCatalogTrack } from '../output/test/game/track/trackRuntime.js';
 import { readForkCue, forkRouteCues } from '../output/test/game/track/forkCue.js';
 import { physicalDistance } from '../output/test/game/track/trackBranches.js';
+import { forkDecisionPlacementClear } from '../output/test/game/track/forkDecisionSafety.js';
+import { jumpPlacementClear } from '../output/test/game/track/trackJump.js';
 import { createDrivingModel, NEUTRAL_INPUT } from '../output/test/game/driving/createDrivingModel.js';
 import { aiDrivingInput } from '../output/test/game/driving/createRaceSession.js';
 import { DRONE_CATALOG } from '../output/test/game/drone/droneCatalog.js';
@@ -41,9 +43,13 @@ for (const challenge of ['easy', 'normal', 'hard']) test(`${challenge}: fixed ri
   assert.deepEqual(expected[0].map(o => o.kind), ['rise', 'descend']);
   assert.ok(expected[0].every(o => o.routeId === fork.routes[0].id && o.motion === undefined));
   assert.equal(expected[2][0].routeId, fork.routes[1].id);
-  assert.ok(Math.abs(physicalDistance(track, fork.routes[1].mouthEnd, expected[2][0].distance - fork.routes[1].mouthEnd, fork.routes[1].id) - 130) < 1e-8);
-  for (const [i, o] of expected[0].entries())
-    assert.ok(Math.abs(physicalDistance(track, fork.routes[0].mouthEnd, o.distance - fork.routes[0].mouthEnd, o.routeId) - (65 + i * 140)) < 1e-8);
+  const pad = expected[2][0];
+  assert.ok(pad.distance > track.jumps[0].landingEnd && pad.distance < fork.routes[1].mergeStart);
+  assert.ok(jumpPlacementClear(track, pad.distance, pad.routeId, pad.length / 2));
+  for (const o of expected[0])
+    assert.ok(forkDecisionPlacementClear(track, o.distance, o.routeId, o.depth / 2 + 3));
+  assert.ok(Math.abs(physicalDistance(track, expected[0][0].distance,
+    expected[0][1].distance - expected[0][0].distance, fork.routes[0].id) - 140) < 1e-8);
   for (const seed of [0, .17, .5, .99]) {
     track.randomizeObstacles(() => seed); assert.deepEqual(layout(track), expected);
     assert.ok(createDrivingModel(track).cores.every(c => c.distance < fork.start - 35 || c.distance > fork.end + 35));

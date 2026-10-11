@@ -1,5 +1,5 @@
 import { reserveSupportMissile } from './game/progression/supportMissileUse';
-import type { ForkCue } from './game/track/forkCue';
+import { forkCountdownText, type ForkCue } from './game/track/forkCue';
 import { LANE_HUES } from './game/track/createForkLanes';
 import { marineZone } from './game/environment/marineZones';
 import { FEATURE_TEST_TRACKS } from './game/track/featureTestTracks';
@@ -72,14 +72,14 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
       <section id="race-showcase" class="race-showcase" aria-label="출전 기체" hidden><p class="sc-count"></p><p class="sc-name"><i class="sc-swatch"></i><strong></strong><em>나</em></p><p class="sc-meta"></p><p class="sc-skip">건너뛰기 · 아무 키나 탭</p></section>
       <div id="race-splash" class="race-splash" role="status" hidden><strong></strong><span></span><em></em></div>
       <header class="race-header">
-        <div class="race-telemetry" aria-label="주행 정보"><div class="telemetry-row"><span class="speed-readout" aria-label="현재 주행 속도"><strong id="drive-speed">000</strong><span class="speed-unit mono"><small>속도</small>km/h</span></span><span id="race-rank" class="rank-readout mono" hidden></span><span id="race-lap" class="lap-readout mono">LAP 1/3</span><time id="drive-time" class="mono">00:00.000</time><span id="race-ghost" class="ghost-delta mono" aria-label="고스트와의 시간 차이" hidden></span></div><div class="corner-guide"><span id="lap-deadline" hidden></span><strong id="corner-text">직선</strong><span class="corner-hint">급한 코너에서는 S로 감속</span></div></div>
+        <div class="race-telemetry" aria-label="주행 정보"><div class="telemetry-row"><span class="speed-readout" aria-label="현재 주행 속도"><strong id="drive-speed">000</strong><span class="speed-unit mono"><small>속도</small>km/h</span></span><span id="race-rank" class="rank-readout mono" hidden><strong id="race-rank-position"></strong><span class="rank-context"><b>순위</b><small id="race-rank-total"></small></span></span><span id="race-lap" class="lap-readout mono">LAP 1/3</span><time id="drive-time" class="mono">00:00.000</time><span id="race-ghost" class="ghost-delta mono" aria-label="고스트와의 시간 차이" hidden></span></div><div class="corner-guide"><span id="lap-deadline" hidden></span><strong id="corner-text">직선</strong><span class="corner-hint">급한 코너에서는 S로 감속</span></div></div>
       </header>
       <button type="button" id="race-pause" class="race-pause" aria-label="일시정지 메뉴" aria-keyshortcuts="Escape" aria-controls="drive-overlay" aria-expanded="false"><span aria-hidden="true">Ⅱ</span><kbd class="key-badge">Esc</kbd></button>
       <div class="driving-overlay"><div id="race-announcement" class="race-announcement" role="status" aria-live="polite" hidden><strong></strong><span></span><em id="race-clean" hidden>클린 +${CLEAN_HALF_LAP_POINTS}P</em></div><p id="race-callout" class="race-callout" role="status" hidden></p><p id="race-nearmiss" class="race-nearmiss" aria-hidden="true" hidden>NEAR MISS</p><p id="race-streak" class="race-streak" aria-hidden="true" hidden></p><section id="race-fork3" class="fork-cue" role="status" aria-label="갈림길 안내" hidden></section><p id="race-jump" class="jump-cue" role="status" hidden><b class="jump-badge">JUMP</b><span class="jump-text"></span><i class="jump-distance mono"></i></p><p id="race-notice" class="race-notice" role="status" aria-live="polite"></p><div id="race-countdown" class="race-countdown" role="status" aria-live="assertive" hidden><span>READY</span><strong>3</strong></div>
       <div class="race-items"><button id="race-focus" type="button" class="race-focus" aria-keyshortcuts="V" hidden>집중 모드<kbd class="key-badge">V</kbd></button>${RIVAL_ITEMS.map(item => `<button type="button" id="race-${item.id}" class="race-focus" data-use-item="${item.id}" hidden>${item.name}</button>`).join('')}</div><p id="focus-feedback" class="focus-feedback" role="status" aria-live="polite"></p><p id="parry-callout" class="focus-feedback parry-callout" role="status" aria-live="polite" hidden>패링!</p><p id="missile-chip" class="missile-chip" role="status" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 20l5-1 9-9 2-6-6 2-9 9z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="17" cy="7" r="1.3" fill="currentColor"/></svg><span></span></p><footer class="drive-hud" aria-label="고도와 부스트 계기판">
         <aside class="height-guide" aria-label="고도 안내: 선택 단계, 민트색 통과 가능, 빨강 통과 불가, 주황 전환 중"><div id="height-level" class="height-bars"></div><strong id="height-instruction"></strong></aside>
         <div class="drive-controls">
-        <div class="boost-readout"><div class="hud-pair"><span class="boost-icon" role="img" aria-label="부스트">${BOOST_ICON}</span><span id="boost-value" class="mono">100%</span></div><div id="boost-meter" class="boost-meter" role="progressbar" aria-label="부스트 잔량 (50%씩 3칸, 최대 150%)" aria-valuemin="0" aria-valuemax="150" aria-valuenow="100"><span></span></div><div id="boost-stage-meter" class="boost-stage-meter" role="progressbar" aria-label="부스트 2단계 축적" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span></span></div><span id="boost-status">Space 유지 · 3초 후 2단계</span><span id="parry-hint" class="parry-hint mono" hidden aria-hidden="true"><kbd>E</kbd> 패링<b>!</b></span><div id="drift-hud" class="drift-hud mono" hidden><span class="drift-pips" aria-hidden="true"><i></i><i></i><i></i></span><span id="drift-label" class="drift-label" aria-hidden="true"></span><span id="drift-end" class="drift-end" aria-live="polite"></span></div></div>
+        <div class="boost-readout"><div class="hud-pair"><span class="boost-icon" role="img" aria-label="부스트">${BOOST_ICON}</span><span id="boost-value" class="mono">100%</span></div><div id="boost-meter" class="boost-meter" role="progressbar" aria-label="부스트 잔량 (50%씩 3칸, 최대 150%)" aria-valuemin="0" aria-valuemax="150" aria-valuenow="100"><span></span></div><div id="boost-stage-meter" class="boost-stage-meter" role="progressbar" aria-label="부스트 2단계 축적" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span></span></div><span id="boost-status">Space 유지 · 3초 후 2단계</span><span id="parry-hint" class="parry-hint mono" hidden aria-hidden="true"><kbd>← / →</kbd> 패링<b>!</b></span><div id="drift-hud" class="drift-hud mono" hidden><span class="drift-pips" aria-hidden="true"><i></i><i></i><i></i></span><span id="drift-label" class="drift-label" aria-hidden="true"></span><span id="drift-end" class="drift-end" aria-live="polite"></span></div></div>
         <div class="awakening-control" hidden><button id="race-awakening" class="awakening-cores" type="button" aria-label="각성 사용" aria-keyshortcuts="W" disabled><span data-awakening-active hidden>${AWAKENING_ICON}</span>${Array.from({ length: AWAKENING_CAPACITY }, () => `<span data-awakening-core hidden>${CORE_ICON}</span>`).join('')}<span class="awakening-duration" aria-hidden="true" hidden><i></i></span></button><kbd class="key-badge">W</kbd></div>
         </div><p id="race-fork" class="fork-guide" hidden></p></footer></div>
       <section id="drive-overlay" class="drive-overlay" aria-labelledby="drive-overlay-title">
@@ -125,7 +125,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
         <p class="quality-hint">아지랑이는 배기 주변에만 적용합니다. 성능이 낮으면 끄거나 ‘성능 우선’을 선택하세요.</p>
         <details class="control-help"><summary>조작 안내</summary>
           <p class="touch-help">메뉴: 화살표로 이동 · Enter로 선택. 게임패드: 방향 패드/스틱으로 이동 · A 선택 · B 돌아가기.<br />주행: 왼쪽 스틱 조향 · 방향 패드 ↑/↓ 고도 · LT 감속 · RT/RB 부스트 · X 콕핏 · Y 트랙 뷰 · LB 아이템 · Start 일시정지/계속.</p>
-          <div class="drive-keys"><span>자동 가속 · <kbd>S</kbd> 감속</span><span><kbd>A</kbd> <kbd>D</kbd> 좌우 조향</span><span><kbd>↓</kbd> <kbd>↑</kbd> 고도 한 단계 전환</span><span><kbd>Space</kbd> 길게 눌러 부스트</span><span><kbd>W</kbd> 코어 각성</span><span><kbd>C</kbd> 기체·콕핏 전환</span><span><kbd>X</kbd> 트랙 PIP·자리 교환·닫기</span><span><kbd>V</kbd> 아이템 사용</span><span><kbd>Esc</kbd> 일시정지·계속하기</span><span>대기·일시정지 중 <kbd>S</kbd> 설정</span></div>
+          <div class="drive-keys"><span>자동 가속 · <kbd>S</kbd> 감속</span><span><kbd>A</kbd> <kbd>D</kbd> 좌우 조향</span><span><kbd>↓</kbd> <kbd>↑</kbd> 고도 한 단계 전환</span><span><kbd>Space</kbd> 길게 눌러 부스트</span><span><kbd>W</kbd> 코어 각성</span><span><kbd>←</kbd> / <kbd>→</kbd> 패링</span><span><kbd>C</kbd> 기체·콕핏 전환</span><span><kbd>X</kbd> 트랙 PIP·자리 교환·닫기</span><span><kbd>V</kbd> 아이템 사용</span><span><kbd>Esc</kbd> 일시정지·계속하기</span><span>대기·일시정지 중 <kbd>S</kbd> 설정</span></div>
           <p class="touch-help">자동으로 가속합니다. 왼쪽 조이스틱은 좌우 조향, 아래로 당기면 감속합니다. 대각선으로 두 조작을 함께 할 수 있습니다.<br />오른쪽 BOOST를 누른 채 위로 길게 밀수록 높게, 아래로 밀수록 낮게 고도를 선택합니다. 여러 단계도 한 번에 바꿀 수 있습니다. 손을 떼면 선택한 고도는 유지하고 부스트만 해제합니다. ↑/↓만 누르면 부스트 없이 고도를 바꿉니다. ${(configuration.performance.boostStage2Threshold / configuration.performance.boostDrain).toFixed(1)}초 연속 부스트 시 2단계에 진입합니다.<br />시점은 일시정지 메뉴의 시점 전환에서 바꿀 수 있습니다.</p>
           <p>중간·어려움: 주황 방전 구역은 모든 고도에서 위험합니다. 민트색 화살표를 따라 왼쪽·가운데·오른쪽 통로로 이동하세요. 자홍색 전기 지뢰밭은 모든 고도에서 위험하니, 기둥 사이 빈틈으로 통과하세요.</p>
           <p>황금색 정육면체 각성 코어는 랩마다 하나씩 나오고 최대 3개까지 보관합니다. 부스트 오른쪽의 코어를 터치하거나 W로 한 개를 사용하면 5초간 기체가 변신해 자동 주행합니다. 날개 아이콘과 줄어드는 막대가 남은 각성 시간을 표시합니다. 2단 부스트 최고속도보다 5% 빠르고 충돌 감속이 없습니다. 부스트 잔량은 그대로 보관합니다.</p>
@@ -193,7 +193,9 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
   const featureTest = !!campaign?.test;
   const featureRecipe = FEATURE_TEST_TRACKS.find(track => track.id === campaign?.track.id);
   const featureInstructions = featureRecipe?.instructions
-    ?? '갈림길에서 위쪽 송전 우회로로 가세요. 도로가 끊기기 전에 ↑로 높은 고도, 공중에서 ↓로 낮은 고도에 착지합니다. 기록과 보상은 저장하지 않습니다.';
+    ?? (campaign?.track.jumps?.length
+      ? '갈림길에서 점프 표시가 있는 경로를 선택하세요. 도로가 끊기기 전에 ↑로 높은 고도, 공중에서 ↓로 낮은 고도에 착지합니다. 기록과 보상은 저장하지 않습니다.'
+      : '기능 테스트 주행입니다. 기록과 보상은 저장하지 않습니다.');
   const isTraining = () => practice || tutorialMode !== null || featureTest;
   let tutorialStorage: Storage | undefined;
   try { tutorialStorage = window.localStorage; } catch { /* Optional tutorial persistence. */ }
@@ -331,7 +333,8 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
     const competition = state.competition;
     if (state.phase !== 'finished') priorBest = attack.bestRecord;
     get('race-rank').hidden = !competition;
-    get('race-rank').textContent = competition ? `${competition.playerRank} / ${competition.standings.length}` : '';
+    get('race-rank-position').textContent = competition ? String(competition.playerRank) : '';
+    get('race-rank-total').textContent = competition ? `/ ${competition.standings.length}` : '';
     get('race-rank').setAttribute('aria-label', competition ? `${competition.standings.length}대 중 ${competition.playerRank}위` : '');
     get('competition-results').hidden = !competition;
     get('ai-roster').hidden = !competition || state.phase !== 'ready';
@@ -424,12 +427,18 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
         const priorLaps = prior && prior.laps.length === attack.lapTimes.length ? prior.laps : null;
         const lapDeltas = attack.lapTimes.map((lap, i) => data ? data.lapDeltas[i] ?? null : priorLaps ? lap - priorLaps[i] : null);
         const fastest = Math.min(...attack.lapTimes);
-        // Sector bars: flat SectorDelta[] grouped by lap, ordered by gate then checkpoint. Absent data renders nothing.
-        const sectorLaps = [...new Set((data?.sectors ?? []).map(d => d.lap))].sort((a, b) => a - b);
-        const sectorBars = (i: number) => (data?.sectors ?? []).filter(d => d.lap === sectorLaps[i]).sort((a, b) => a.gate - b.gate || a.checkpoint - b.checkpoint);
+        // Always show this run, including the first run after a track revision.
+        const sectorBars = (i: number) => attack.checkpointSplits.filter(d => d.lap === i + 1).sort((a, b) => a.gate - b.gate || a.checkpoint - b.checkpoint);
         get('result-card-title').textContent = '랩 · 구간';
-        get('result-card-note').textContent = lapDeltas.some(d => d != null) ? '최고 기록 대비' : '';
-        get('result-laps').innerHTML = attack.lapTimes.map((lap, i) => `<li${lap === fastest && attack.lapTimes.length > 1 ? ' class="is-fastest"' : ''}><span class="k">LAP ${i + 1}</span>${sectorBars(i).length ? `<span class="sectors">${sectorBars(i).map(d => `<i class="${d.delta <= 0 ? 'g' : 'r'}"></i>`).join('')}</span>` : '<span></span>'}<time class="v">${formatTime(lap)}</time><span class="d">${lapDeltas[i] != null ? gainLoss(lapDeltas[i]!) : ''}</span></li>`).join('');
+        get('result-card-note').textContent = lapDeltas.some(d => d != null) ? '초록 빠름 · 빨강 느림 · 회색 비교 없음' : '회색 · 비교 기록 없음';
+        get('result-laps').innerHTML = attack.lapTimes.map((lap, i) => {
+          const sectors = sectorBars(i).map(d => {
+            const comparison = d.segmentDelta == null ? '비교 기록 없음' : formatDelta(d.segmentDelta).text;
+            const tone = d.segmentDelta == null ? 'neutral' : d.segmentDelta <= 0 ? 'g' : 'r';
+            return `<i class="${tone}" title="${d.gate}구간 · ${formatTime(d.segmentTime)} · ${comparison}" aria-label="${d.gate}구간 ${comparison}"></i>`;
+          }).join('');
+          return `<li${lap === fastest && attack.lapTimes.length > 1 ? ' class="is-fastest"' : ''}><span class="k">LAP ${i + 1}</span><span class="sectors">${sectors}</span><time class="v">${formatTime(lap)}</time><span class="d">${lapDeltas[i] != null ? gainLoss(lapDeltas[i]!) : ''}</span></li>`;
+        }).join('');
       }
       get('stat-collisions').querySelector('b')!.textContent = String(data?.collisions ?? state.collisions);
       get('stat-collisions').classList.toggle('warn', (data?.collisions ?? state.collisions) > 0);
@@ -813,7 +822,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
     get('race-course-name').textContent = course?.name ?? 'NEON CIRCUIT';
     get('race-mode-title').textContent = `${featureTest ? `FEATURE TEST · ${previewZone ? `${previewZone.name} · ` : ''}` : isTraining() ? 'PRACTICE · ' : ''}${selectedMode === 'competition' ? 'COMPETITION RACE' : 'TIME ATTACK'} · ${campaign ? RACE_CHALLENGES[challenge].label : DIFFICULTIES[selectedDifficulty].label}`;
     if (course) { const zone = document.createElement('span'); zone.className = 'result-zone'; zone.textContent = ` · ${DISTRICTS[course.district].name} · ${String(course.order ?? 0).padStart(2, '0')}`; get('race-mode-title').append(zone); }
-    get('race-loadout').textContent = featureTest ? featureRecipe ? '수중 도시 기능 테스트 · 기록과 보상을 저장하지 않습니다' : '기능 테스트 · 끊긴 도로 점프 — 갈림길에서 위쪽 송전 우회로 · 기록과 보상을 저장하지 않습니다' : isTraining() ? '첫 코스 조작 연습 · 기록과 보상을 저장하지 않습니다' : `${selectedMode === 'competition' ? `상대 기체 ${AI_OPPONENT_COUNT}대와 경쟁` : '타임어택'} · ${focusSlots || equippedRivalSlots.length ? `장착 아이템 ${focusSlots + equippedRivalSlots.length}개 · 기본 보상 80%` : '코스에서 각성 코어 획득'}`;
+    get('race-loadout').textContent = featureTest ? featureRecipe ? '수중 도시 기능 테스트 · 기록과 보상을 저장하지 않습니다' : `기능 테스트${course?.jumps?.length ? ' · 끊긴 도로 점프' : ''} · 기록과 보상을 저장하지 않습니다` : isTraining() ? '첫 코스 조작 연습 · 기록과 보상을 저장하지 않습니다' : `${selectedMode === 'competition' ? `상대 기체 ${AI_OPPONENT_COUNT}대와 경쟁` : '타임어택'} · ${focusSlots || equippedRivalSlots.length ? `장착 아이템 ${focusSlots + equippedRivalSlots.length}개 · 기본 보상 80%` : '코스에서 각성 코어 획득'}`;
     rewardInput = undefined; campaignOutcome = undefined; get('result-reward').textContent = ''; get('reward-retry').hidden = true; get('result-shop').hidden = true; get('campaign-next').hidden = true;
     tutorialCompleteShown = false; screen.classList.remove('is-tutorial-complete'); coach.hideComplete();
     race?.dispose(); lastPhase = ''; lastViewKey = ''; previewing = false; lastCollisions = 0; lastBoostStage = 0; lastAnnouncement = 0; lastCallout = 0; lastNearMisses = 0; lastStreak = 0; impactAnimation?.cancel(); boostFlashAnimation?.cancel();
@@ -949,10 +958,11 @@ function renderForkCue(el: HTMLElement, cue: ForkCue | null, coarse: boolean) {
   if (!cue || (cue.phase === 'route' && routeAge > 3200)) { if (!el.hidden) { el.hidden = true; forkCueKey = ''; } return; }
   const dist = `${Math.max(0, Math.ceil(cue.distance / 5) * 5)}m`;
   const vertical = cue.kind === 'vertical';
-  const head = cue.phase === 'approach' ? `갈림길 ${dist}` : cue.phase === 'choice' ? `${vertical ? '고도' : '방향'} 선택 · ${dist}` : '경로 확정';
-  const how = vertical ? (coarse ? '↑ ↓ 버튼 · 지금 고도로 선택' : '↑ ↓ 고도 · 지금 고도로 선택') : coarse ? '조이스틱 좌우' : '← → 조향';
+  const head = cue.phase === 'approach' ? `${vertical ? '고도 ' : ''}갈림길 ${dist}` : cue.phase === 'choice' ? `${vertical ? '고도' : '방향'} 선택 · ${dist}` : '경로 확정';
+  const how = vertical ? (coarse ? '↑ ↓ 고도 버튼으로 선택' : '↑ ↓ 고도로 선택') : coarse ? '조이스틱 좌우' : 'A D · ← → 조향';
   const shown = cue.phase === 'route' ? cue.routes.filter(r => r.id === cue.selectedRouteId) : cue.routes;
-  const key = [cue.phase, cue.previewRouteId, cue.selectedRouteId, head, how].join('|');
+  const countdown = forkCountdownText(cue);
+  const key = [cue.phase, cue.previewRouteId, cue.selectedRouteId, head, how, countdown].join('|');
   el.hidden = false;
   if (key === forkCueKey) return;
   forkCueKey = key;
@@ -965,10 +975,11 @@ function renderForkCue(el: HTMLElement, cue: ForkCue | null, coarse: boolean) {
       ...(r.hazards.includes('height') ? ['<span title="고도 장애물">⇕<small>고도</small></span>'] : []),
       ...(r.hazards.includes('corridor') ? ['<span title="통로 게이트">▥<small>통로</small></span>'] : []),
       ...(r.features.some(f => f.includes('부스트')) ? ['<span title="부스트 패드">⚡<small>부스트</small></span>'] : []),
+      ...(r.features.some(f => f.includes('점프')) ? ['<span title="하강 점프">↗<small>점프</small></span>'] : []),
     ].join('') || '<span class="clear">✓<small>안전</small></span>';
     const on = cue.phase === 'route' || r.id === cue.previewRouteId;
     const mark = cue.phase === 'route' ? '<em>✓ 확정</em>' : r.id === cue.defaultRouteId ? '<em>기본</em>' : '';
-    return `<div class="fork-slot${on ? ' is-on' : ''}${cue.phase === 'route' ? ' is-locked' : ''}" style="--lane:${LANE_HUES[r.choice as keyof typeof LANE_HUES] ?? 'transparent'}"><b class="fork-arrow">${FORK_ARROWS[r.choice] ?? '↑'}</b><strong>${r.name}</strong><span class="fork-height"><span class="fork-bars">${bars}</span><small>${label}</small></span><span class="fork-chips">${chips}</span>${mark}</div>`;
+    return `<div class="fork-slot${on ? ' is-on' : ''}${cue.phase === 'route' ? ' is-locked' : ''}" style="--lane:${LANE_HUES[r.choice as keyof typeof LANE_HUES] ?? 'transparent'}"><b class="fork-arrow">${FORK_ARROWS[r.choice] ?? '↑'}</b><strong>${r.name}</strong><span class="fork-height"><span class="fork-bars">${bars}</span><small>${r.altitudeHint ? `고도 ${r.altitudeHint}` : label}</small></span><span class="fork-chips">${chips}</span>${mark}</div>`;
   }).join('');
-  el.innerHTML = `<p class="fork-head"><b>${head}</b>${cue.phase === 'route' ? '' : `<small>${how}</small>`}</p><div class="fork-slots">${slots}</div>`;
+  el.innerHTML = `<p class="fork-timer mono">${countdown}</p><p class="fork-head"><b>${head}</b>${cue.phase === 'route' ? '' : `<small>${how}</small>`}</p><div class="fork-slots">${slots}</div>`;
 }

@@ -11,7 +11,8 @@ import { createBoostPadVisual } from './createBoostPadVisual.js';
 import { createMineFieldVisual } from './createMineFieldVisual.js';
 import { createArcRailVisual } from './createArcRailVisual.js';
 import { createBoostRingVisual } from './createBoostRingVisual.js';
-import { createForkSign } from './createForkSign.js';
+import { createForkSign, type ForkSign } from './createForkSign.js';
+import { readForkCue } from './forkCue.js';
 import { createForkLanes } from './createForkLanes.js';
 import { createTrackJumpVisual } from './createTrackJumpVisual.js';
 import { roadBoundary, roadPaths, routeDistanceScale, verticalThreshold, type TrackFork } from './trackBranches.js';
@@ -265,6 +266,7 @@ const maxAltitude = (track: Track) => track.altitudeProfile.levels[track.altitud
 export function createTrackVisual(track: Track, lineColor?: string) {
   const group = new THREE.Group();
   group.name = 'neonLoop';
+  const forkSigns: ForkSign[] = [];
   const paths = roadPaths(track);
   const inGap = (distance: number, routeId?: string | null) => (track.jumps ?? []).some(j => j.routeId === routeId && distance > j.start + 1e-6 && distance < j.end - 1e-6);
   const snap = (distance: number, routeId?: string | null) => {
@@ -357,8 +359,8 @@ export function createTrackVisual(track: Track, lineColor?: string) {
     track.sample(fork.start - 95, frame);
     const sign = new THREE.Group(); sign.name = `junction-sign-${fork.id}`;
     const arrows = fork.kind === 'horizontal' ? ['←', '→'] : ['↓', '↑'];
-    const cueSign = createForkSign(fork, lineColor, maxAltitude(track) + 3);
-    if (cueSign) { sign.add(cueSign); track.sample(fork.start - 120, frame); }
+    const cueSign = createForkSign(fork, lineColor, maxAltitude(track) + 3, track);
+    if (cueSign) { forkSigns.push(cueSign); sign.add(cueSign); track.sample(fork.start - 120, frame); }
     else if (typeof document !== 'undefined') {
       const canvas = document.createElement('canvas'); canvas.width = 1024; canvas.height = 144;
       const context = canvas.getContext('2d');
@@ -438,6 +440,9 @@ export function createTrackVisual(track: Track, lineColor?: string) {
     hitRing(distance: number, routeId?: string | null) { rings.hit(distance, routeId); },
     update(time: number, reducedMotion: boolean, distance = 0, altitude = 1.8, speed = 0, offset = 0, routeId?: string | null) {
       pads.update(time, reducedMotion); mines.update(time, reducedMotion); rails.update(time, reducedMotion); rings.update(time, reducedMotion); jumpVisual.update(time, reducedMotion);
+      const forkCue = readForkCue(track, { distance, offset, speed, routeId, altitudeLevel: track.altitudeProfile.levels.reduce((best, h, i) =>
+        Math.abs(h - altitude) < Math.abs(track.altitudeProfile.levels[best] - altitude) ? i : best, 0) });
+      forkSigns.forEach(sign => sign.updateCue(forkCue));
       const lap = Math.floor(distance / track.length);
       barriers.forEach((barrier, index) => {
         const obstacle = track.heightObstacles[index];

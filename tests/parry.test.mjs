@@ -24,11 +24,11 @@ const hazards = [
   ['corridor', { corridorObstacles: [{ distance: 50, depth: 4, safeCenter: 5, safeWidth: 4, speedRetention: .35 }] }],
 ];
 
-test('one impact consumes a 0.30s window, with immutable event IDs and a 3s reuse clock', () => {
+test('one impact consumes a 0.30s window, with immutable event IDs and a 6s reuse clock', () => {
   const c = createParryController(); assert.equal(c.request(), true); assert.equal(c.request(), false);
   c.advance(.299); assert.equal(c.impact(hit()), true); assert.equal(c.impact(hit('mine:1', 'mine')), false);
   const event = c.snapshot().lastEvent; assert.equal(event.id, 1); assert.equal(event.outcome, 'success');
-  c.advance(2.701); assert.equal(c.snapshot().phase, 'ready'); assert.equal(c.request(), true);
+  c.advance(5.701); assert.equal(c.snapshot().phase, 'ready'); assert.equal(c.request(), true);
   c.setTarget(hit('mine:2', 'mine')); c.advance(.3); assert.equal(c.impact(hit('mine:2', 'mine')), false);
   assert.equal(c.snapshot().lastEvent.id, 2); assert.equal(c.snapshot().failureEventId, 2);
   assert.equal(c.snapshot().successEventId, 1); assert.equal(event.outcome, 'success');
@@ -39,11 +39,44 @@ test('one impact consumes a 0.30s window, with immutable event IDs and a 3s reus
 
 test('ongoing contact cannot be parried late or repeatedly; a released episode can', () => {
   const c = createParryController(); assert.equal(c.impact(hit()), false);
-  c.request(); assert.equal(c.impact(hit()), false); c.advance(3);
-  c.releaseEpisode('wall:1'); c.request(); assert.equal(c.impact(hit()), true); c.advance(3);
-  c.request(); assert.equal(c.impact(hit()), false); c.advance(3);
+  c.request(); assert.equal(c.impact(hit()), false); c.advance(PARRY_TUNING.cooldownSeconds);
+  c.releaseEpisode('wall:1'); c.request(); assert.equal(c.impact(hit()), true); c.advance(PARRY_TUNING.cooldownSeconds);
+  c.request(); assert.equal(c.impact(hit()), false); c.advance(PARRY_TUNING.cooldownSeconds);
   c.releaseEpisode('wall:1'); c.request(); assert.equal(c.impact(hit()), true);
   assert.equal(c.snapshot().successes, 2);
+});
+
+test('damage consumes an open attempt immediately without shortening or restarting recharge', () => {
+  const c = createParryController(); c.request(); c.advance(.1); c.damage();
+  assert.equal(c.snapshot().phase, 'cooldown');
+  assert.equal(c.snapshot().windowRemaining, 0);
+  assert.equal(c.snapshot().interrupted, true);
+  assert.equal(c.snapshot().failures, 1);
+  assert.equal(c.snapshot().cooldownRemaining, 5.9);
+  c.damage(); c.advance(.2);
+  assert.equal(c.snapshot().failures, 1);
+  assert.equal(c.request(), false);
+  c.advance(5.7); assert.equal(c.request(), true);
+  assert.equal(c.snapshot().interrupted, false);
+});
+
+test('damage after an expired attempt clears its failed shield without counting another failure', () => {
+  const c = createParryController(); c.request(); c.advance(.31);
+  assert.equal(c.snapshot().failures, 1); assert.equal(c.snapshot().interrupted, false);
+  c.damage();
+  assert.equal(c.snapshot().interrupted, true);
+  assert.equal(c.snapshot().failures, 1);
+  assert.equal(c.snapshot().cooldownRemaining, 5.69);
+});
+
+test('a late parry during ongoing craft contact disappears on actual damage', () => {
+  const m = createDrivingModel(track()); m.state.speed = 60;
+  m.contact('same-craft'); m.useParry(); m.contact('same-craft');
+  assert.equal(m.state.collisions, 2);
+  assert.equal(m.state.parry.phase, 'cooldown');
+  assert.equal(m.state.parry.windowRemaining, 0);
+  assert.equal(m.state.parry.interrupted, true);
+  assert.equal(m.state.parry.failures, 1);
 });
 
 for (const [kind, data] of hazards) test(`${kind} defense preserves speed, boost and clean streak without duplicate passage rewards`, () => {
@@ -73,10 +106,10 @@ test('wall defense keeps the road boundary and bounce; sustained rubbing cannot 
   const m = createDrivingModel(track()); m.state.speed = 64; m.state.offset = 9.3; m.state.heading = 1;
   m.useParry(); m.step(dt, input); assert.equal(m.state.collisions, 0); assert.equal(m.state.parry.successes, 1);
   assert.ok(m.state.offset <= 11 - DRIVING_TUNING.craftHalfWidth); assert.ok(m.state.heading < 0);
-  for (let i = 0; i < 400; i++) { m.state.offset = 9.3; m.state.heading = 1; m.state.speed = 64; m.step(dt, input); }
+  for (let i = 0; i < (PARRY_TUNING.cooldownSeconds + .1) / dt; i++) { m.state.offset = 9.3; m.state.heading = 1; m.state.speed = 64; m.step(dt, input); }
   assert.ok(m.state.collisions >= 5); assert.equal(m.useParry(), true);
   m.state.offset = 9.3; m.state.heading = 1; m.step(dt, input); assert.equal(m.state.parry.successes, 1);
-  advance(m, 3); Object.assign(m.state, { offset: 0, heading: 0 }); advance(m, .3);
+  advance(m, PARRY_TUNING.cooldownSeconds); Object.assign(m.state, { offset: 0, heading: 0 }); advance(m, .3);
   m.useParry(); Object.assign(m.state, { offset: 9.3, heading: 1, speed: 64 }); m.step(dt, input);
   assert.equal(m.state.parry.successes, 2);
 });
@@ -140,7 +173,7 @@ test('running-only activation, pause freezes timers, focus does not lengthen par
   assert.equal(race.useParry(), false); race.start(); advance(race, 3); assert.equal(race.useFocus(), true);
   assert.equal(race.useParry(), true); advance(race, .2); assert.ok(Math.abs(race.model.state.parry.windowRemaining - .1) < 1e-8);
   race.pause(); const before = race.model.state.parry; advance(race, 4); assert.deepEqual(race.model.state.parry, before); assert.equal(race.useParry(), false);
-  race.start(); advance(race, .1); assert.equal(race.model.state.parry.failures, 1); advance(race, 2.7);
+  race.start(); advance(race, .1); assert.equal(race.model.state.parry.failures, 1); advance(race, PARRY_TUNING.cooldownSeconds - .3);
   assert.equal(race.model.state.parry.phase, 'ready'); race.restart(); assert.equal(race.model.state.parry.failureEventId, 0);
   const practice = createTimeAttack(track(), config.performance, records(), 0, { practice: true }); practice.start(); advance(practice, 3);
   assert.equal(practice.model.state.parry.enabled, false); assert.equal(practice.useParry(), false);
@@ -170,7 +203,7 @@ test('R3 activates once per press without taking over boost, brake, awakening or
 });
 
 test('defense results and reuse timing are consistent at 30, 60 and 120 FPS', () => {
-  const states = [30, 60, 120].map(fps => { const m = createDrivingModel(track({ heightObstacles: [electric] })); Object.assign(m.state, { distance: 44, speed: 64 }); m.useParry(); advance(m, .2, input, fps); advance(m, 3, input, fps); return m.state; });
+  const states = [30, 60, 120].map(fps => { const m = createDrivingModel(track({ heightObstacles: [electric] })); Object.assign(m.state, { distance: 44, speed: 64 }); m.useParry(); advance(m, .2, input, fps); advance(m, PARRY_TUNING.cooldownSeconds, input, fps); return m.state; });
   for (const s of states) { assert.equal(s.parry.successes, 1); assert.equal(s.collisions, 0); assert.equal(s.parry.phase, 'ready'); }
   for (const s of states.slice(1)) for (const k of ['distance', 'speed', 'charge']) assert.ok(Math.abs(s[k] - states[0][k]) < 1e-7, k);
 });
@@ -205,8 +238,8 @@ test('competition groups continuous craft contact and re-arms only after separat
   const player = race.model.state, rival = race.rivals[0].controller.model.state;
   const touch = () => { Object.assign(player, { distance: 60, offset: 0, speed: 40 }); Object.assign(rival, { distance: 62, offset: 0, speed: 40, altitude: player.altitude, targetAltitude: player.altitude }); race.step(dt, input); };
   race.useParry(); touch(); assert.equal(player.parry.successes, 1);
-  for (let i = 0; i < 370; i++) touch(); assert.equal(race.useParry(), true);
+  for (let i = 0; i < (PARRY_TUNING.cooldownSeconds + .1) / dt; i++) touch(); assert.equal(race.useParry(), true);
   for (let i = 0; i < 40; i++) touch(); assert.equal(player.parry.successes, 1); assert.equal(player.parry.failures, 1);
-  for (let i = 0; i < 340; i++) { Object.assign(player, { distance: 60, offset: 0, heading: 0, speed: 40 }); Object.assign(rival, { distance: 160, offset: 0, speed: 40 }); race.step(dt, input); }
+  for (let i = 0; i < PARRY_TUNING.cooldownSeconds / dt; i++) { Object.assign(player, { distance: 60, offset: 0, heading: 0, speed: 40 }); Object.assign(rival, { distance: 160, offset: 0, speed: 40 }); race.step(dt, input); }
   assert.equal(race.useParry(), true); touch(); assert.equal(player.parry.successes, 2);
 });

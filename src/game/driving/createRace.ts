@@ -49,14 +49,17 @@ import type { RaceAnnouncement } from './createRaceFeedback';
 import { createBoostHaptics } from './createBoostHaptics';
 import { createBoostWarp } from './createBoostWarp';
 import type { RivalItemId } from '../progression/catalog';
-import { createRaceSession } from './createRaceSession';
+import { createRaceSession, aiDrivingInput } from './createRaceSession';
+import { createJumpPresentation, jumpFlightPose, jumpCameraPose, JUMP_CAMERA_SHOTS } from './jumpPresentation';
+import type { JumpCameraShot } from './jumpPresentation';
+import { createJumpPreviewControls } from './createJumpPreviewControls';
 import type { RaceMode, CompetitionSnapshot } from './createRaceSession';
 import { createRivalVisuals } from './createRivalVisuals';
 import type { RacePhase } from './createTimeAttack';
 import { createRaceRecords } from './raceRecords';
 import { createGhostRecorder, ghostDelta, ghostKey, loadGhost, saveGhost, shouldSaveGhost } from './raceGhost';
 import { createGhostVisual } from './createGhostVisual';
-import { INTRO_SECONDS, SWING_SECONDS, cinematicSeconds, finishSwing, finishTimeScale, introProgress, replayShot, showcaseAt, showcasePlan } from './raceCinematic';
+import { INTRO_APPROACH_SECONDS, INTRO_LINGER_SECONDS, INTRO_SECONDS, SWING_SECONDS, cinematicSeconds, finishSwing, finishTimeScale, introProgress, replayShot, showcaseAt, showcasePlan } from './raceCinematic';
 import type { CinematicKind, CinematicShot, ShowcaseAt } from './raceCinematic';
 import { createReplayBuffer } from './raceReplay';
 import type { ReplayPose } from './raceReplay';
@@ -193,7 +196,7 @@ export function createRace(
   const coarsePointer = window.matchMedia('(any-pointer: coarse)');
   let storage: Storage | undefined;
   try { storage = window.localStorage; } catch { /* Private browsing can deny storage. */ }
-  const trackId = course ? `${course.id}:v${course.revision}` : `neon-circuit-v2:${difficulty?.id ?? 'beginner'}`;
+  const trackId = course ? `${course.id}:v${course.revision}` : `neon-circuit-v3:${difficulty?.id ?? 'beginner'}`;
   const records = createRaceRecords({ laps: course?.laps, trackId, configurationId: JSON.stringify({ ...(challenge !== 'normal' ? { challenge } : {}), performance: config.performance, altitude: track.altitudeProfile, ...(focusSlots || rivalSlots.length ? { assisted: true } : {}), ...(rivalSlots.includes('support-missile') ? { rivalItems: [...rivalSlots].sort(), focusSlots } : {}), ...(mode === 'competition' ? { mode } : {}) }) }, storage);
   const training = !!guidance.practice || !!guidance.tutorial;
   const timeAttack = createRaceSession(track, config, records, focusSlots, mode, Math.random, coarsePointer.matches ? 'touch' : 'desktop', { practice: training, parry: !guidance.tutorial, drift: !guidance.tutorial, ...(course ? { laps: course.laps, ...(mode === 'time-attack' ? { lapLimit: challengeLapLimit(course, challenge) } : {}) } : {}) }, course?.rating, rivalSlots, challenge);
@@ -273,6 +276,13 @@ export function createRace(
   let bank = 0;
   let boostEntryAge = 1;
   let craftShake = 0;
+  const jumpShotParam = import.meta.env.DEV ? new URLSearchParams(window.location.hash.split('?')[1] ?? '').get('jumpShot') : null;
+  const previewJump = import.meta.env.DEV && training && mode === 'time-attack' && !guidance.tutorial ? track.jumps?.[0] : undefined;
+  let jumpPreview: { shots: readonly JumpCameraShot[]; index: number; landingAge: number } | null = null;
+  let jumpPreviewControls: ReturnType<typeof createJumpPreviewControls> | null = null;
+  const jumpPresentation = createJumpPresentation({ shot: () => jumpPreview?.shots[jumpPreview.index] ?? JUMP_CAMERA_SHOTS.find(shot => shot === jumpShotParam) });
+  const jumpChaseQuaternion = new THREE.Quaternion();
+  let sceneryClock = performance.now() / 1000;
   const craftEntry = DRONE_CATALOG.find(c => c.configuration.modelVariant === config.modelVariant);
   const newCinematic = (kind: CinematicKind) => {
     const reduced = reducedMotion.matches, plan = showcasePlan(kind === 'intro' ? timeAttack.rivals.length : 0, reduced);
@@ -363,7 +373,7 @@ export function createRace(
     clearInput(); raceAudio.activate();
     if (timeAttack.phase === 'ready' || timeAttack.phase === 'finished') { feedback.reset(); raceAudio.reset(); }
     const fresh = timeAttack.phase === 'ready' || timeAttack.phase === 'finished';
-    timeAttack.start(); if (fresh) { ghostRecorder.reset(); replayBuffer.reset(); replayClock = 0; replayT = 0; armStart(); soundFeedback.reset(); trackVisual.refreshObstacles(); raceGates.refresh(); weather.reset(); hapticCollisions = 0; hapticNearMisses = 0; } touchControls.setRunning(timeAttack.phase === 'running'); previous = performance.now(); notify();
+    timeAttack.start(); if (fresh) { jumpPresentation.reset(); ghostRecorder.reset(); replayBuffer.reset(); replayClock = 0; replayT = 0; armStart(); soundFeedback.reset(); trackVisual.refreshObstacles(); raceGates.refresh(); weather.reset(); hapticCollisions = 0; hapticNearMisses = 0; } touchControls.setRunning(timeAttack.phase === 'running'); previous = performance.now(); notify();
   };
   const togglePause = () => {
     if (timeAttack.phase === 'running' || timeAttack.phase === 'countdown') pause();
@@ -371,12 +381,26 @@ export function createRace(
   };
   const restart = () => {
     if (lost || disposed) return;
-    clearInput(); feedback.reset(); soundFeedback.reset(); raceAudio.activate(); raceAudio.reset(); timeAttack.restart(); hapticCollisions = 0; hapticNearMisses = 0; ghostRecorder.reset(); replayBuffer.reset(); replayClock = 0; replayT = 0; armStart(); trackVisual.refreshObstacles(); raceGates.refresh(); weather.reset(); boostPulse.reset(); driftEffect.reset(); missileEffect.reset(); parryEffect.reset(); boostWarp.reset(); boostHaptics.stop(); boostEntryAge = 1; bank = 0; craftShake = 0; cameraSnap = true; touchControls.setRunning(false); previous = performance.now(); notify();
+    jumpPreview = null; jumpPreviewControls?.update(null);
+    clearInput(); feedback.reset(); soundFeedback.reset(); raceAudio.activate(); raceAudio.reset(); timeAttack.restart(); hapticCollisions = 0; hapticNearMisses = 0; jumpPresentation.reset(); ghostRecorder.reset(); replayBuffer.reset(); replayClock = 0; replayT = 0; armStart(); trackVisual.refreshObstacles(); raceGates.refresh(); weather.reset(); boostPulse.reset(); driftEffect.reset(); missileEffect.reset(); parryEffect.reset(); boostWarp.reset(); boostHaptics.stop(); boostEntryAge = 1; bank = 0; craftShake = 0; cameraSnap = true; touchControls.setRunning(false); previous = performance.now(); notify();
   };
+  const playJumpPreview = (shots: readonly JumpCameraShot[], index = 0) => {
+    if (!previewJump || !shots.length || lost || disposed) return;
+    cinematic = null; restart();
+    // Skip the grid countdown in this local-only, non-saving practice session.
+    for (let i = 0; i < 32; i++) timeAttack.step(.1, { throttle: false, brake: false, boost: false, steer: 0, lift: 0 });
+    const level = previewJump.launchLevel, altitude = model.altitudeProfile.levels[level];
+    Object.assign(model.state, { routeId: previewJump.routeId, distance: previewJump.approachStart,
+      offset: 0, heading: 0, speed: 80, altitudeLevel: level, altitude, targetAltitude: altitude });
+    jumpPreview = { shots, index, landingAge: 0 };
+    jumpPreviewControls?.update(shots[index], index, shots.length);
+    untilGo = -1; launched = true; cameraSnap = true; clearInput(); notify();
+  };
+  const stopJumpPreview = () => { jumpPreview = null; pause(); jumpPreviewControls?.update(null); };
   const recover = () => {
     if (lost || disposed || guidance.tutorial?.snapshot()) return;
     const recoveries = model.state.recoveries;
-    clearInput(); timeAttack.recover(); boostPulse.reset(); driftEffect.reset(); missileEffect.reset(); parryEffect.reset(); boostWarp.reset(); boostHaptics.stop(); boostEntryAge = 1;
+    clearInput(); timeAttack.recover(); jumpPresentation.reset(); boostPulse.reset(); driftEffect.reset(); missileEffect.reset(); parryEffect.reset(); boostWarp.reset(); boostHaptics.stop(); boostEntryAge = 1;
     if (timeAttack.phase === 'running' && model.state.recoveries > recoveries) raceAudio.play('recovery');
     cameraSnap = true; notify();
   };
@@ -399,7 +423,7 @@ export function createRace(
     views.cycleTrack(); resize(); notify();
   };
   const continueTutorial = () => { if (timeAttack.phase !== 'running') return false; const continued = guidance.tutorial?.continue() ?? false; if (continued) notify(); return continued; };
-  const controlCodes = new Set(['KeyE', 'KeyS', 'KeyA', 'KeyD', 'KeyW', 'ArrowDown', 'ArrowUp', 'Space', 'KeyR', 'KeyC', 'KeyX', 'Escape', 'Enter']);
+  const controlCodes = new Set(['KeyE', 'KeyS', 'KeyA', 'KeyD', 'KeyW', 'ArrowLeft', 'ArrowRight', 'ArrowDown', 'ArrowUp', 'Space', 'KeyR', 'KeyC', 'KeyX', 'Escape', 'Enter']);
   window.addEventListener('speedracer:pad-action', (event) => {
     if (lost || document.querySelector('dialog[open]')) return;
     const action = (event as CustomEvent<string>).detail;
@@ -435,7 +459,7 @@ export function createRace(
     if (event.code === 'Enter') { if (!event.repeat) continueTutorial(); return; }
     if (!event.repeat && event.code === 'Escape') { togglePause(); return; }
     if (!event.repeat && event.code === 'KeyR') { window.dispatchEvent(new CustomEvent('speedracer:restart-request')); return; }
-    if (event.code === 'KeyE') { if (!event.repeat) useParry(); return; }
+    if (event.code === 'ArrowLeft' || event.code === 'ArrowRight' || event.code === 'KeyE') { if (!event.repeat) useParry(); return; }
     if (event.code === 'KeyW') { if (!event.repeat) useAwakening(); return; }
     if (event.code === 'Space') {
       spaceHeld = true;
@@ -504,12 +528,19 @@ export function createRace(
     } else padArmed = false;
     replaying = !training && oldPhase === 'finished' && !cinematic && !reducedMotion.matches && replayBuffer.seconds() >= .5;
     const slow = cinematic?.kind === 'finish' ? finishTimeScale(cinematic.t, cinematic.reduced) : 1;
+    const jumpMotion = jumpPresentation.step(oldPhase === 'running' || oldPhase === 'paused' ? upcomingTrackJump(track, model.state.distance, model.state.routeId) : null,
+      oldPhase === 'running' ? delta : 0, reducedMotion.matches, model.state.speed);
     if (oldPhase === 'running' || oldPhase === 'countdown') {
       const touch = touchControls.read();
       input.brake = keys.has('KeyS') || touch.brake || gamepadDriving.brake;
       input.throttle = !input.brake;
       input.steer = THREE.MathUtils.clamp(Number(keys.has('KeyD')) - Number(keys.has('KeyA')) + touch.steer + gamepadDriving.steer, -1, 1);
       input.boost = keys.has('Space') || touch.boost || gamepadDriving.boost;
+      delete input.targetAltitudeLevel;
+      if (jumpPreview) {
+        Object.assign(input, aiDrivingInput(track, config, model.state, 1, []), { boost: false });
+        heightRequests.length = 0;
+      }
       const padBoost = touch.boost || gamepadDriving.boost;
       if (padBoost && !boostHeld && !launched) pressAt = untilGo;
       boostHeld = padBoost;
@@ -522,7 +553,8 @@ export function createRace(
           model.step(0, { ...input, ...request });
           heightChanged ||= model.state.altitudeLevel !== previousLevel;
         }
-        input.lift = 0; timeAttack.step(delta, input); worldDelta = delta;
+        if (!jumpPreview) input.lift = 0;
+        worldDelta = delta * jumpMotion.timeScale; timeAttack.step(worldDelta, input);
       }
       heightRequests.length = 0;
     }
@@ -543,7 +575,7 @@ export function createRace(
     if (model.state.nearMisses > oldNearMisses) { raceAudio.play('boost-full'); boostPulse.trigger(); notify(); }
     if (model.state.coresCollected > oldCores) { raceAudio.play('boost-full'); say('pickup', '각성 코어 획득'); }
     if (oldAwakening > 0 && model.state.awakeningRemaining === 0 && phase === 'running') { raceAudio.play('boost-complete'); notify(); }
-    rivalVisuals.update((guidance.tutorial ? worldDelta : delta) * slow, reducedMotion.matches);
+    rivalVisuals.update((oldPhase === 'running' ? worldDelta : delta * slow), reducedMotion.matches);
     if (!training && mode === 'time-attack' && timeAttack.phase === 'running') ghostRecorder.sample(model.state);
     ghostVisual?.update(model.state.elapsed, cinematic?.kind !== 'intro' && phase !== 'finished' && model.state.elapsed > 0);
     const cues = feedback.update({ ...timeAttack.snapshot(), phase, elapsed: model.state.elapsed });
@@ -567,11 +599,15 @@ export function createRace(
       notify();
     }
     if (cinematic && (cinematic.t += delta) >= cinematic.duration) endCinematic();
-    if (oldRecoveries !== model.state.recoveries) { cameraSnap = true; boostPulse.reset(); driftEffect.reset(); missileEffect.reset(); parryEffect.reset(); boostWarp.reset(); boostEntryAge = 1; }
+    if (oldRecoveries !== model.state.recoveries) { jumpPresentation.reset(); cameraSnap = true; boostPulse.reset(); driftEffect.reset(); missileEffect.reset(); parryEffect.reset(); boostWarp.reset(); boostEntryAge = 1; }
     const state = model.state;
     const awake = state.awakeningRemaining > 0;
     const simulationDelta = phase === 'running' ? worldDelta : 0;
-    const sceneDelta = tutorialFrozen() && phase === 'running' ? 0 : delta;
+    const sceneDelta = oldPhase === 'running' ? worldDelta : delta * slow;
+    sceneryClock += sceneDelta;
+    const jumpPose = jumpFlightPose(phase === 'running' || phase === 'paused' ? upcomingTrackJump(track, state.distance, state.routeId) : null,
+      state.distance, track.length, reducedMotion.matches);
+    const landingDip = reducedMotion.matches || phase !== 'running' && phase !== 'paused' ? 0 : jumpMotion.landing * .32;
     boostEntryAge += simulationDelta;
     if (phase === 'running' && state.boostStage === 2 && oldBoostStage !== 2) { boostPulse.trigger(); boostEntryAge = 0; notify(); }
     if (state.collisions > oldCollisions && (state.notice === 'height-collision' || state.notice === 'corridor-collision')) {
@@ -585,7 +621,7 @@ export function createRace(
     if (Math.abs(camera.fov - fov) > 0.001) { camera.fov = fov; camera.updateProjectionMatrix(); }
     const cameraScale = Math.tan(THREE.MathUtils.degToRad(visuals.baseFov / 2)) / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
     track.sample(state.distance, frame, state.routeId);
-    drone.position.copy(frame.position).addScaledVector(frame.right, state.offset).addScaledVector(frame.up, state.altitude);
+    drone.position.copy(frame.position).addScaledVector(frame.right, state.offset).addScaledVector(frame.up, state.altitude + jumpPose.lift - landingDip);
     flightForward.copy(frame.tangent).multiplyScalar(Math.cos(state.heading)).addScaledVector(frame.right, Math.sin(state.heading));
     flightRight.copy(frame.right).multiplyScalar(Math.cos(state.heading)).addScaledVector(frame.tangent, -Math.sin(state.heading));
     flightUp.copy(frame.up);
@@ -597,7 +633,7 @@ export function createRace(
     craftShake = THREE.MathUtils.lerp(craftShake, shakeTarget, 1 - Math.exp(-sceneDelta * 16));
     if (reducedMotion.matches) craftShake = 0;
     drone.rotateZ(bank + Math.sin(state.elapsed * 51) * craftShake);
-    drone.rotateX(Math.sin(state.elapsed * 67 + 1) * craftShake * .5 + (reducedMotion.matches ? 0 : (state.targetAltitude - state.altitude) * -0.045));
+    drone.rotateX(jumpPose.pitch + Math.sin(state.elapsed * 67 + 1) * craftShake * .5 + (reducedMotion.matches ? 0 : (state.targetAltitude - state.altitude) * -0.045));
     drone.rotateY(Math.sin(state.elapsed * 43) * craftShake * .35);
     if (!training && oldPhase === 'running') {
       replayClock += delta;
@@ -616,6 +652,8 @@ export function createRace(
     else cameraOffset.lerp(desiredCameraOffset, 1 - Math.exp(-sceneDelta * 9));
     camera.position.copy(drone.position).addScaledVector(cameraOffset, cameraScale);
     camera.position.addScaledVector(flightUp, cameraAltitude - state.altitude);
+    // Let the craft visibly rise within the chase view instead of moving camera and craft together.
+    camera.position.addScaledVector(flightUp, -jumpPose.lift * .65 + landingDip * .5);
     camera.position.addScaledVector(flightForward, -entry * visuals.boostEntryPullback);
     if (!reducedMotion.matches && state.boostStage === 2 && boostEntryAge < 0.22) {
       const shake = visuals.boostEntryShake * (1 - boostEntryAge / 0.22) ** 2;
@@ -625,7 +663,8 @@ export function createRace(
     lookAt.copy(drone.position).addScaledVector(flightForward, 9).addScaledVector(flightUp, cameraAltitude - state.altitude - 0.5); camera.up.copy(flightUp); camera.lookAt(lookAt);
     const introActive = cinematic?.kind === 'intro' && !cinematic.reduced && cinematic.t < INTRO_SECONDS;
     if (introActive) {
-      const s = introProgress(cinematic!.t, INTRO_SECONDS);
+      const s = introProgress(cinematic!.t, INTRO_APPROACH_SECONDS);
+      const linger = introProgress(cinematic!.t - INTRO_APPROACH_SECONDS, INTRO_LINGER_SECONDS);
       if (introAspect !== camera.aspect) {
         introAspect = camera.aspect;
         const overview = overviewPose(track, camera.aspect, camera.fov), landmark = scenery?.landmark;
@@ -641,6 +680,8 @@ export function createRace(
       }
       introPos.points[2].copy(camera.position); introLook.points[2].copy(lookAt);
       introPos.getPoint(s, camera.position); introLook.getPoint(s, introTarget);
+      // Once the flythrough reaches the craft, keep a gentle rear-quarter dolly before the front showcase cut.
+      camera.position.addScaledVector(flightRight, linger * 1.6).addScaledVector(flightForward, linger * .7).addScaledVector(flightUp, -linger * .2);
       camera.up.lerpVectors(worldUp, flightUp, s).normalize(); camera.lookAt(introTarget);
       if (scene.fog instanceof THREE.FogExp2) scene.fog.density = environment.fogDensity * (.12 + .88 * introProgress(s - .35, .55));
     } else if (scene.fog instanceof THREE.FogExp2) scene.fog.density = environment.fogDensity * (replaying ? .4 : 1);
@@ -690,6 +731,21 @@ export function createRace(
     }
     bloom.strength = replaying ? .3 : .65;
     views.update(flightForward, flightUp, bank, state.elapsed, state.boosting, reducedMotion.matches, state.routeId);
+    const airborneCue = phase === 'running' || phase === 'paused' ? upcomingTrackJump(track, state.distance, state.routeId) : null;
+    if (airborneCue?.phase === 'airborne' && !reducedMotion.matches && !replaying && !cinematic) {
+      const shot = jumpCameraPose(jumpMotion.cameraAge, jumpMotion.cameraDuration, false, jumpMotion.cameraShot);
+      // Apply after cockpit update so its normal camera resumes after landing as well.
+      if (shot.weight > 0) {
+        jumpChaseQuaternion.copy(camera.quaternion);
+        lookAt.copy(drone.position).addScaledVector(flightForward, shot.forward * cameraScale)
+          .addScaledVector(flightRight, shot.right * cameraScale).addScaledVector(flightUp, shot.up * cameraScale);
+        camera.position.lerp(lookAt, shot.weight);
+        lookAt.copy(drone.position).addScaledVector(flightForward, shot.lookAhead).addScaledVector(flightUp, shot.lookUp);
+        camera.up.copy(flightUp); camera.lookAt(lookAt);
+        jumpChaseQuaternion.slerp(camera.quaternion, shot.weight);
+        camera.quaternion.copy(jumpChaseQuaternion);
+      }
+    }
     thrusters.setMode(replaying ? REPLAY_MODES[replayPose.mode] : awake || state.boostStage === 2 ? 'boost-stage2' : phase === 'running' && state.boosting ? 'boost' : phase === 'running' && input.throttle && state.speed > 1 ? 'accelerate' : 'idle');
     thrusters.setBoostCharge(replaying ? replayPose.mode / 3 : awake ? 1 : state.boostStageProgress);
     thrusters.update(replaying ? delta : simulationDelta, reducedMotion.matches);
@@ -715,8 +771,8 @@ export function createRace(
     if (replaying) speedLines.update(replayClock + replayT, replayPose.speed, replayPick.shot === 1 && replayPose.mode >= 2, reducedMotion.matches, replayPose.mode === 3);
     else speedLines.update(state.elapsed, state.speed, awake || state.boosting, reducedMotion.matches, awake || state.boostStage === 2);
     views.prepareDriving();
-    scenery?.setOverview(false); scenery?.update(drone.position, reducedMotion.matches ? 0 : performance.now() / 1000, delta, reducedMotion.matches); giant?.update(camera.position, reducedMotion.matches ? 0 : performance.now() / 1000); sky.update(camera.position, reducedMotion.matches ? 0 : performance.now() / 1000);
-    const weatherFrame = weather.update(camera.position, state.distance, (guidance.tutorial ? worldDelta : delta) * slow, phase === 'running' && !tutorialFrozen(), reducedMotion.matches);
+    scenery?.setOverview(false); scenery?.update(drone.position, reducedMotion.matches ? 0 : sceneryClock, sceneDelta, reducedMotion.matches); giant?.update(camera.position, reducedMotion.matches ? 0 : sceneryClock); sky.update(camera.position, reducedMotion.matches ? 0 : sceneryClock);
+    const weatherFrame = weather.update(camera.position, state.distance, sceneDelta, phase === 'running' && !tutorialFrozen(), reducedMotion.matches);
     ambient.intensity = environment.ambientIntensity + weatherFrame.flash * 5;
     sun.intensity = environment.lightIntensity + weatherFrame.flash * 10;
     sky.setLightning(weatherFrame.flash);
@@ -744,6 +800,14 @@ export function createRace(
     }
     renderer.setScissorTest(false);
     renderer.getSize(rendererSize); renderer.setViewport(0, 0, rendererSize.x, rendererSize.y);
+    if (jumpPreview && previewJump && phase === 'running' && model.state.distance >= previewJump.end) {
+      jumpPreview.landingAge += delta;
+      if (jumpPreview.landingAge >= 1.1) {
+        const { shots, index } = jumpPreview;
+        if (index + 1 < shots.length) playJumpPreview(shots, index + 1);
+        else { jumpPreview = null; pause(); jumpPreviewControls?.update(null, 0, 0, true); }
+      }
+    }
     animation = requestAnimationFrame(tick);
   };
   document.addEventListener('visibilitychange', () => {
@@ -756,6 +820,7 @@ export function createRace(
   }, listen);
   const applyQuality = (quality: RenderQuality) => { scenery?.setQuality(quality); giant?.setQuality(quality); weather.setQuality(quality); renderQuality = quality; resize(); };
   const unsubscribeQuality = autoQuality.onChange(status => applyQuality(status.quality));
+  if (previewJump) jumpPreviewControls = createJumpPreviewControls(container.parentElement ?? container, shots => playJumpPreview(shots), stopJumpPreview);
   notify(); animation = requestAnimationFrame(tick);
   return {
     launchSupportMissile(requestId) { if (guidance.tutorial?.snapshot()) return false; const used = timeAttack.launchSupportMissile(requestId); if (used) notify(); return used; },
@@ -770,6 +835,7 @@ export function createRace(
     setHapticsEnabled(enabled) { boostHaptics.setEnabled(enabled); },
     dispose() {
       disposed = true; unsubscribeQuality(); cancelAnimationFrame(animation); events.abort(); observer.disconnect();
+      jumpPreviewControls?.dispose();
       touchControls.dispose(); rivalVisuals.dispose(); thrusters.dispose(); overdrive.dispose(); coreVisual.dispose(); boostPulse.dispose(); driftEffect.dispose(); missileEffect.dispose(); parryEffect.dispose(); raceAudio.dispose(); boostHaptics.dispose();
       const geometries = new Set<THREE.BufferGeometry>();
       const materials = new Set<THREE.Material>();
