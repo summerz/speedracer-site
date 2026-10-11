@@ -597,3 +597,17 @@ button:focus-visible { outline:2px solid #c9f9f2; outline-offset:3px; }
 .drift-end[data-tone='1'] { color:var(--d1); } .drift-end[data-tone='2'] { color:var(--d2); } .drift-end[data-tone='3'] { color:var(--d3); }
 @keyframes drift-pop { from { transform:scale(1.35); opacity:.4; } to { transform:none; opacity:1; } }
 @media (prefers-reduced-motion:reduce) { .drift-end { animation:none; } }
+
+/* Support missile status chip (docs/SHOP_PROGRESSION.md). */
+.missile-chip { position:absolute; z-index:5; right:max(24px,env(safe-area-inset-right)); top:calc(42% - 40px); margin:0; display:flex; align-items:center; gap:6px; padding:5px 10px 5px 8px; border:1px solid #ff5a3c80; border-radius:999px; background:#2a1210e6; color:#ffc2b0; font:600 12px/1 'IBM Plex Mono',monospace; white-space:nowrap; pointer-events:none; }
+.missile-chip[hidden] { display:none; }
+.missile-chip svg { width:16px; height:16px; flex:none; }
+.missile-chip[data-phase='flying'] { border-color:#ff5a3c; color:#fff; box-shadow:0 0 14px #ff5a3caa; }
+.missile-chip[data-phase='hit'] { border-color:#ffb38f; color:#fff3ec; background:#5a1c12f0; box-shadow:0 0 12px #ff5a3c88; }
+.missile-chip[data-phase='spent'] { opacity:.45; filter:saturate(.3); }
+.missile-chip.is-hit { animation:missile-hit .5s ease-out; }
+@keyframes missile-hit { 0% { transform:scale(1.35); box-shadow:0 0 26px #ffb38f; } 100% { transform:scale(1); } }
+.driving-overlay.is-inset .missile-chip { right:6px; top:calc(34% - 24px); padding:3px 7px 3px 5px; font-size:9px; }
+.driving-overlay.is-inset .missile-chip svg { width:11px; height:11px; }
+@media (max-width:760px) { .missile-chip { right:16px; top:calc(36% - 34px); font-size:11px; } }
+@media (prefers-reduced-motion:reduce) { .missile-chip.is-hit { animation:none; } }

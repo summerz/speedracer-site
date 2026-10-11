@@ -1,0 +1,3 @@
+/** Inline 24px item icons; currentColor so each screen can tint them. */
+export const SUPPORT_MISSILE_ICON = '<svg class="item-icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><circle cx="16.5" cy="7.5" r="5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-dasharray="3 1.6"/><circle cx="16.5" cy="7.5" r="1.1" fill="currentColor"/><path d="M3 21l1.6-4.6 6-6 2.3 2.3-6 6z" fill="currentColor" opacity=".9"/><path d="M5 15.5L2.5 14l2-.5M8.5 19l1.5 2.5.5-2" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M12 11l2.2-2.2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>';
+export const itemIcon = (id: string) => (id === 'support-missile' ? SUPPORT_MISSILE_ICON : '');
