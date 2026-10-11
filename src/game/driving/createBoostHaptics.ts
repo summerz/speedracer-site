@@ -27,6 +27,10 @@ export function createBoostHaptics(vibrate?: Vibration) {
       if (!vibrate || !enabled || collisionCooldown > 0) return;
       send([18, 25, 12]); oneShotRemaining = .09; collisionCooldown = .35;
     },
+    parry() {
+      if (!vibrate || !enabled || oneShotRemaining > 0) return;
+      send([12, 18, 24]); oneShotRemaining = .06;
+    },
     nearMiss() {
       if (!vibrate || !enabled || oneShotRemaining > 0 || nearMissCooldown > 0) return;
       send(10); oneShotRemaining = .04; nearMissCooldown = .3;

@@ -1,3 +1,6 @@
+import { createParryController, PARRY_TUNING } from './parry.js';
+import type { ParrySnapshot, ParryTarget } from './parry.js';
+import { parryWorldPosition, predictParryThreat } from './parryThreat.js';
 import { createDriftController, DRIFT_TUNING } from './drift.js';
 import type { DriftSnapshot } from './drift.js';
 import { createJumpTracker } from './jumpPassage.js';
@@ -21,6 +24,7 @@ export { OFF_TRACK_PENALTY_POINTS, COLLISION_PENALTY_POINTS, OBSTACLE_COLLISION_
 export interface DrivingInput { throttle: boolean; brake: boolean; steer: number; lift: number; boost: boolean; targetAltitudeLevel?: number; targetSpeedScale?: number; guidedSpeedScale?: number; guidedOffset?: number; guidedStopDistance?: number }
 export interface DrivingState {
   drift: DriftSnapshot;
+  parry: ParrySnapshot;
   routeId?: string | null;
   distance: number;
   offset: number;
@@ -82,13 +86,14 @@ export function steeringYawRate(speed: number, performance: DronePerformance = D
 }
 
 /** Track coordinates are the simulation; Three.js objects only display the resulting pose. */
-export function createDrivingModel(track: Track, performance: DronePerformance = DEFAULT_DRONE_CONFIGURATION.performance, options: { drift?: boolean } = {}) {
+export function createDrivingModel(track: Track, performance: DronePerformance = DEFAULT_DRONE_CONFIGURATION.performance, options: { drift?: boolean; parry?: boolean } = {}) {
   const driftController = createDriftController();
+  const parry = createParryController(options.parry ?? true);
   const altitudeProfile = resolveAltitudeProfile(track.altitudeProfile);
   const { levels, initialLevel, transitionSeconds } = altitudeProfile;
   const initialAltitude = levels[initialLevel];
   const state: DrivingState = {
-    drift: driftController.snapshot(), routeId: null,
+    drift: driftController.snapshot(), parry: parry.snapshot(), routeId: null,
     distance: 0, offset: 0, heading: 0, altitude: initialAltitude, targetAltitude: initialAltitude, altitudeLevel: initialLevel,
     speed: 0, charge: 1, awakeningCores: 0, coresCollected: 0, awakeningRemaining: 0, awakeningsUsed: 0,
     boostUses: 0, jumpsPassed: 0, jumpsMissed: 0, boosting: false, boostStage: 0, boostElapsed: 0, boostStageProgress: 0, boostNeedsRelease: false, checkpoint: 0, elapsed: 0,
@@ -101,6 +106,14 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
   let rechargeDelay = 0;
   let boostSpent = 0;
   let impactCooldown = 0;
+  let wallEpisode = 0, wallContact = false, wallClearSeconds = 0;
+  let externalThreat: ParryTarget | null = null;
+  const publishParry = () => { state.parry = parry.snapshot(); };
+  const hitTarget = (kind: ParryTarget['kind'], id: string, distance = state.distance, offset = state.offset): ParryTarget => ({
+    id, kind, secondsToImpact: 0, worldPosition: parryWorldPosition(track, distance, offset, state.altitude, state.routeId),
+  });
+  const defend = (hit: ParryTarget) => { const success = parry.impact(hit); publishParry(); return success; };
+  const cancelParry = () => { parry.cancel(); externalThreat = null; publishParry(); };
   let noticeRemaining = 0;
   let heightSwitchSpeed = 0;
   let offTrackEpisode = false;
@@ -144,7 +157,7 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
     if (state.charge === 0) { state.boostNeedsRelease = true; interruptBoost(); }
   };
   const recover = () => {
-    cancelDrift(); state.cleanStreak = 0;
+    cancelDrift(); cancelParry(); state.cleanStreak = 0;
     state.awakeningRemaining = 0;
     state.distance = state.checkpoint;
     state.offset = 0; state.heading = 0; state.altitude = initialAltitude; state.targetAltitude = initialAltitude;
@@ -153,8 +166,8 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
     state.recoveries++; state.notice = 'recovery'; noticeRemaining = 1.8;
     rechargeDelay = Math.max(rechargeDelay, 0.6);
   };
-  const fieldImpact = (retention: number, notice: 'height-collision' | 'corridor-collision' | 'jump-missed') => {
-    if (state.awakeningRemaining > 0) return;
+  const fieldImpact = (retention: number, notice: 'height-collision' | 'corridor-collision' | 'jump-missed', target?: ParryTarget) => {
+    if (state.awakeningRemaining > 0 || target && defend(target)) return;
     cancelDrift();
     const severity = (1 - retention) / DEFAULT_DRONE_CONFIGURATION.performance.collisionSpeedLoss;
     state.speed *= impactSpeedRetention(tuning.collisionSpeedLoss, severity);
@@ -191,17 +204,25 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
     cancelDrift,
     get cores() { return cores; },
     coreAvailable(index: number, lap: number) { return collectedCores.get(index) !== lap; },
+    useParry() { if (state.awakeningRemaining > 0) return false; const used = parry.request(); publishParry(); return used; },
+    cancelParry,
+    setParryThreat(target: ParryTarget | null) { externalThreat = target; },
+    releaseParryContact(id: string) { parry.releaseEpisode(id); },
     useAwakening() {
       if (state.awakeningCores <= 0 || state.awakeningRemaining > 0) return false;
-      finishDrift();
+      finishDrift(); cancelParry();
       state.awakeningCores--; state.awakeningsUsed++; state.awakeningRemaining = AWAKENING_SECONDS;
       interruptBoost(); boostSpent = 0; state.boostNeedsRelease = true;
       accelerationRecovery = 0; impactCooldown = 0; offTrackEpisode = false; handoffRemaining = 0;
       state.notice = null; noticeRemaining = 0;
       return true;
     },
-    contact() {
+    contact(episode = 'craft-contact', target?: ParryTarget, away = 0) {
       if (state.awakeningRemaining > 0) return;
+      // Cushion the hit, never remove separation or let the push cross the road boundary.
+      state.offset = clamp(state.offset + Math.sign(away) * PARRY_TUNING.contactPush,
+        -(track.halfWidth - tuning.craftHalfWidth), track.halfWidth - tuning.craftHalfWidth);
+      if (defend(target ?? hitTarget('craft', episode))) return;
       cancelDrift(); state.cleanStreak = 0;
       damageBoost(.08);
       state.speed *= impactSpeedRetention(tuning.collisionSpeedLoss, .7);
@@ -211,8 +232,9 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
       state.notice = 'craft-collision'; noticeRemaining = 0.8;
     },
     reset() {
-      driftController.reset(); settledAt = -Infinity;
-      Object.assign(state, initial); publishDrift(); jumps.reset();
+      driftController.reset(); parry.reset(); settledAt = -Infinity;
+      wallEpisode = 0; wallContact = false; wallClearSeconds = 0; externalThreat = null;
+      Object.assign(state, initial); publishDrift(); publishParry(); jumps.reset();
       fieldPassages.clear(); completedPassages.clear(); margins.clear(); lateCalls.clear(); safeSince.clear(); accelerationRecovery = 0;
       rechargeDelay = 0; boostSpent = 0; impactCooldown = 0; noticeRemaining = 0; heightSwitchSpeed = 0;
       offTrackEpisode = false; forkHandoffRemaining = 0; approachChoiceId = null; approachSteered = false;
@@ -221,7 +243,7 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
     recover,
     /** Instant launch (perfect start): never slows a craft that is already faster. */
     launch(speed: number) { state.speed = Math.max(state.speed, speed); },
-    step(delta: number, input: DrivingInput, onTravel?: (segment: TravelSegment) => boolean) {
+    step(delta: number, input: DrivingInput, onTravel?: (segment: TravelSegment) => boolean, clockScale = 1) {
       if (state.awakeningRemaining <= 0 && (input.lift !== 0 || Number.isFinite(input.targetAltitudeLevel))) {
         const nextLevel = clamp(Number.isFinite(input.targetAltitudeLevel) ? Math.round(input.targetAltitudeLevel!)
           : state.altitudeLevel + Math.sign(input.lift), 0, levels.length - 1);
@@ -248,6 +270,7 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
         const offsetFrom = state.offset;
         const altitudeFrom = state.altitude;
         state.elapsed += dt;
+        parry.advance(dt * clockScale);
         impactCooldown = Math.max(0, impactCooldown - dt);
         accelerationRecovery = Math.max(0, accelerationRecovery - dt);
         noticeRemaining = Math.max(0, noticeRemaining - dt);
@@ -434,7 +457,7 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
             && Math.abs(state.offset) < track.halfWidth + tuning.craftHalfWidth
             && (state.altitude < obstacle.minAltitude || state.altitude > obstacle.maxAltitude)) {
             fieldPassages.set(key, lap);
-            fieldImpact(obstacle.speedRetention, 'height-collision');
+            fieldImpact(obstacle.speedRetention, 'height-collision', hitTarget('height', `${key}:${lap}`, center));
           }
           if (oldDistance <= rear && state.distance > rear && completedPassages.get(key) !== lap) {
             completedPassages.set(key, lap);
@@ -462,7 +485,10 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
           const marginKey = `${key}:${lap}`;
           margins.set(marginKey, Math.min(margins.get(marginKey) ?? Infinity, edge(Math.max(oldDistance, front)), edge(Math.min(state.distance, rear))));
           if (!safe && fieldPassages.get(key) !== lap && Math.abs(state.offset) < track.halfWidth + tuning.craftHalfWidth) {
-            fieldPassages.set(key, lap); fieldImpact(obstacle.speedRetention, 'corridor-collision');
+            fieldPassages.set(key, lap);
+            state.offset = clamp(state.offset + Math.sign(obstacle.safeCenter - state.offset) * PARRY_TUNING.contactPush,
+              -(track.halfWidth - tuning.craftHalfWidth), track.halfWidth - tuning.craftHalfWidth);
+            fieldImpact(obstacle.speedRetention, 'corridor-collision', hitTarget('corridor', `${key}:${lap}`, center));
           }
           if (state.distance > rear && completedPassages.get(key) !== lap) {
             completedPassages.set(key, lap);
@@ -484,7 +510,7 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
             const [a, b] = [side(from), side(to)];
             if ((a * b <= 0 ? 0 : Math.min(Math.abs(a), Math.abs(b))) < mine.radius + tuning.craftHalfWidth) {
               fieldPassages.set(key, lap); fieldPassages.set(fieldKey, lap);
-              fieldImpact(MINE_SPEED_RETENTION, 'corridor-collision');
+              fieldImpact(MINE_SPEED_RETENTION, 'corridor-collision', hitTarget('mine', `${key}:${lap}`, centre, mine.offset));
             }
           }
           const end = field.distance + field.length + lap * track.length + tuning.craftHalfLength / scale;
@@ -570,18 +596,44 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
             state.notice = 'off-track'; noticeRemaining = 1.8;
           }
         }
+        if (wallContact) {
+          wallClearSeconds = Math.abs(state.offset) < boundary - PARRY_TUNING.contactClearance ? wallClearSeconds + dt * clockScale : 0;
+          if (wallClearSeconds + 1e-8 >= PARRY_TUNING.contactReleaseSeconds) {
+            parry.releaseEpisode(`wall:${wallEpisode}`); wallContact = false; wallClearSeconds = 0;
+          }
+        }
         if (!awake && Math.abs(state.offset) > boundary && state.altitude <= 3.2 && !offTrackEpisode) {
-          cancelDrift(); state.cleanStreak = 0;
+          if (!wallContact) { wallContact = true; wallEpisode++; }
+          wallClearSeconds = 0;
           const side = Math.sign(state.offset);
           state.offset = side * boundary;
           if (state.heading * side > 0) state.heading = -side * 0.12;
+          const defended = defend(hitTarget('wall', `wall:${wallEpisode}`));
+          if (!defended) { cancelDrift(); state.cleanStreak = 0; }
           if (impactCooldown === 0) {
-            state.speed *= impactSpeedRetention(tuning.collisionSpeedLoss);
-            impairAcceleration(1); damageBoost(.10); state.collisions++; impactCooldown = 0.5;
-            state.penaltyPoints += COLLISION_PENALTY_POINTS;
-            state.notice = 'collision'; noticeRemaining = 0.8;
+            impactCooldown = .5;
+            if (!defended) {
+              state.speed *= impactSpeedRetention(tuning.collisionSpeedLoss);
+              impairAcceleration(1); damageBoost(.10); state.collisions++;
+              state.penaltyPoints += COLLISION_PENALTY_POINTS;
+              state.notice = 'collision'; noticeRemaining = 0.8;
+            }
           }
         }
+        if (state.parry.enabled && !awake) {
+          const lateral = (state.offset - offsetFrom) / dt;
+          let target = predictParryThreat(track, state, levels, lateral, heightSwitchSpeed, clockScale, id => {
+            const split = id.lastIndexOf(':'); return fieldPassages.get(id.slice(0, split)) === Number(id.slice(split + 1));
+          });
+          const wallIn = lateral === 0 ? Infinity : (Math.sign(lateral) * boundary - state.offset) / lateral * clockScale;
+          if (!wallContact && state.altitude <= 3.2 && wallIn >= 0 && wallIn <= PARRY_TUNING.warningSeconds
+            && (!target || wallIn < target.secondsToImpact)) {
+            target = { ...hitTarget('wall', `wall:${wallEpisode + 1}`, state.distance + state.speed * wallIn / clockScale, Math.sign(lateral) * boundary), secondsToImpact: wallIn };
+          }
+          if (externalThreat && (!target || externalThreat.secondsToImpact < target.secondsToImpact)) target = externalThreat;
+          parry.setTarget(target);
+        } else parry.setTarget(null);
+        publishParry();
         if (!Number.isFinite(state.distance + state.offset)) {
           recover(); continue;
         }
