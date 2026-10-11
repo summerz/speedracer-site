@@ -3,7 +3,7 @@
   grid-template-columns: minmax(0, 1fr) minmax(0, auto);
   gap: 20px 24px;
   min-height: auto;
-  padding-block: calc(20px + env(safe-area-inset-top)) 16px;
+  padding-block: calc(20px + env(safe-area-inset-top) + var(--standalone-top-extra, 0px)) 16px;
   background: #080e14;
 }
 .menu-header .wordmark { align-self: start; min-height: 40px; }
@@ -43,7 +43,7 @@
 .menu-balance { color: #bce6eb; font-size: 14px; font-weight: 400; white-space: nowrap; }
 .menu-header [hidden] { display: none !important; }
 @media (max-width: 760px) and (orientation: portrait) {
-  .menu-header.masthead { grid-template-columns: auto minmax(0, 1fr); gap: 8px 12px; min-height: 0; padding-block: calc(8px + env(safe-area-inset-top)) 8px; }
+  .menu-header.masthead { grid-template-columns: auto minmax(0, 1fr); gap: 8px 12px; min-height: 0; padding-block: calc(8px + env(safe-area-inset-top) + var(--standalone-top-extra, 0px)) 8px; }
   .menu-header .wordmark { min-height: 36px; font-size: 15px; }
   .menu-header .wordmark-caption, .menu-header .wordmark-divider { display: none; }
   .menu-header-tools { flex-wrap: nowrap; gap: 6px; }
@@ -64,7 +64,7 @@
 @media (max-height: 500px) and (orientation: landscape) {
   .menu-header.masthead {
     display: flex; flex-wrap: nowrap; align-items: center; gap: 12px; min-height: 0;
-    padding: calc(6px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 6px max(16px, env(safe-area-inset-left));
+    padding: calc(6px + env(safe-area-inset-top) + var(--standalone-top-extra, 0px)) max(16px, env(safe-area-inset-right)) 6px max(16px, env(safe-area-inset-left));
   }
   .menu-header .wordmark { order: 1; min-height: 36px; font-size: 15px; flex: none; }
   .menu-header .wordmark-caption, .menu-header .wordmark-divider { display: none; }
@@ -80,7 +80,7 @@
 }
 
 @media (min-width: 761px) {
-  .menu-header.masthead { gap: 12px 24px; padding-block: calc(12px + env(safe-area-inset-top)) 12px; }
+  .menu-header.masthead { gap: 12px 24px; padding-block: calc(12px + env(safe-area-inset-top) + var(--standalone-top-extra, 0px)) 12px; }
   .menu-header .wordmark { min-height: 36px; }
   .menu-header .menu-header-button, .menu-header .app-shell-tools button { min-height: 36px; padding-block: 7px; }
 }

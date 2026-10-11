@@ -32,7 +32,11 @@ export function createAppShell(root: HTMLElement) {
   const dialog = document.createElement('dialog');
   dialog.className = 'install-dialog';
   dialog.innerHTML = `<h2>Speedracer 설치</h2><p>iPhone / iPad: Safari의 공유 메뉴에서 <strong>홈 화면에 추가</strong>를 선택하세요.</p><p>Android / 데스크톱: 브라우저 메뉴의 <strong>앱 설치</strong> 또는 <strong>홈 화면에 추가</strong>를 선택하세요.</p><form method="dialog"><button type="submit">닫기</button></form>`;
-  document.body.append(dialog);
+  const safeTop = document.createElement('div');
+  safeTop.className = 'standalone-safe-top';
+  safeTop.setAttribute('aria-hidden', 'true');
+  // Outside the screen root so it survives menu/race navigation.
+  document.body.append(safeTop, dialog);
   const standalone = window.matchMedia('(display-mode: standalone)');
   const paint = () => {
     const slot = root.querySelector<HTMLElement>('[data-app-tools]');
@@ -124,5 +128,5 @@ export function createAppShell(root: HTMLElement) {
   window.addEventListener('pageshow', () => { void check(); }, listen);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) void check(); }, listen);
   const timer = setInterval(() => { void check(); }, 60 * 1000);
-  return () => { stopped = true; events.abort(); observer.disconnect(); clearInterval(timer); tools.remove(); dialog.remove(); };
+  return () => { stopped = true; events.abort(); observer.disconnect(); clearInterval(timer); tools.remove(); dialog.remove(); safeTop.remove(); };
 }

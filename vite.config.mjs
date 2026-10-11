@@ -22,7 +22,15 @@ self.addEventListener('activate', e => e.waitUntil((async () => {
 })()));`);
       });
     },
-    transformIndexHtml(html) { return html.replaceAll('__APP_VERSION__', version); },
+    transformIndexHtml(html) {
+      return {
+        html: html.replaceAll('__APP_VERSION__', version),
+        tags: [
+          { tag: 'meta', attrs: { name: 'apple-mobile-web-app-capable', content: 'yes' }, injectTo: 'head' },
+          { tag: 'meta', attrs: { name: 'apple-mobile-web-app-status-bar-style', content: 'black-translucent' }, injectTo: 'head' },
+        ],
+      };
+    },
     closeBundle() {
       const walk = (dir, prefix = '') => readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
         const name = prefix + entry.name;
