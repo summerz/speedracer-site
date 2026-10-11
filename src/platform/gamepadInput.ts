@@ -1,4 +1,4 @@
-export type PadAction = 'up' | 'down' | 'left' | 'right' | 'confirm' | 'back' | 'pause' | 'cockpit' | 'track' | 'focus';
+export type PadAction = 'up' | 'down' | 'left' | 'right' | 'confirm' | 'back' | 'pause' | 'cockpit' | 'track' | 'focus' | 'parry';
 export interface PadSnapshot { connected: boolean; steer: number; brake: boolean; boost: boolean }
 export interface PadSample { mapping: string; axes: readonly number[]; buttons: readonly { pressed: boolean; value: number }[] }
 export const gamepadDriving: PadSnapshot = { connected: false, steer: 0, brake: false, boost: false };
@@ -19,7 +19,7 @@ export function createPadReader() {
         if (pressed(13) || (!driving && (pad?.axes[1] ?? 0) > .55)) current.add('down');
         if (pressed(14) || (!driving && axis < -.55)) current.add('left');
         if (pressed(15) || (!driving && axis > .55)) current.add('right');
-        for (const [index, action] of [[0,'confirm'],[1,'back'],[2,'cockpit'],[3,'track'],[4,'focus'],[9,'pause']] as const) if (pressed(index)) current.add(action);
+        for (const [index, action] of [[0,'confirm'],[1,'back'],[2,'cockpit'],[3,'track'],[4,'focus'],[9,'pause'],[11,'parry']] as const) if (pressed(index)) current.add(action);
       }
       const actions = [...current].filter(action => !held.has(action));
       const nextDirection = (['up','down','left','right'] as const).find(action => current.has(action));

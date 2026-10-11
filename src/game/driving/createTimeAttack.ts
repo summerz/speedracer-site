@@ -10,7 +10,7 @@ import { createCleanHalfLaps } from './raceScoring.js';
 
 export type RacePhase = 'ready' | 'countdown' | 'running' | 'paused' | 'finished';
 
-export interface RaceRules { laps?: number; lapLimit?: number; practice?: boolean; drift?: boolean }
+export interface RaceRules { laps?: number; lapLimit?: number; practice?: boolean; drift?: boolean; parry?: boolean }
 
 /** Owns race timing and transitions; the renderer only steps and displays it. */
 export function createTimeAttack(track: Track, performance: DronePerformance, records: ReturnType<typeof createRaceRecords>, focusSlots = 0, rules: RaceRules = {}) {
@@ -19,7 +19,7 @@ export function createTimeAttack(track: Track, performance: DronePerformance, re
   const lapLimit = rules.practice ? null : rules.lapLimit ?? null;
   if (lapLimit !== null && (!Number.isFinite(lapLimit) || lapLimit <= 0)) throw new Error('Invalid lap deadline');
   let disqualified = false;
-  const model = createDrivingModel(track, performance, { drift: rules.drift ?? !rules.practice });
+  const model = createDrivingModel(track, performance, { drift: rules.drift ?? !rules.practice, parry: rules.parry ?? !rules.practice });
   const progress = createRaceProgress(track.length, Math.ceil(track.length / track.checkpointSpacing), track.halfWidth, totalLaps);
   const clean = createCleanHalfLaps(track.length, totalLaps);
   let phase: RacePhase = 'ready';
@@ -43,6 +43,7 @@ export function createTimeAttack(track: Track, performance: DronePerformance, re
   return {
     model,
     get phase() { return phase; },
+    get motionScale() { return focusRemaining > 0 ? .45 : 1; },
     snapshot() {
       const p = progress.snapshot();
       const cleanSegments = clean.snapshot();
@@ -66,6 +67,7 @@ export function createTimeAttack(track: Track, performance: DronePerformance, re
       if (phase === 'running' || phase === 'countdown') { resumePhase = phase; phase = 'paused'; model.interruptBoost(); }
     },
     recover() { if (phase === 'running' || phase === 'paused' && resumePhase === 'running') model.recover(); },
+    useParry() { return phase === 'running' && model.useParry(); },
     useAwakening() {
       if (phase !== 'running' || !model.useAwakening()) return false;
       focusRemaining = 0; return true;
@@ -74,7 +76,7 @@ export function createTimeAttack(track: Track, performance: DronePerformance, re
     finishPractice() {
       if (!rules.practice || phase !== 'running') return false;
       finishSpeed = model.state.speed;
-      model.cancelDrift(); model.endAwakening(); model.state.speed = 0; model.interruptBoost(); phase = 'finished';
+      model.cancelDrift(); model.cancelParry(); model.endAwakening(); model.state.speed = 0; model.interruptBoost(); phase = 'finished';
       return true;
     },
     useFocus() {
@@ -116,7 +118,7 @@ export function createTimeAttack(track: Track, performance: DronePerformance, re
             progress.cross({ ...segment, to: distance, timeTo: deadline });
             clean.cross(distance, model.state);
             model.cancelDrift(); model.state.distance = distance; model.state.elapsed = deadline;
-            model.endAwakening(); model.state.speed = 0; model.interruptBoost(); phase = 'finished'; disqualified = true;
+            model.cancelParry(); model.endAwakening(); model.state.speed = 0; model.interruptBoost(); phase = 'finished'; disqualified = true;
             return true;
           }
         }
@@ -128,11 +130,11 @@ export function createTimeAttack(track: Track, performance: DronePerformance, re
         model.state.distance = track.length * totalLaps;
         model.cancelDrift(); model.state.elapsed = finish;
         finishSpeed = model.state.speed;
-        model.endAwakening(); model.state.speed = 0; model.interruptBoost(); phase = 'finished';
+        model.cancelParry(); model.endAwakening(); model.state.speed = 0; model.interruptBoost(); phase = 'finished';
         const completed = progress.snapshot();
         if (!rules.practice) result = records.save(finish, completed.lapTimes, completed.checkpointTimes);
         return true;
-      });
+      }, 1 / scale);
         if (phase === 'running') model.state.elapsed = startedAt + duration;
         focusRemaining = Math.max(0, focusRemaining - duration);
         focusCooldown = Math.max(0, focusCooldown - duration);

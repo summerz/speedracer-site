@@ -1,3 +1,5 @@
+import { PARRY_TUNING, type ParryTarget } from './parry.js';
+import { parryWorldPosition, predictCraftParryThreat } from './parryThreat.js';
 import { createSupportMissile } from './supportMissile.js';
 import type { MissileRacer } from './supportMissile.js';
 import { upcomingTrackJump } from '../track/trackJump.js';
@@ -223,16 +225,19 @@ export function createRaceSession(track: Track, configuration: DroneConfiguratio
       id: `ai-${racer.id}`, name: racer.name, craftName: entry.name, color, racer, effects: { freeze: 0, jam: 0 },
       style: AI_STYLE_LABELS[racer.style], rating: racer.rating, profile, configuration: rivalConfiguration,
       controller: createTimeAttack(track, rivalConfiguration.performance,
-        createRaceRecords({ trackId: 'ai-memory', laps: rules.laps, configurationId: racer.id }), focusSlots, { laps: rules.laps, drift: false }),
+        createRaceRecords({ trackId: 'ai-memory', laps: rules.laps, configurationId: racer.id }), focusSlots, { laps: rules.laps, drift: false, parry: false }),
     };
   });
   const chasers = new Set([...rivals].sort((a, b) => b.rating - a.rating).slice(0, 3));
   const participants = [{ id: 'player', name: craft?.name ?? 'PLAYER',
     color: playerColor, craftName: craft?.name ?? 'PLAYER', style: '', rating: 0, configuration, controller: player }, ...rivals];
   const contacts = new Map<string, number>();
+  const contactEpisodes = new Map<string, { id: string; clear: number }>();
+  const contactGenerations = new Map<string, number>();
+  const nextContactId = (key: string) => `craft:${key}:${(contactGenerations.get(key) ?? 0) + 1}`;
   let clock = 0;
   const grid = () => {
-    contacts.clear(); missile = rivalSlots.includes('support-missile') ? createSupportMissile() : null; clock = 0; track.obstacleTime = 0; itemCooldown = 0; itemUsed.length = 0;
+    contacts.clear(); contactEpisodes.clear(); contactGenerations.clear(); missile = rivalSlots.includes('support-missile') ? createSupportMissile() : null; clock = 0; track.obstacleTime = 0; itemCooldown = 0; itemUsed.length = 0;
     rivals.forEach((rival, index) => {
       rival.finishCoast = null;
       rival.effects.freeze = 0; rival.effects.jam = 0;
@@ -294,6 +299,7 @@ export function createRaceSession(track: Track, configuration: DroneConfiguratio
     finishPractice() { return player.finishPractice(); },
     pause() { player.pause(); rivals.forEach(p => p.controller.pause()); },
     recover() { player.recover(); },
+    useParry() { return player.useParry(); },
     useAwakening() { return player.useAwakening(); },
     useFocus() {
       if (itemCooldown > 1e-8 || !player.useFocus()) return false;
@@ -338,6 +344,18 @@ export function createRaceSession(track: Track, configuration: DroneConfiguratio
         const step = Math.min(remaining, 1 / 120, ...boundaries); remaining -= step;
         const before = participants.map(p => ({ ...p.controller.model.state }));
         const active = participants.map(p => p.controller.phase === 'running');
+        let craftThreat: ParryTarget | null = null;
+        if (player.phase === 'running' && player.model.state.awakeningRemaining <= 0) {
+          rivals.forEach((rival, i) => {
+            if (rival.controller.phase !== 'running' || rival.effects.freeze > 0 || missile?.stopped(rival.id)
+              || rival.controller.model.state.awakeningRemaining > 0 || contactEpisodes.has(`0:${i + 1}`)) return;
+            const key = `0:${i + 1}`;
+            const candidate = predictCraftParryThreat(track, player.model.state, rival.controller.model.state,
+              nextContactId(key), player.motionScale, rival.controller.motionScale);
+            if (candidate && (!craftThreat || candidate.secondsToImpact < craftThreat.secondsToImpact)) craftThreat = candidate;
+          });
+        }
+        player.model.setParryThreat(craftThreat);
         player.step(step, { ...input, lift: firstStep ? input.lift : 0 }); firstStep = false;
         rivals.forEach((rival, index) => {
           const opponents = participants.filter(p => p !== rival && p.controller.phase !== 'finished' && !missile?.stopped(p.id)).map(p => p.controller.model.state);
@@ -365,8 +383,24 @@ export function createRaceSession(track: Track, configuration: DroneConfiguratio
             || missile?.stopped(participants[a].id) || missile?.stopped(participants[b].id)) continue;
           const key = `${a}:${b}`;
           const sa = participants[a].controller.model.state, sb = participants[b].controller.model.state;
+          const touching = craftContact(before[a], sa, before[b], sb, track.length);
+          const episode = contactEpisodes.get(key);
+          if (episode) {
+            const pa = parryWorldPosition(track, sa.distance, sa.offset, sa.altitude, sa.routeId);
+            const pb = parryWorldPosition(track, sb.distance, sb.offset, sb.altitude, sb.routeId);
+            const worldSeparated = pa && pb && (pa.x - pb.x) ** 2 + (pa.y - pb.y) ** 2 + (pa.z - pb.z) ** 2 > 6.5 ** 2;
+            const separated = worldSeparated || !craftContact(sa, sa, sb, sb, track.length)
+              && (Math.abs(sa.offset - sb.offset) > 3.2 + PARRY_TUNING.contactClearance
+                || Math.abs(sa.altitude - sb.altitude) > 1.1 + PARRY_TUNING.contactClearance
+                || Math.abs(sa.distance - sb.distance - Math.round((sa.distance - sb.distance) / track.length) * track.length) > 4.4 + PARRY_TUNING.contactClearance);
+            episode.clear = separated ? episode.clear + step : 0;
+            if (episode.clear + 1e-8 >= PARRY_TUNING.contactReleaseSeconds) {
+              contactEpisodes.delete(key);
+              participants[a].controller.model.releaseParryContact(episode.id); participants[b].controller.model.releaseParryContact(episode.id);
+            }
+          }
           if (sa.awakeningRemaining > 0 || sb.awakeningRemaining > 0 || before[a].awakeningRemaining > 0 || before[b].awakeningRemaining > 0
-            || clock < (contacts.get(key) ?? 0) || !craftContact(before[a], sa, before[b], sb, track.length)) continue;
+            || clock < (contacts.get(key) ?? 0) || !touching) continue;
           // Separate branches can share progress/altitude while being metres apart in world space.
           if (sa.routeId !== sb.routeId || sa.routeId || sb.routeId) {
             const fa = track.sample(sa.distance, undefined, sa.routeId), fb = track.sample(sb.distance, undefined, sb.routeId);
@@ -374,7 +408,15 @@ export function createRaceSession(track: Track, configuration: DroneConfiguratio
             const pb = fb.position.addScaledVector(fb.right, sb.offset).addScaledVector(fb.up, sb.altitude);
             if (pa.distanceToSquared(pb) > 6 ** 2) continue;
           }
-          participants[a].controller.model.contact(); participants[b].controller.model.contact();
+          if (!contactEpisodes.has(key)) {
+            const id = nextContactId(key); contactGenerations.set(key, (contactGenerations.get(key) ?? 0) + 1);
+            contactEpisodes.set(key, { id, clear: 0 });
+          }
+          const id = contactEpisodes.get(key)!.id;
+          const hit = (other: typeof sa): ParryTarget => ({ id, kind: 'craft', secondsToImpact: 0,
+            worldPosition: parryWorldPosition(track, other.distance, other.offset, other.altitude, other.routeId) });
+          const away = Math.sign(sa.offset - sb.offset) || (a === 0 ? -1 : 1);
+          participants[a].controller.model.contact(id, hit(sb), away); participants[b].controller.model.contact(id, hit(sa), -away);
           contacts.set(key, clock + .7);
         }
       }

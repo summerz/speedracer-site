@@ -111,6 +111,7 @@ export interface Race {
   skipCinematic(): void;
   useFocus(): boolean;
   useAwakening(): boolean;
+  useParry(): boolean;
   useRivalItem(item: RivalItemId): boolean;
   launchSupportMissile(requestId: number): boolean;
   rejectSupportMissile(requestId: number): void;
@@ -190,10 +191,10 @@ export function createRace(
   const coarsePointer = window.matchMedia('(any-pointer: coarse)');
   let storage: Storage | undefined;
   try { storage = window.localStorage; } catch { /* Private browsing can deny storage. */ }
-  const trackId = course ? `${course.id}:v${course.revision}` : `neon-circuit-v1:${difficulty?.id ?? 'beginner'}`;
+  const trackId = course ? `${course.id}:v${course.revision}` : `neon-circuit-v2:${difficulty?.id ?? 'beginner'}`;
   const records = createRaceRecords({ laps: course?.laps, trackId, configurationId: JSON.stringify({ ...(challenge !== 'normal' ? { challenge } : {}), performance: config.performance, altitude: track.altitudeProfile, ...(focusSlots || rivalSlots.length ? { assisted: true } : {}), ...(rivalSlots.includes('support-missile') ? { rivalItems: [...rivalSlots].sort(), focusSlots } : {}), ...(mode === 'competition' ? { mode } : {}) }) }, storage);
   const training = !!guidance.practice || !!guidance.tutorial;
-  const timeAttack = createRaceSession(track, config, records, focusSlots, mode, Math.random, coarsePointer.matches ? 'touch' : 'desktop', { practice: training, drift: !guidance.tutorial, ...(course ? { laps: course.laps, ...(mode === 'time-attack' ? { lapLimit: challengeLapLimit(course, challenge) } : {}) } : {}) }, course?.rating, rivalSlots, challenge);
+  const timeAttack = createRaceSession(track, config, records, focusSlots, mode, Math.random, coarsePointer.matches ? 'touch' : 'desktop', { practice: training, parry: !guidance.tutorial, drift: !guidance.tutorial, ...(course ? { laps: course.laps, ...(mode === 'time-attack' ? { lapLimit: challengeLapLimit(course, challenge) } : {}) } : {}) }, course?.rating, rivalSlots, challenge);
   const rivalVisuals = createRivalVisuals(scene, track, timeAttack.rivals);
   const ghostStorageKey = ghostKey(trackId, challenge);
   const ghost = mode === 'time-attack' && !guidance.tutorial ? loadGhost(storage, ghostStorageKey) : null;
@@ -376,6 +377,10 @@ export function createRace(
     if (timeAttack.phase === 'running' && model.state.recoveries > recoveries) raceAudio.play('recovery');
     cameraSnap = true; notify();
   };
+  const useParry = () => {
+    if (lost || disposed || guidance.tutorial?.snapshot()) return false;
+    const used = timeAttack.useParry(); if (used) notify(); return used;
+  };
   const useAwakening = () => {
     if (lost || disposed || guidance.tutorial?.snapshot() || !timeAttack.useAwakening()) return false;
     clearInput(); raceAudio.activate(); boostPulse.trigger();
@@ -391,7 +396,7 @@ export function createRace(
     views.cycleTrack(); resize(); notify();
   };
   const continueTutorial = () => { if (timeAttack.phase !== 'running') return false; const continued = guidance.tutorial?.continue() ?? false; if (continued) notify(); return continued; };
-  const controlCodes = new Set(['KeyS', 'KeyA', 'KeyD', 'KeyW', 'ArrowDown', 'ArrowUp', 'Space', 'KeyR', 'KeyC', 'KeyX', 'Escape', 'Enter']);
+  const controlCodes = new Set(['KeyE', 'KeyS', 'KeyA', 'KeyD', 'KeyW', 'ArrowDown', 'ArrowUp', 'Space', 'KeyR', 'KeyC', 'KeyX', 'Escape', 'Enter']);
   window.addEventListener('speedracer:pad-action', (event) => {
     if (lost || document.querySelector('dialog[open]')) return;
     const action = (event as CustomEvent<string>).detail;
@@ -401,6 +406,7 @@ export function createRace(
     if (action === 'up' || action === 'down') heightRequests.push({ lift: action === 'up' ? 1 : -1 });
     else if (action === 'cockpit') toggleCockpit();
     else if (action === 'track') cycleTrack();
+    else if (action === 'parry') useParry();
     else if (action === 'focus') window.dispatchEvent(new CustomEvent('speedracer:focus-request'));
   }, listen);
   // Any key, tap or pad button skips a cinematic and is consumed, so it cannot also press the start button.
@@ -426,6 +432,7 @@ export function createRace(
     if (event.code === 'Enter') { if (!event.repeat) continueTutorial(); return; }
     if (!event.repeat && event.code === 'Escape') { togglePause(); return; }
     if (!event.repeat && event.code === 'KeyR') { window.dispatchEvent(new CustomEvent('speedracer:restart-request')); return; }
+    if (event.code === 'KeyE') { if (!event.repeat) useParry(); return; }
     if (event.code === 'KeyW') { if (!event.repeat) useAwakening(); return; }
     if (event.code === 'Space') {
       spaceHeld = true;
@@ -747,7 +754,7 @@ export function createRace(
   return {
     launchSupportMissile(requestId) { if (guidance.tutorial?.snapshot()) return false; const used = timeAttack.launchSupportMissile(requestId); if (used) notify(); return used; },
     rejectSupportMissile(requestId) { timeAttack.rejectSupportMissile(requestId); },
-    start, togglePause, restart, continueTutorial, skipTutorial() { guidance.tutorial?.skip(); notify(); }, skipAllTutorial() { guidance.tutorial?.skipAll(); notify(); }, skipCinematic: endCinematic, useAwakening, useFocus() { if (guidance.tutorial?.snapshot()) return false; const used = timeAttack.useFocus(); if (used) notify(); return used; }, useRivalItem(item) { if (guidance.tutorial?.snapshot()) return false; const used = timeAttack.useRivalItem(item); if (used) notify(); return used; }, recover, toggleCockpit, cycleTrack,
+    start, togglePause, restart, continueTutorial, skipTutorial() { guidance.tutorial?.skip(); notify(); }, skipAllTutorial() { guidance.tutorial?.skipAll(); notify(); }, skipCinematic: endCinematic, useAwakening, useParry, useFocus() { if (guidance.tutorial?.snapshot()) return false; const used = timeAttack.useFocus(); if (used) notify(); return used; }, useRivalItem(item) { if (guidance.tutorial?.snapshot()) return false; const used = timeAttack.useRivalItem(item); if (used) notify(); return used; }, recover, toggleCockpit, cycleTrack,
     setBloom(enabled) { bloom.enabled = enabled; },
     setQuality(preference) { autoQuality.setPreference(preference); },
     onQualityChange(listener) { return autoQuality.onChange(listener); },
