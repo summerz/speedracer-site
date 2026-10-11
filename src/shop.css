@@ -197,3 +197,6 @@
   .shop-comparison-title { margin-top: 8px; }
   .stat-row { min-height: 26px; }
 }
+
+/* Item icons (support missile): sit inline before the item name. */
+.item-icon { display:inline-block; width:24px; height:24px; vertical-align:-6px; margin-right:6px; color:#ff7a4a; flex:none; }
