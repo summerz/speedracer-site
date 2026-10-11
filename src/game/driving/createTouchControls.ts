@@ -1,11 +1,12 @@
 import { createTouchInput } from './touchInput';
+import type { ParrySnapshot } from './parry';
 export type { TouchDrivingInput } from './touchInput';
 
 /** Pointer capture plus window-level termination prevents controls staying held. */
 export function createTouchControls(container: HTMLElement, actions: {
   lift(direction: number): void;
   altitude(): { level: number; count: number }; selectAltitude(level: number): void;
-  interact(): void; releaseBoost(): void;
+  interact(): void; releaseBoost(): void; parry(): boolean;
 }) {
   const media = window.matchMedia('(any-pointer: coarse)');
   const element = document.createElement('nav');
@@ -21,6 +22,7 @@ export function createTouchControls(container: HTMLElement, actions: {
     <div class="touch-flight" aria-label="고도와 부스트">
       <button type="button" class="touch-rise" data-lift="1" aria-label="고도 한 단계 상승">↑</button>
       <button type="button" class="touch-descend" data-lift="-1" aria-label="고도 한 단계 하강">↓</button>
+      <button type="button" class="touch-parry" data-parry hidden aria-label="패링: 충격 직전에 눌러 한 번 막기"><span>패링</span></button>
       <button type="button" class="touch-boost" aria-label="부스트: 누른 채 위로 길게 밀수록 높은 고도, 아래로 길게 밀수록 낮은 고도 선택"><span>BOOST</span><small>누른 채 ↕</small><span class="touch-flight-cursor" aria-hidden="true" hidden></span></button>
     </div>`;
   container.append(element);
@@ -30,6 +32,7 @@ export function createTouchControls(container: HTMLElement, actions: {
   const cursor = element.querySelector<HTMLElement>('.touch-flight-cursor')!;
   const rise = element.querySelector<HTMLButtonElement>('.touch-rise')!;
   const descend = element.querySelector<HTMLButtonElement>('.touch-descend')!;
+  const parryButton = element.querySelector<HTMLButtonElement>('.touch-parry')!;
   const buttons = [...element.querySelectorAll<HTMLButtonElement>('button')];
   const input = createTouchInput();
   const captures = new Map<number, HTMLButtonElement>();
@@ -95,6 +98,7 @@ export function createTouchControls(container: HTMLElement, actions: {
     button.addEventListener('pointerdown', event => {
       if (!running || !media.matches || event.button !== 0) return;
       event.preventDefault(); actions.interact();
+      if (button === parryButton) { if (!parryButton.classList.contains('is-cooldown')) actions.parry(); return; }
       if (button.dataset.lift) {
         if (!input.read(true).boost) actions.lift(Number(button.dataset.lift));
         return;
@@ -125,13 +129,30 @@ export function createTouchControls(container: HTMLElement, actions: {
   const refresh = () => {
     element.hidden = !media.matches || !running;
     container.classList.toggle('has-touch-controls', media.matches);
-    buttons.forEach(button => { button.disabled = !running; });
+    buttons.forEach(button => { if (button !== parryButton) button.disabled = !running; });
+    if (!running) parryButton.hidden = true;
     if (!media.matches) reset();
   };
   media.addEventListener('change', refresh, listen); refresh();
   return {
     read: () => input.read(media.matches && running),
     setRunning(value: boolean) { running = value; if (!running) reset(); refresh(); },
+    /** Paints the parry button from the logic snapshot; touches classes and a CSS variable only when they change. */
+    setParry(parry: ParrySnapshot | undefined, usableNow: boolean) {
+      const show = running && !!parry?.enabled;
+      if (parryButton.hidden === show) parryButton.hidden = !show;
+      if (!show || !parry) return;
+      const cooling = parry.phase === 'cooldown', guarding = parry.phase === 'window';
+      const warning = parry.phase === 'ready' && !!parry.target && usableNow;
+      const sweep = cooling ? Math.min(1, Math.max(0, parry.cooldownRemaining / 3)) : 0;
+      const angle = `${(Math.round(sweep * 360 / 4) * 4) % 361}deg`;
+      if (parryButton.style.getPropertyValue('--cd') !== angle) parryButton.style.setProperty('--cd', angle);
+      for (const [name, on] of [['is-cooldown', cooling], ['is-window', guarding], ['is-warning', warning], ['is-ready', !cooling && !guarding && !warning]] as const) {
+        if (parryButton.classList.contains(name) !== on) parryButton.classList.toggle(name, on);
+      }
+      const label = cooling ? 'true' : 'false';
+      if (parryButton.getAttribute('aria-disabled') !== label) parryButton.setAttribute('aria-disabled', label);
+    },
     reset,
     dispose() { reset(); events.abort(); element.remove(); container.classList.remove('has-touch-controls'); },
   };

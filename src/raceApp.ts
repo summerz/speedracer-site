@@ -76,10 +76,10 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
       </header>
       <button type="button" id="race-pause" class="race-pause" aria-label="일시정지 메뉴" aria-keyshortcuts="Escape" aria-controls="drive-overlay" aria-expanded="false"><span aria-hidden="true">Ⅱ</span><kbd class="key-badge">Esc</kbd></button>
       <div class="driving-overlay"><div id="race-announcement" class="race-announcement" role="status" aria-live="polite" hidden><strong></strong><span></span><em id="race-clean" hidden>클린 +${CLEAN_HALF_LAP_POINTS}P</em></div><p id="race-callout" class="race-callout" role="status" hidden></p><p id="race-nearmiss" class="race-nearmiss" aria-hidden="true" hidden>NEAR MISS</p><p id="race-streak" class="race-streak" aria-hidden="true" hidden></p><section id="race-fork3" class="fork-cue" role="status" aria-label="갈림길 안내" hidden></section><p id="race-jump" class="jump-cue" role="status" hidden><b class="jump-badge">JUMP</b><span class="jump-text"></span><i class="jump-distance mono"></i></p><p id="race-notice" class="race-notice" role="status" aria-live="polite"></p><div id="race-countdown" class="race-countdown" role="status" aria-live="assertive" hidden><span>READY</span><strong>3</strong></div>
-      <div class="race-items"><button id="race-focus" type="button" class="race-focus" aria-keyshortcuts="V" hidden>집중 모드<kbd class="key-badge">V</kbd></button>${RIVAL_ITEMS.map(item => `<button type="button" id="race-${item.id}" class="race-focus" data-use-item="${item.id}" hidden>${item.name}</button>`).join('')}</div><p id="focus-feedback" class="focus-feedback" role="status" aria-live="polite"></p><p id="missile-chip" class="missile-chip" role="status" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 20l5-1 9-9 2-6-6 2-9 9z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="17" cy="7" r="1.3" fill="currentColor"/></svg><span></span></p><footer class="drive-hud" aria-label="고도와 부스트 계기판">
+      <div class="race-items"><button id="race-focus" type="button" class="race-focus" aria-keyshortcuts="V" hidden>집중 모드<kbd class="key-badge">V</kbd></button>${RIVAL_ITEMS.map(item => `<button type="button" id="race-${item.id}" class="race-focus" data-use-item="${item.id}" hidden>${item.name}</button>`).join('')}</div><p id="focus-feedback" class="focus-feedback" role="status" aria-live="polite"></p><p id="parry-callout" class="focus-feedback parry-callout" role="status" aria-live="polite" hidden>패링!</p><p id="missile-chip" class="missile-chip" role="status" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 20l5-1 9-9 2-6-6 2-9 9z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="17" cy="7" r="1.3" fill="currentColor"/></svg><span></span></p><footer class="drive-hud" aria-label="고도와 부스트 계기판">
         <aside class="height-guide" aria-label="고도 안내: 선택 단계, 민트색 통과 가능, 빨강 통과 불가, 주황 전환 중"><div id="height-level" class="height-bars"></div><strong id="height-instruction"></strong></aside>
         <div class="drive-controls">
-        <div class="boost-readout"><div class="hud-pair"><span class="boost-icon" role="img" aria-label="부스트">${BOOST_ICON}</span><span id="boost-value" class="mono">100%</span></div><div id="boost-meter" class="boost-meter" role="progressbar" aria-label="부스트 잔량 (50%씩 3칸, 최대 150%)" aria-valuemin="0" aria-valuemax="150" aria-valuenow="100"><span></span></div><div id="boost-stage-meter" class="boost-stage-meter" role="progressbar" aria-label="부스트 2단계 축적" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span></span></div><span id="boost-status">Space 유지 · 3초 후 2단계</span><div id="drift-hud" class="drift-hud mono" hidden><span class="drift-pips" aria-hidden="true"><i></i><i></i><i></i></span><span id="drift-label" class="drift-label" aria-hidden="true"></span><span id="drift-end" class="drift-end" aria-live="polite"></span></div></div>
+        <div class="boost-readout"><div class="hud-pair"><span class="boost-icon" role="img" aria-label="부스트">${BOOST_ICON}</span><span id="boost-value" class="mono">100%</span></div><div id="boost-meter" class="boost-meter" role="progressbar" aria-label="부스트 잔량 (50%씩 3칸, 최대 150%)" aria-valuemin="0" aria-valuemax="150" aria-valuenow="100"><span></span></div><div id="boost-stage-meter" class="boost-stage-meter" role="progressbar" aria-label="부스트 2단계 축적" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span></span></div><span id="boost-status">Space 유지 · 3초 후 2단계</span><span id="parry-hint" class="parry-hint mono" hidden aria-hidden="true"><kbd>E</kbd> 패링<b>!</b></span><div id="drift-hud" class="drift-hud mono" hidden><span class="drift-pips" aria-hidden="true"><i></i><i></i><i></i></span><span id="drift-label" class="drift-label" aria-hidden="true"></span><span id="drift-end" class="drift-end" aria-live="polite"></span></div></div>
         <div class="awakening-control" hidden><button id="race-awakening" class="awakening-cores" type="button" aria-label="각성 사용" aria-keyshortcuts="W" disabled><span data-awakening-active hidden>${AWAKENING_ICON}</span>${Array.from({ length: AWAKENING_CAPACITY }, () => `<span data-awakening-core hidden>${CORE_ICON}</span>`).join('')}<span class="awakening-duration" aria-hidden="true" hidden><i></i></span></button><kbd class="key-badge">W</kbd></div>
         </div><p id="race-fork" class="fork-guide" hidden></p></footer></div>
       <section id="drive-overlay" class="drive-overlay" aria-labelledby="drive-overlay-title">
@@ -218,7 +218,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
   let lastPhase = '';
   let introPending = true; let cinematicKind = ''; let shotKey = ''; let cinematicEndedAt = 0;
   let rewardInput: RewardInput | undefined; let rewardPending = false; let focusPending = false; let canFocus = false; let activeRaceId = '';
-  let screenDisposed = false; let focusSerial = 0; let focusMessageUntil = 0; let lastMissileHit = -1;
+  let screenDisposed = false; let focusSerial = 0; let focusMessageUntil = 0; let lastMissileHit = -1; let lastParrySuccess = -1; let parryCalloutUntil = 0;
   const saveReward = async () => {
     if (!store || !rewardInput || rewardPending) return;
     const input = rewardInput; rewardPending = true; get('reward-retry').hidden = true;
@@ -378,6 +378,17 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
         lastMissileHit = missile.hitEventId;
       }
     } else lastMissileHit = -1;
+    const parry = state.parry, hint = get('parry-hint'), parryOn = !!parry?.enabled && state.phase === 'running';
+    if (hint.hidden === parryOn) hint.hidden = !parryOn;
+    if (parryOn) {
+      const phase = parry.phase === 'ready' && parry.target ? 'warning' : parry.phase;
+      if (hint.dataset.phase !== phase) hint.dataset.phase = phase;
+    }
+    if (parry && parry.successEventId !== lastParrySuccess) {
+      if (lastParrySuccess >= 0 && parry.successEventId > lastParrySuccess) parryCalloutUntil = performance.now() + 900;
+      lastParrySuccess = parry.successEventId;
+    } else if (!parry?.enabled) lastParrySuccess = -1;
+    get('parry-callout').hidden = !parryOn || performance.now() >= parryCalloutUntil;
     let slot = 0; for (const button of screen.querySelectorAll<HTMLButtonElement>('.race-items .race-focus')) if (!button.hidden) button.style.setProperty('--slot', String(slot++));
     get('focus-feedback').hidden = !focusPending && performance.now() >= focusMessageUntil;
     screen.classList.toggle('is-focused', attack.focusRemaining > 0 && state.phase === 'running');

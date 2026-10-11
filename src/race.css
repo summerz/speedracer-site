@@ -611,3 +611,26 @@ button:focus-visible { outline:2px solid #c9f9f2; outline-offset:3px; }
 .driving-overlay.is-inset .missile-chip svg { width:11px; height:11px; }
 @media (max-width:760px) { .missile-chip { right:16px; top:calc(36% - 34px); font-size:11px; } }
 @media (prefers-reduced-motion:reduce) { .missile-chip.is-hit { animation:none; } }
+/* Parry button: right-hand arc above-left of BOOST (clear of the joystick, altitude arrows, awakening core and focus slots). */
+.touch-flight .touch-parry { --a:100deg; --pr:186px; width:56px; height:56px; border-radius:50%; left:calc(60px + cos(var(--a)) * var(--pr) - 28px); top:calc(60px - sin(var(--a)) * var(--pr) - 28px); font:700 13px/1 -apple-system,'Pretendard',sans-serif; letter-spacing:0; border-color:#bff8ff; color:#e9fdff; box-shadow:0 0 16px #bff8ff55, inset 0 0 10px #bff8ff2a; overflow:hidden; transition:opacity .15s,filter .15s; }
+.touch-parry[hidden] { display:none; }
+.touch-parry span { position:relative; z-index:2; }
+.touch-parry::before { content:""; position:absolute; inset:0; z-index:1; border-radius:50%; opacity:0; pointer-events:none; }
+.touch-parry.is-window { background:#bff8ff; color:#04202a; box-shadow:0 0 24px #bff8ff, inset 0 0 14px #ffffffaa; }
+.touch-parry.is-warning { border-color:#ffb347; color:#fff3dc; background:#3a2608cc; box-shadow:0 0 22px #ffb347cc, inset 0 0 12px #ffb34755; animation:parry-pulse .32s ease-in-out infinite alternate; }
+.touch-parry.is-cooldown { opacity:.7; border-color:#7a9aa0aa; color:#9db4ba; box-shadow:none; }
+.touch-parry.is-cooldown::before { opacity:1; background:conic-gradient(#0a1c26f2 var(--cd,0deg),#bff8ff44 0); }
+@keyframes parry-pulse { from { transform:scale(1); } to { transform:scale(1.12); } }
+@media (prefers-reduced-motion:reduce) { .touch-parry.is-warning { animation:none; outline:3px solid #ffb347; outline-offset:-3px; } }
+.parry-hint { display:inline-flex; align-items:center; gap:5px; margin-top:6px; font-size:10px; color:#bff8ff; white-space:nowrap; }
+.parry-hint[hidden] { display:none; }
+.parry-hint kbd { padding:0 4px; border:1px solid #bff8ff99; border-radius:3px; font:inherit; }
+.parry-hint b { display:none; color:#ffb347; }
+.parry-hint[data-phase='cooldown'],.parry-hint[data-phase='window'] { opacity:.45; }
+.parry-hint[data-phase='window'] { opacity:1; color:#fff; }
+.parry-hint[data-phase='warning'] { color:#ffe2b0; } .parry-hint[data-phase='warning'] b { display:inline; }
+.has-touch-controls .parry-hint { display:none; }
+.focus-feedback.parry-callout { top:calc(34% - 24px); color:#bff8ff; font:700 18px 'IBM Plex Mono',monospace; letter-spacing:1px; text-shadow:0 0 12px #6fe8ffcc,0 2px 8px #000; animation:parry-callout .9s ease-out both; }
+.focus-feedback.parry-callout[hidden] { display:none; }
+@keyframes parry-callout { 0% { transform:translateX(-50%) scale(1.5); opacity:0; } 18% { transform:translateX(-50%) scale(1); opacity:1; } 80% { opacity:1; } 100% { transform:translateX(-50%) scale(1); opacity:0; } }
+@media (prefers-reduced-motion:reduce) { .focus-feedback.parry-callout { animation:none; } }
