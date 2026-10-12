@@ -20,9 +20,18 @@
 | Unity | **1순위** | 모바일 3D에서 가장 검증됨. iOS/Android 동시 빌드, Metal 직접 호출, ASTC, Adaptive Performance(열 상태 API), LOD·오클루전, 프로파일러, IAP·Game Center SDK. 런타임 요금은 2024년 9월 철회. |
 | Godot 4 | 2순위 | 오픈소스. Unity가 싫을 때 대안. 모바일 3D 렌더러와 생태계가 아직 얇다. |
 | Capacitor | 제외 | 기존 빌드 그대로 가장 빠르게 심사에 올릴 수 있으나 사용자가 사용성 문제로 제외. |
-| React Native + expo-gl | 제외 | 3D 레이싱에 성능·안정성 부족. |
+| React Native + expo-gl | 제외 | 코드 재사용률은 가장 높지만 주행 UX·발열이 개선되지 않음. 아래 참고. |
 | Flutter | 제외 | 3D 사실상 없음. |
 | SwiftUI + RealityKit | 제외 | 네이티브 UX는 최고지만 iOS 전용, 게임 툴링 약함. |
+
+React Native + `expo-gl`(+ `expo-three`)를 제외한 이유. `expo-gl`은 네이티브 GL 컨텍스트를 WebGL 모양의 API로 JS에 노출하므로 Three.js 레이스 코드를 거의 그대로 가져가고, 메뉴·격납고·상점만 네이티브 뷰로 다시 짜면 된다. 햅틱·IAP·앱 복귀는 Expo 모듈로 붙는다. 그러나:
+
+- 렌더링 경로가 같다. iOS에서 JS → GL 호출 → ANGLE → Metal이라 브라우저 WebGL과 본질이 같고, 드로우콜마다 JS가 호출하는 오버헤드도 그대로다.
+- 물리·NPC 루프는 오히려 느려질 수 있다. React Native 기본 엔진 Hermes는 JIT 없는 바이트코드 인터프리터라 Safari JIT보다 수치 계산이 느리다.
+- 열 상태 API, ASTC, LOD·오클루전, 프레임 페이싱 같은 엔진 도구가 없다. 발열은 지금과 같거나 나쁘다.
+- `expo-three`는 8.0.0 이후 활동이 뜸하고 열린 이슈가 100개 넘는다. README가 시뮬레이터 비지원과 Metro 번들러 우회법을 명시한다. `@react-three/native`도 내부는 같은 `expo-gl`이다.
+
+"메뉴를 네이티브 느낌으로, 레이스는 지금 수준 유지, 코드 최대 재사용"이 목표라면 Capacitor보다 나은 길이다. 이 문서의 목표인 주행감·프레임·발열 개선에는 엔진 전환이 필요하다.
 
 ### 플랫폼 범위
 
