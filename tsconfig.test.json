@@ -8,6 +8,8 @@
   },
   "include": [
     "src/platform/analytics.ts",
+    "src/game/driving/itemSlots.ts",
+    "src/game/progression/startItemUse.ts",
     "src/game/driving/drivingTutorial.ts",
     "src/game/driving/scriptedTutorial.ts",
     "src/game/driving/tutorialProgress.ts",

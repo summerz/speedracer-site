@@ -1,3 +1,5 @@
+import { validItemLoadout } from '../progression/itemLoadout.js';
+import { boostItemBonus, speedItemBonus, isStartItem, isAutomaticItem, itemAllowedInMode } from '../progression/catalog.js';
 import { PARRY_TUNING, type ParryTarget } from './parry.js';
 import { parryWorldPosition, predictCraftParryThreat } from './parryThreat.js';
 import { createSupportMissile } from './supportMissile.js';
@@ -28,7 +30,7 @@ import type { RivalItemId } from '../progression/catalog.js';
 /** Rival upgrade level by device and challenge; weakest-rated rivals sit one level lower. */
 const RIVAL_LEVELS = { desktop: { easy: 1, normal: 2, hard: 3 }, touch: { easy: 0, normal: 1, hard: 2 } } as const;
 /** Top-3 rated rivals chase a leader more than 80 m ahead, fading out within 30 m. */
-const CATCH_UP = { desktop: .03, touch: .03 } as const;
+const CATCH_UP = { desktop: .015, touch: .015 } as const;
 export type RaceMode = 'time-attack' | 'competition';
 export interface Standing {
   id: string; name: string; color: string; player: boolean;
@@ -196,9 +198,9 @@ export function aiDrivingInput(track: Track, configuration: DroneConfiguration, 
 export function createRaceSession(track: Track, configuration: DroneConfiguration,
   records: ReturnType<typeof createRaceRecords>, focusSlots = 0, mode: RaceMode = 'time-attack',
   random: () => number = Math.random, controlMode: AiControlMode = 'desktop', rules: RaceRules = {}, rating?: number, rivalSlots: readonly RivalItemId[] = [], challenge: RaceChallengeId = 'normal') {
-  if (rivalSlots.length && mode !== 'competition' || rivalSlots.length + focusSlots > 2 || !rivalSlots.every(isRivalItem) || rivalSlots.filter(id => id === 'support-missile').length > 1) throw new Error('Invalid race item loadout');
-  let missile = rivalSlots.includes('support-missile') ? createSupportMissile() : null;
-  let itemCooldown = 0;
+  if (!rivalSlots.every(isRivalItem) || rivalSlots.some(id => !itemAllowedInMode(id, mode)) || !validItemLoadout(focusSlots, rivalSlots)) throw new Error('Invalid race item loadout');
+  let missile = rivalSlots.includes('support-missile') ? createSupportMissile(rivalSlots.filter(id => id === 'support-missile').length) : null;
+  let itemCooldown = 0, headStartRemaining = 0, boostBonus = 0, speedBonus = 0;
   const itemUsed: RivalItemId[] = [];
   const player = createTimeAttack(track, configuration.performance, records, focusSlots, rules);
   const craft = DRONE_CATALOG.find(c => c.configuration.modelVariant === configuration.modelVariant);
@@ -216,7 +218,7 @@ export function createRaceSession(track: Track, configuration: DroneConfiguratio
     const level = Math.max(0, Math.min(MAX_UPGRADE_LEVEL, RIVAL_LEVELS[controlMode][challenge] - (racer.rating <= 2 ? 1 : 0)));
     const speed = challenge === 'hard' ? controlMode === 'touch' ? 1.015 : 1.03 : 1;
     const upgraded = resolveDroneConfiguration(applyUpgrades(entry.configuration, { engine: level, brakes: level, steering: level, stabilizer: level, battery: level }),
-      [{ performanceMultiplier: { topSpeed: speed, boostSpeed: speed, boostStage2Speed: speed } }]);
+      [{ performanceMultiplier: { topSpeed: speed, acceleration: .94, boostSpeed: speed * .97, boostStage2Speed: speed * .97 } }]);
     const rivalConfiguration = { ...upgraded, boostStyle: {
       core: '#ffffff', body: color, tail: color, afterglow: color, pulseColor: color,
     } };
@@ -237,7 +239,8 @@ export function createRaceSession(track: Track, configuration: DroneConfiguratio
   const nextContactId = (key: string) => `craft:${key}:${(contactGenerations.get(key) ?? 0) + 1}`;
   let clock = 0;
   const grid = () => {
-    contacts.clear(); contactEpisodes.clear(); contactGenerations.clear(); missile = rivalSlots.includes('support-missile') ? createSupportMissile() : null; clock = 0; track.obstacleTime = 0; itemCooldown = 0; itemUsed.length = 0;
+    contacts.clear(); contactEpisodes.clear(); contactGenerations.clear(); missile = rivalSlots.includes('support-missile') ? createSupportMissile(rivalSlots.filter(id => id === 'support-missile').length) : null; clock = 0; track.obstacleTime = 0; itemCooldown = 0; itemUsed.length = 0;
+    headStartRemaining = 0; boostBonus = 0; speedBonus = 0; player.model.setSpeedBonuses(0, 0);
     rivals.forEach((rival, index) => {
       rival.finishCoast = null;
       rival.effects.freeze = 0; rival.effects.jam = 0;
@@ -257,7 +260,7 @@ export function createRaceSession(track: Track, configuration: DroneConfiguratio
     return { standings, playerRank: standings.find(p => p.player)!.rank, complete: standings.every(p => p.finishTime !== null) };
   };
   const targets = (item: RivalItemId) => {
-    if (item === 'support-missile') return [];
+    if (isAutomaticItem(item)) return [];
     const active = rivals.filter(rival => rival.controller.phase === 'running');
     if (item === 'time-stop') return active;
     const distance = player.model.state.distance;
@@ -265,7 +268,7 @@ export function createRaceSession(track: Track, configuration: DroneConfiguratio
       .sort((a, b) => a.controller.model.state.distance - b.controller.model.state.distance).slice(0, 2);
   };
   const itemRemaining = (item: RivalItemId) => rivalSlots.filter(id => id === item).length - itemUsed.filter(id => id === item).length;
-  const canUseRivalItem = (item: RivalItemId) => item !== 'support-missile' && player.phase === 'running' && itemCooldown <= 1e-8 && itemRemaining(item) > 0 && targets(item).length > 0;
+  const canUseRivalItem = (item: RivalItemId) => !isAutomaticItem(item) && player.phase === 'running' && itemCooldown <= 1e-8 && itemRemaining(item) > 0 && targets(item).length > 0;
   const missilePose = (id: string, controller: typeof player): MissileRacer => {
     const state = controller.model.state, frame = track.sample(state.distance, undefined, state.routeId);
     const point = frame.position.clone().addScaledVector(frame.right, state.offset).addScaledVector(frame.up, state.altitude);
@@ -281,9 +284,9 @@ export function createRaceSession(track: Track, configuration: DroneConfiguratio
     model: player.model, rivals, controlMode,
     get phase() { return player.phase; },
     snapshot() { const snapshot = player.snapshot(), supportMissile = missileSnapshot(); return { ...snapshot, mode, competition: competition(),
-      supportMissile, assisted: snapshot.assisted || rivalSlots.length > 0, canFocus: snapshot.canFocus && itemCooldown <= 1e-8, itemCooldown,
+      supportMissile, headStartRemaining, boostBonus, speedBonus, assisted: snapshot.assisted || rivalSlots.length > 0, canFocus: snapshot.canFocus && itemCooldown <= 1e-8, itemCooldown,
       items: RIVAL_ITEMS.map(item => ({ id: item.id, remaining: itemRemaining(item.id), canUse: canUseRivalItem(item.id),
-        active: item.id === 'support-missile' ? supportMissile?.stopRemaining ?? 0 : Math.max(0, ...rivals.map(rival => item.id === 'time-stop' ? rival.effects.freeze : rival.effects.jam)),
+        active: speedItemBonus(item.id) > 0 ? (speedBonus === speedItemBonus(item.id) ? 1 : 0) : item.id === 'head-start' ? headStartRemaining : boostItemBonus(item.id) > 0 ? (boostBonus === boostItemBonus(item.id) ? 1 : 0) : item.id === 'support-missile' ? supportMissile?.stopRemaining ?? 0 : Math.max(0, ...rivals.map(rival => item.id === 'time-stop' ? rival.effects.freeze : rival.effects.jam)),
         targets: targets(item.id).map(rival => rival.name) })) }; },
     start() {
       const fresh = player.phase === 'ready' || player.phase === 'finished';
@@ -307,17 +310,32 @@ export function createRaceSession(track: Track, configuration: DroneConfiguratio
       rivals.forEach(p => p.controller.useFocus()); return true;
     },
     launchSupportMissile(requestId: number) {
-      if (!missile || player.phase !== 'running' || itemRemaining('support-missile') < 1) return false;
+      if (!missile || player.phase !== 'running' || player.snapshot().completedLaps < 1 || itemRemaining('support-missile') < 1) return false;
       const poses = missilePoses();
       if (!missile.launch(requestId, poses.player, poses.rivals, itemCooldown)) return false;
       itemUsed.push('support-missile'); itemCooldown = 3; return true;
     },
     rejectSupportMissile(requestId: number) { missile?.reject(requestId); },
     useRivalItem(item: RivalItemId) {
+      if (isStartItem(item)) {
+        if (player.phase !== 'countdown' || itemRemaining(item) < 1 || itemUsed.includes(item)) return false;
+        if (item === 'head-start') headStartRemaining = 5;
+        else if (speedItemBonus(item) > 0) {
+          const best = Math.max(0, ...rivalSlots.map(speedItemBonus));
+          if (speedBonus > 0 || speedItemBonus(item) !== best) return false;
+          speedBonus = best;
+        } else {
+          const best = Math.max(0, ...rivalSlots.map(boostItemBonus));
+          if (boostBonus > 0 || boostItemBonus(item) !== best) return false;
+          boostBonus = best;
+        }
+        player.model.setSpeedBonuses(speedBonus, boostBonus);
+        itemUsed.push(item); return true;
+      }
       if (!isRivalItem(item) || !canUseRivalItem(item)) return false;
       const affected = targets(item);
       for (const rival of affected) {
-        if (item === 'time-stop') rival.effects.freeze = 1;
+        if (item === 'time-stop') rival.effects.freeze = 3;
         else rival.effects.jam = 3;
       }
       itemUsed.push(item); itemCooldown = 3; return true;
@@ -339,15 +357,15 @@ export function createRaceSession(track: Track, configuration: DroneConfiguratio
       // Small shared substeps keep contact decisions stable across rendering frame rates.
       let remaining = dt; let firstStep = true;
       while (remaining > 1e-8) {
-        const stoppedBefore = new Set(rivals.filter(r => missile?.stopped(r.id)).map(r => r.id));
-        const boundaries = [missile?.boundary() ?? Infinity, ...rivals.flatMap(rival => [rival.effects.freeze, rival.effects.jam]).filter(time => time > 1e-8)];
+        const stoppedBefore = new Set(rivals.filter(r => headStartRemaining > 1e-8 || missile?.stopped(r.id)).map(r => r.id));
+        const boundaries = [headStartRemaining > 1e-8 ? headStartRemaining : Infinity, missile?.boundary() ?? Infinity, ...rivals.flatMap(rival => [rival.effects.freeze, rival.effects.jam]).filter(time => time > 1e-8)];
         const step = Math.min(remaining, 1 / 120, ...boundaries); remaining -= step;
         const before = participants.map(p => ({ ...p.controller.model.state }));
         const active = participants.map(p => p.controller.phase === 'running');
         let craftThreat: ParryTarget | null = null;
         if (player.phase === 'running' && player.model.state.awakeningRemaining <= 0) {
           rivals.forEach((rival, i) => {
-            if (rival.controller.phase !== 'running' || rival.effects.freeze > 0 || missile?.stopped(rival.id)
+            if (rival.controller.phase !== 'running' || rival.effects.freeze > 0 || stoppedBefore.has(rival.id)
               || rival.controller.model.state.awakeningRemaining > 0 || contactEpisodes.has(`0:${i + 1}`)) return;
             const key = `0:${i + 1}`;
             const candidate = predictCraftParryThreat(track, player.model.state, rival.controller.model.state,
@@ -373,10 +391,11 @@ export function createRaceSession(track: Track, configuration: DroneConfiguratio
               rival.controller.snapshot().finishSpeed, index, track.length);
           } else rival.finishCoast.step(step);
         });
+        if (active[0]) headStartRemaining = Math.max(0, headStartRemaining - step);
         clock += Math.max(0, ...participants.map((p, i) => p.controller.model.state.elapsed - before[i].elapsed));
         track.obstacleTime = clock;
         if (player.phase === 'running') itemCooldown = Math.max(0, itemCooldown - step);
-        if (missile) { const poses = missilePoses(); missile.step(step, poses.player, poses.rivals); }
+        if (missile) { const poses = missilePoses(); missile.step(step, poses.player, poses.rivals, player.snapshot().completedLaps >= 1); }
         for (let a = 0; a < participants.length; a++) for (let b = a + 1; b < participants.length; b++) {
           if (!active[a] || !active[b] || participants[a].controller.phase !== 'running' || participants[b].controller.phase !== 'running') continue;
           if (stoppedBefore.has(participants[a].id) || stoppedBefore.has(participants[b].id)

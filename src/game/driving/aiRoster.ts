@@ -90,11 +90,11 @@ export function aiDrivingProfile(racer: AiRacer, controlMode: AiControlMode): Ai
   }[racer.style];
   const touch = controlMode === 'touch';
   return {
-    // Ease the field through cautious decisions, preserving each racer's identity and craft physics.
-    pace: (.82 + skill * .18) * style.pace * .95 * (touch ? .95 : 1),
-    cornerLimit: (.5 + skill * .2 + style.corner + (racer.rating >= 5 ? touch ? .06 : .12 : 0)) * .92 * (touch ? .93 : 1),
-    boostStartCharge: style.charge + (1 - skill) * .12 + .07 + (touch ? .05 : 0),
-    boostEndCharge: style.end + .03,
-    boostCurvature: racer.style === 'straight' ? .0025 : .003,
+    // Ease the field through cautious decisions, preserving each racer's driving style.
+    pace: (.82 + skill * .18) * style.pace * .92 * (touch ? .95 : 1),
+    cornerLimit: (.5 + skill * .2 + style.corner + (racer.rating >= 5 ? touch ? .06 : .12 : 0)) * .87 * (touch ? .93 : 1),
+    boostStartCharge: style.charge + (1 - skill) * .12 + .12 + (touch ? .05 : 0),
+    boostEndCharge: style.end + .08,
+    boostCurvature: racer.style === 'straight' ? .0022 : .0026,
   };
 }

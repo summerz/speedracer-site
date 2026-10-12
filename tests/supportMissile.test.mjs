@@ -68,7 +68,7 @@ test('pending launch is revalidated if target finishes, changes route, falls beh
   }
 });
 
-test('0.4 second homing flight exposes copied world positions, then exactly 2 seconds of stop and one retained hit ID', () => {
+test('0.4 second homing flight exposes copied world positions, then exactly 5 seconds of stop and one retained hit ID', () => {
   const m = createSupportMissile(); launch(m);
   m.step(.2, player, [pose('target', 113)]);
   const s = m.snapshot(player, [pose('target', 113)], 0);
@@ -76,9 +76,9 @@ test('0.4 second homing flight exposes copied world positions, then exactly 2 se
   s.position.z = -1; assert.notEqual(m.snapshot(player, [], 0).position.z, -1);
   m.step(.2, player, [pose('target', 123, { routeId: 'new-fork' })]);
   const hit = m.snapshot(player, [], 0);
-  assert.equal(hit.phase, 'hit'); assert.equal(hit.hitEventId, 1); approx(hit.stopRemaining, 2);
+  assert.equal(hit.phase, 'hit'); assert.equal(hit.hitEventId, 1); approx(hit.stopRemaining, 5);
   assert.equal(hit.position.z, 123); assert.equal(m.stopped('target'), true);
-  m.step(1.999, player, []); assert.equal(m.stopped('target'), true);
+  m.step(4.999, player, []); assert.equal(m.stopped('target'), true);
   m.step(.001, player, []); assert.equal(m.stopped('target'), false);
   assert.equal(m.snapshot(player, [], 0).phase, 'spent');
   assert.equal(m.snapshot(player, [], 0).hitEventId, 1);
@@ -103,11 +103,17 @@ const session = (challenge = 'normal', mode = 'desktop', slots = ['support-missi
   const race = createRaceSession(straight(), config, createRaceRecords({ trackId: 'missile', configurationId: 'test' }), focus,
     'competition', () => .999, mode, {}, undefined, slots, challenge);
   race.start(); advance(race, 3);
-  race.model.state.distance = 100; race.model.state.offset = 0; race.model.state.speed = 0;
-  race.rivals.forEach((r, i) => { Object.assign(r.controller.model.state, { distance: 300 + i * 100, offset: 8, speed: 0, altitude: race.model.state.altitude }); });
+  // Cross every ordered checkpoint to enter lap two before arranging the overtake.
+  for (let d = 25; d <= 5000; d += 25) {
+    race.model.state.distance = d - .1; race.model.state.speed = 50;
+    race.step(1 / 120, { ...input, brake: false, throttle: true });
+  }
+  assert.equal(race.snapshot().completedLaps, 1);
+  race.model.state.distance = 5100; race.model.state.offset = 0; race.model.state.speed = 0;
+  race.rivals.forEach((r, i) => { Object.assign(r.controller.model.state, { distance: 5300 + i * 100, offset: 8, speed: 0, altitude: race.model.state.altitude }); });
   const target = race.rivals[0];
-  Object.assign(target.controller.model.state, { distance: 96, offset: 4 }); race.step(1 / 120, input);
-  target.controller.model.state.distance = 103; race.step(1 / 120, input);
+  Object.assign(target.controller.model.state, { distance: 5096, offset: 4 }); race.step(1 / 120, input);
+  target.controller.model.state.distance = 5103; race.step(1 / 120, input);
   assert.equal(race.snapshot().supportMissile.canLaunch, true);
   return { race, target, requestId: race.snapshot().supportMissile.requestId };
 };
@@ -118,11 +124,11 @@ for (const challenge of ['easy', 'normal', 'hard']) for (const controlMode of ['
     assert.equal(race.useRivalItem('support-missile'), false);
     assert.equal(race.launchSupportMissile(requestId), true);
     advance(race, .3); assert.equal(race.snapshot().supportMissile.phase, 'flying');
-    advance(race, .1); approx(race.snapshot().supportMissile.stopRemaining, 2);
+    advance(race, .1); approx(race.snapshot().supportMissile.stopRemaining, 5);
     const frozen = { ...target.controller.model.state };
-    advance(race, 1.9);
+    advance(race, 4.9);
     for (const key of ['distance', 'offset', 'altitude', 'speed', 'charge']) assert.equal(target.controller.model.state[key], frozen[key]);
-    approx(target.controller.model.state.elapsed - frozen.elapsed, 1.9);
+    approx(target.controller.model.state.elapsed - frozen.elapsed, 4.9);
     assert.equal(race.snapshot().competition.standings.find(s => s.id === target.id).effect, 'support-missile');
     advance(race, .1); approx(race.snapshot().supportMissile.stopRemaining, 0);
     advance(race, .1); assert.ok(target.controller.model.state.distance > frozen.distance);
@@ -160,13 +166,13 @@ test('focus shares the cooldown; overlapping time-stop timers are not added', ()
   advance(race, 3);
   if (race.snapshot().supportMissile.canLaunch) {
     assert.equal(race.launchSupportMissile(requestId), true);
-    advance(race, .4); approx(race.snapshot().supportMissile.stopRemaining, 2);
+    advance(race, .4); approx(race.snapshot().supportMissile.stopRemaining, 5);
   } else assert.fail('nearby overtaker should remain eligible through focus cooldown');
   const other = session('normal', 'desktop', ['support-missile', 'time-stop']);
   other.race.launchSupportMissile(other.requestId); advance(other.race, .4);
   other.target.effects.freeze = 1;
   const d = other.target.controller.model.state.distance;
-  advance(other.race, 2); approx(other.race.snapshot().supportMissile.stopRemaining, 0);
+  advance(other.race, 5); approx(other.race.snapshot().supportMissile.stopRemaining, 0);
   advance(other.race, .1); assert.ok(other.target.controller.model.state.distance > d);
 });
 
@@ -176,7 +182,7 @@ test('flight, stop expiry and resumption are stable at 30/60/120fps', () => {
     race.launchSupportMissile(requestId);
     advance(race, .4, fps);
     const hitDistance = target.controller.model.state.distance;
-    advance(race, 2, fps);
+    advance(race, 5, fps);
     assert.equal(target.controller.model.state.distance, hitDistance);
     assert.equal(race.snapshot().supportMissile.phase, 'spent');
     advance(race, .2, fps);
@@ -187,14 +193,14 @@ test('flight, stop expiry and resumption are stable at 30/60/120fps', () => {
   }
 });
 
-test('missile costs 100P, accepts complete legacy inventories, and limits equipment to one shot/two shared slots', () => {
+test('missile costs 100P, accepts complete legacy inventories, and allows five shots in each of two type slots', () => {
   let p = { ...initialProgress(), balance: 1000 };
-  delete p.rivalInventory['support-missile']; p.rivalInventory['time-stop'] = 2;
+  p.rivalInventory = { 'time-stop': 2, interference: 0 };
   p = validateProgress(p); assert.equal(p.rivalInventory['support-missile'], 0); assert.equal(p.rivalInventory['time-stop'], 2);
   for (let i = 0; i < 2; i++) p = applyCommand(p, { kind: 'rival-buy', item: 'support-missile', mode: 'competition' });
   assert.equal(p.balance, 800);
   assert.throws(() => applyCommand(p, { kind: 'rival-buy', item: 'support-missile', mode: 'time-attack' }));
-  assert.throws(() => applyCommand(p, { kind: 'rival-slots', slots: ['support-missile', 'support-missile'], mode: 'competition' }));
+  p = applyCommand(p, { kind: 'rival-slots', slots: ['support-missile', 'support-missile'], mode: 'competition' });
   p = applyCommand(p, { kind: 'rival-slots', slots: ['support-missile', 'time-stop'], mode: 'competition' });
   assert.equal(p.rivalSlots.length, 2);
   assert.throws(() => validateProgress({ ...p, focusSlots: 1 }));
@@ -235,4 +241,24 @@ test('failed reservation cannot launch; failed confirmation after launch cannot 
     receipt: 'launched', requestId: 2, valid: () => true, launch: () => { launched++; return true; }, reject: () => rejected++ }));
   assert.equal(launched, 1); assert.equal(ledger.profile.rivalInventory['support-missile'], 0);
   assert.equal(ledger.profile.rivalUses.launched.state, 'pending');
+});
+
+
+test('first-lap crossings are discarded and lap two requires a fresh overtake', () => {
+  const m=createSupportMissile(5), rivals=[pose('target',103)];
+  m.step(.01,player,[pose('target',96)],false);m.step(.01,player,rivals,false);
+  assert.equal(m.snapshot(player,rivals,0).canLaunch,false);
+  m.step(.01,player,rivals,true);assert.equal(m.snapshot(player,rivals,0).phase,'armed');
+  launch(m);
+});
+test('five missiles rearm only after the full stop and each needs a new overtake', () => {
+  const m=createSupportMissile(5), rivals=[pose('target',103)];
+  for(let n=1;n<=5;n++) {
+    launch(m);m.step(.4,player,rivals);assert.equal(m.snapshot(player,rivals,0).hitEventId,n);
+    m.step(4.99,player,rivals);assert.equal(m.stopped('target'),true);
+    assert.equal(m.snapshot(player,rivals,0).canLaunch,false);m.step(.01,player,rivals);
+    assert.equal(m.stopped('target'),false);assert.equal(m.snapshot(player,rivals,0).phase,n<5?'armed':'spent');
+    assert.equal(m.snapshot(player,rivals,0).canLaunch,false);
+  }
+  crossing(m);assert.equal(m.snapshot(player,rivals,0).canLaunch,false);
 });

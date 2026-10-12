@@ -1,3 +1,7 @@
+import { itemIcon } from './itemIcons';
+import { createItemSlots, itemSlotIndex, ITEM_SLOT_KEYS } from './game/driving/itemSlots';
+import { isAutomaticItem, itemAllowedInMode, isStartItem, boostItemBonus, speedItemBonus } from './game/progression/catalog';
+import { reserveStartItems } from './game/progression/startItemUse';
 import { reserveSupportMissile } from './game/progression/supportMissileUse';
 import { forkCountdownText, type ForkCue } from './game/track/forkCue';
 import { LANE_HUES } from './game/track/createForkLanes';
@@ -76,7 +80,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
       </header>
       <button type="button" id="race-pause" class="race-pause" aria-label="일시정지 메뉴" aria-keyshortcuts="Escape" aria-controls="drive-overlay" aria-expanded="false"><span aria-hidden="true">Ⅱ</span><kbd class="key-badge">Esc</kbd></button>
       <div class="driving-overlay"><div id="race-announcement" class="race-announcement" role="status" aria-live="polite" hidden><strong></strong><span></span><em id="race-clean" hidden>클린 +${CLEAN_HALF_LAP_POINTS}P</em></div><p id="race-callout" class="race-callout" role="status" hidden></p><p id="race-nearmiss" class="race-nearmiss" aria-hidden="true" hidden>NEAR MISS</p><p id="race-streak" class="race-streak" aria-hidden="true" hidden></p><section id="race-fork3" class="fork-cue" role="status" aria-label="갈림길 안내" hidden></section><p id="race-jump" class="jump-cue" role="status" hidden><b class="jump-badge">JUMP</b><span class="jump-text"></span><i class="jump-distance mono"></i></p><p id="race-notice" class="race-notice" role="status" aria-live="polite"></p><div id="race-countdown" class="race-countdown" role="status" aria-live="assertive" hidden><span>READY</span><strong>3</strong></div>
-      <div class="race-items"><button id="race-focus" type="button" class="race-focus" aria-keyshortcuts="V" hidden>집중 모드<kbd class="key-badge">V</kbd></button>${RIVAL_ITEMS.map(item => `<button type="button" id="race-${item.id}" class="race-focus" data-use-item="${item.id}" hidden>${item.name}</button>`).join('')}</div><p id="focus-feedback" class="focus-feedback" role="status" aria-live="polite"></p><p id="parry-callout" class="focus-feedback parry-callout" role="status" aria-live="polite" hidden>패링!</p><p id="missile-chip" class="missile-chip" role="status" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 20l5-1 9-9 2-6-6 2-9 9z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="17" cy="7" r="1.3" fill="currentColor"/></svg><span></span></p><footer class="drive-hud" aria-label="고도와 부스트 계기판">
+      <div class="race-items">${ITEM_SLOT_KEYS.map((key, i) => `<button id="race-item-${i}" type="button" class="race-focus" aria-keyshortcuts="${key}" hidden><kbd class="key-badge">${key}</kbd></button>`).join('')}</div><p id="focus-feedback" class="focus-feedback" role="status" aria-live="polite"></p><p id="parry-callout" class="focus-feedback parry-callout" role="status" aria-live="polite" hidden>패링!</p><p id="missile-chip" class="missile-chip" role="status" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 20l5-1 9-9 2-6-6 2-9 9z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="17" cy="7" r="1.3" fill="currentColor"/></svg><span></span></p><footer class="drive-hud" aria-label="고도와 부스트 계기판">
         <aside class="height-guide" aria-label="고도 안내: 선택 단계, 민트색 통과 가능, 빨강 통과 불가, 주황 전환 중"><div id="height-level" class="height-bars"></div><strong id="height-instruction"></strong></aside>
         <div class="drive-controls">
         <div class="boost-readout"><div class="hud-pair"><span class="boost-icon" role="img" aria-label="부스트">${BOOST_ICON}</span><span id="boost-value" class="mono">100%</span></div><div id="boost-meter" class="boost-meter" role="progressbar" aria-label="부스트 잔량 (50%씩 3칸, 최대 150%)" aria-valuemin="0" aria-valuemax="150" aria-valuenow="100"><span></span></div><div id="boost-stage-meter" class="boost-stage-meter" role="progressbar" aria-label="부스트 2단계 축적" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span></span></div><span id="boost-status">Space 유지 · 3초 후 2단계</span><span id="parry-hint" class="parry-hint mono" hidden aria-hidden="true"><kbd>← / →</kbd> 패링<b>!</b></span><div id="drift-hud" class="drift-hud mono" hidden><span class="drift-pips" aria-hidden="true"><i></i><i></i><i></i></span><span id="drift-label" class="drift-label" aria-hidden="true"></span><span id="drift-end" class="drift-end" aria-live="polite"></span></div></div>
@@ -125,7 +129,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
         <p class="quality-hint">아지랑이는 배기 주변에만 적용합니다. 성능이 낮으면 끄거나 ‘성능 우선’을 선택하세요.</p>
         <details class="control-help"><summary>조작 안내</summary>
           <p class="touch-help">메뉴: 화살표로 이동 · Enter로 선택. 게임패드: 방향 패드/스틱으로 이동 · A 선택 · B 돌아가기.<br />주행: 왼쪽 스틱 조향 · 방향 패드 ↑/↓ 고도 · LT 감속 · RT/RB 부스트 · X 콕핏 · Y 트랙 뷰 · LB 아이템 · Start 일시정지/계속.</p>
-          <div class="drive-keys"><span>자동 가속 · <kbd>S</kbd> 감속</span><span><kbd>A</kbd> <kbd>D</kbd> 좌우 조향</span><span><kbd>↓</kbd> <kbd>↑</kbd> 고도 한 단계 전환</span><span><kbd>Space</kbd> 길게 눌러 부스트</span><span><kbd>W</kbd> 코어 각성</span><span><kbd>←</kbd> / <kbd>→</kbd> 패링</span><span><kbd>C</kbd> 기체·콕핏 전환</span><span><kbd>X</kbd> 트랙 PIP·자리 교환·닫기</span><span><kbd>V</kbd> 아이템 사용</span><span><kbd>Esc</kbd> 일시정지·계속하기</span><span>대기·일시정지 중 <kbd>S</kbd> 설정</span></div>
+          <div class="drive-keys"><span>자동 가속 · <kbd>S</kbd> 감속</span><span><kbd>A</kbd> <kbd>D</kbd> 좌우 조향</span><span><kbd>↓</kbd> <kbd>↑</kbd> 고도 한 단계 전환</span><span><kbd>Space</kbd> 길게 눌러 부스트</span><span><kbd>W</kbd> 코어 각성</span><span><kbd>←</kbd> / <kbd>→</kbd> 패링</span><span><kbd>C</kbd> 기체·콕핏 전환</span><span><kbd>X</kbd> 트랙 PIP·자리 교환·닫기</span><span><kbd>Q / E</kbd> 아이템 사용</span><span><kbd>Esc</kbd> 일시정지·계속하기</span><span>대기·일시정지 중 <kbd>S</kbd> 설정</span></div>
           <p class="touch-help">자동으로 가속합니다. 왼쪽 조이스틱은 좌우 조향, 아래로 당기면 감속합니다. 대각선으로 두 조작을 함께 할 수 있습니다.<br />오른쪽 BOOST를 누른 채 위로 길게 밀수록 높게, 아래로 밀수록 낮게 고도를 선택합니다. 여러 단계도 한 번에 바꿀 수 있습니다. 손을 떼면 선택한 고도는 유지하고 부스트만 해제합니다. ↑/↓만 누르면 부스트 없이 고도를 바꿉니다. ${(configuration.performance.boostStage2Threshold / configuration.performance.boostDrain).toFixed(1)}초 연속 부스트 시 2단계에 진입합니다.<br />시점은 일시정지 메뉴의 시점 전환에서 바꿀 수 있습니다.</p>
           <p>중간·어려움: 주황 방전 구역은 모든 고도에서 위험합니다. 민트색 화살표를 따라 왼쪽·가운데·오른쪽 통로로 이동하세요. 자홍색 전기 지뢰밭은 모든 고도에서 위험하니, 기둥 사이 빈틈으로 통과하세요.</p>
           <p>황금색 정육면체 각성 코어는 랩마다 하나씩 나오고 최대 3개까지 보관합니다. 부스트 오른쪽의 코어를 터치하거나 W로 한 개를 사용하면 5초간 기체가 변신해 자동 주행합니다. 날개 아이콘과 줄어드는 막대가 남은 각성 시간을 표시합니다. 2단 부스트 최고속도보다 5% 빠르고 충돌 감속이 없습니다. 부스트 잔량은 그대로 보관합니다.</p>
@@ -211,6 +215,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
   }
   let itemStates: RaceSnapshot['timeAttack']['items'] = [];
   let equippedRivalSlots: RivalItemId[] = [];
+  let itemSlots = createItemSlots(0, []);
   let campaignOutcome: CampaignOutcome | undefined;
   let standingsKey = '';
   // Single seam for result statistics; undefined falls back to the local computations below.
@@ -359,24 +364,30 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
     activeRaceId = attack.raceId;
     if (state.phase === 'running' && attack.supportMissile?.canLaunch) void fireSupportMissile(attack.supportMissile.requestId!);
     canFocus = attack.canFocus; itemStates = attack.items;
-    const focus = get<HTMLButtonElement>('race-focus');
-    focus.hidden = !focusSlots || state.phase !== 'running'; focus.disabled = !canFocus || focusPending;
-    focus.innerHTML = `집중 <small class="item-count">${attack.focusRemaining > 0 ? `${attack.focusRemaining.toFixed(1)}s` : focusSlots - attack.focusUsed}</small><kbd class="key-badge">V</kbd>`;
-    for (const item of RIVAL_ITEMS) {
-      const status = attack.items.find(entry => entry.id === item.id)!;
-      const button = get<HTMLButtonElement>(`race-${item.id}`);
-      button.hidden = item.id === 'support-missile' || !equippedRivalSlots.includes(item.id) || state.phase !== 'running';
-      button.disabled = !status.canUse || focusPending;
-      button.innerHTML = status.active > 1e-8 ? `${item.name} <small class="item-count">${status.active.toFixed(1)}s</small>` : `${item.name} <small class="item-count">${status.remaining}</small><small class="item-note">${attack.itemCooldown > 0 ? ` · ${attack.itemCooldown.toFixed(1)}s` : status.remaining > 0 && !status.targets.length ? ' · 대상 없음' : ''}</small>`;
-    }
+    itemSlots.slots.forEach((slot, i) => {
+      const button = get<HTMLButtonElement>(`race-item-${i}`), status = attack.items.find(item => item.id === slot.item);
+      const isFocus = slot.item === 'focus', automatic = isAutomaticItem(slot.item);
+      const remaining = isFocus ? focusSlots - attack.focusUsed : status?.remaining ?? 0;
+      const active = isFocus ? attack.focusRemaining : status?.active ?? 0;
+      slot.remaining = remaining;
+      button.hidden = state.phase !== 'running';
+      button.disabled = automatic || focusPending || !(isFocus ? canFocus : status?.canUse);
+      const name = isFocus ? '집중' : RIVAL_ITEMS.find(item => item.id === slot.item)!.name;
+      const passive = boostItemBonus(slot.item) > 0 || speedItemBonus(slot.item) > 0;
+      const badge = passive && active ? '✓' : active > 1e-8 ? `${active.toFixed(1)}s` : `×${remaining}`;
+      const tier = Math.round(Math.max(boostItemBonus(slot.item), speedItemBonus(slot.item)) * 100);
+      button.setAttribute('aria-label', `${name} · ${passive && active ? '적용 중' : active > 1e-8 ? `${active.toFixed(1)}초 남음` : `${remaining}개 남음`} · ${automatic ? '자동 사용' : ITEM_SLOT_KEYS[i]}`);
+      button.innerHTML = `${itemIcon(slot.item)}<span class="item-name">${name}</span>${tier ? `<span class="item-tier">${tier}%</span>` : ''} <small class="item-count">${badge}</small><kbd class="key-badge">${automatic ? '자동' : ITEM_SLOT_KEYS[i]}</kbd>`;
+    });
+    for (let i = itemSlots.slots.length; i < 2; i++) get(`race-item-${i}`).hidden = true;
     const missile = attack.supportMissile, chip = get('missile-chip');
     chip.hidden = !missile || state.phase !== 'running';
     if (missile) {
-      const label = missile.phase === 'flying' ? '발사!' : missile.phase === 'hit' ? `명중 · ${missile.stopRemaining.toFixed(1)}s` : missile.phase === 'spent' ? '사용함' : '미사일 대기';
+      const label = missile.phase === 'flying' ? '발사!' : missile.phase === 'hit' ? `명중 · ${missile.stopRemaining.toFixed(1)}s` : missile.phase === 'spent' ? '사용함' : attack.completedLaps < 1 ? '2랩부터 준비' : '미사일 대기';
       if (chip.dataset.phase !== missile.phase) chip.dataset.phase = missile.phase;
       if (chip.lastElementChild!.textContent !== label) chip.lastElementChild!.textContent = label;
       if (missile.hitEventId !== lastMissileHit) {
-        if (missile.hitEventId > lastMissileHit && lastMissileHit >= 0 && !focusPending) { get('focus-feedback').textContent = '명중! 상대 정지 2초'; focusMessageUntil = performance.now() + 1600; }
+        if (missile.hitEventId > lastMissileHit && lastMissileHit >= 0 && !focusPending) { get('focus-feedback').textContent = '명중! 상대 정지 5초'; focusMessageUntil = performance.now() + 1600; }
         if (lastMissileHit >= 0) { chip.classList.remove('is-hit'); void chip.offsetWidth; chip.classList.add('is-hit'); }
         lastMissileHit = missile.hitEventId;
       }
@@ -765,12 +776,12 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
   }
   const useFocus = async () => {
     if (!store || focusPending || lastPhase !== 'running' || !canFocus) return;
-    focusPending = true; get<HTMLButtonElement>('race-focus').disabled = true;
+    focusPending = true;
     const requestedRaceId = activeRaceId; const receipt = `${requestedRaceId}:${++focusSerial}`;
     try {
       await store.command({ kind: 'consume-focus', id: receipt });
       if (screenDisposed || activeRaceId !== requestedRaceId || !race?.useFocus()) await store.command({ kind: 'refund-focus', id: receipt });
-      else { get('focus-feedback').textContent = '집중 모드 · 2초'; focusMessageUntil = performance.now() + 2200; await store.command({ kind: 'confirm-focus', id: receipt }); }
+      else { get('focus-feedback').textContent = '집중 모드 · 5초 · 속도 −70%'; focusMessageUntil = performance.now() + 2200; await store.command({ kind: 'confirm-focus', id: receipt }); }
     } catch (error) { if (!screenDisposed) { get('focus-feedback').textContent = error instanceof Error ? error.message : '아이템을 사용할 수 없습니다.'; focusMessageUntil = performance.now() + 2500; } }
     finally { focusPending = false; }
   };
@@ -790,16 +801,21 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
     } catch (error) { if (!screenDisposed) { get('focus-feedback').textContent = error instanceof Error ? error.message : '아이템을 사용할 수 없습니다.'; focusMessageUntil = performance.now() + 2500; } }
     finally { focusPending = false; }
   };
-  const useNextItem = () => {
-    if (canFocus) void useFocus();
-    else { const next = itemStates.find(item => item.canUse); if (next) void useRival(next.id); }
+  const useSlot = (index: number) => {
+    const item = itemSlots.manual(index);
+    if (item === 'focus') void useFocus();
+    else if (item) void useRival(item);
   };
-  get('race-focus').addEventListener('click', () => { void useFocus(); }, listen);
-  for (const item of RIVAL_ITEMS) get(`race-${item.id}`).addEventListener('click', () => { void useRival(item.id); }, listen);
+  const useNextItem = () => {
+    const index = itemSlots.slots.findIndex(slot => slot.remaining > 0 && (slot.item === 'focus' ? canFocus : itemStates.find(item => item.id === slot.item)?.canUse));
+    if (index >= 0) useSlot(index);
+  };
+  for (let i = 0; i < 2; i++) get(`race-item-${i}`).addEventListener('click', () => useSlot(i), listen);
   window.addEventListener('speedracer:focus-request', () => { if (!preferences.open) useNextItem(); }, listen);
   window.addEventListener('keydown', event => {
-    if (event.code !== 'KeyV' || event.repeat || event.ctrlKey || event.metaKey || event.altKey || document.querySelector('dialog[open]') || event.target instanceof HTMLElement && event.target.closest('input, select, textarea, [contenteditable]')) return;
-    event.preventDefault(); useNextItem();
+    const index = itemSlotIndex(event.code);
+    if (index === null || event.repeat || event.ctrlKey || event.metaKey || event.altKey || document.querySelector('dialog[open]') || event.target instanceof HTMLElement && event.target.closest('input, select, textarea, [contenteditable]')) return;
+    event.preventDefault(); useSlot(index);
   }, listen);
   get('drive-retry').addEventListener('click', () => location.reload(), listen);
   const prepareRace = () => {
@@ -816,7 +832,8 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
     if (isTraining()) { selectedMode = 'time-attack'; introPending = false; }
     const profile = store?.snapshot();
     focusSlots = !isTraining() && profile ? Math.min(profile.focusSlots, profile.focus) : 0;
-    equippedRivalSlots = !isTraining() && selectedMode === 'competition' && profile ? profile.rivalSlots.filter((item, index, slots) => slots.slice(0, index + 1).filter(id => id === item).length <= profile.rivalInventory[item]) : [];
+    equippedRivalSlots = !isTraining() && profile ? profile.rivalSlots.filter((item, index, slots) => itemAllowedInMode(item, selectedMode) && slots.slice(0, index + 1).filter(id => id === item).length <= profile.rivalInventory[item]) : [];
+    itemSlots = createItemSlots(focusSlots, equippedRivalSlots);
     const tutorial = tutorialMode ? createDrivingTutorial({ mode: tutorialMode, onFinish: status => { if (status.outcome) tutorialProgress.finish(status.outcome); } }) : undefined;
     document.title = `Speedracer — ${selectedMode === 'competition' ? '경쟁 레이스' : '타임어택'}`;
     get('race-course-name').textContent = course?.name ?? 'NEON CIRCUIT';
@@ -901,7 +918,27 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
   }, { ...listen, capture: true });
   // The press that skipped a cinematic (pad A, a held key) must not also activate a button revealed under it.
   overlay.addEventListener('click', event => { if (performance.now() - cinematicEndedAt < 400) { event.preventDefault(); event.stopImmediatePropagation(); } }, { ...listen, capture: true });
-  startButton.addEventListener('click', () => { startButton.blur(); if (lastPhase === 'finished') prepareRace(); race?.start(); }, listen);
+  const beginRace = async () => {
+    if (focusPending || !race) return;
+    if (lastPhase === 'finished') prepareRace();
+    if (!race || lastPhase === 'paused' || isTraining() || !store) { race?.start(); return; }
+    if (lastPhase !== 'ready') return;
+    const requestedRace = race;
+    const startItems = equippedRivalSlots.filter(isStartItem).filter((item, i, all) => all.indexOf(item) === i)
+      .filter(item => (!boostItemBonus(item) || boostItemBonus(item) === Math.max(...equippedRivalSlots.map(boostItemBonus)))
+        && (!speedItemBonus(item) || speedItemBonus(item) === Math.max(...equippedRivalSlots.map(speedItemBonus))));
+    if (!startItems.length) { race.start(); return; }
+    focusPending = true; startButton.disabled = true;
+    try {
+      const startReceipt = `start:${globalThis.crypto?.randomUUID() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`}`;
+      await reserveStartItems({ store, items: startItems, mode: selectedMode, receipt: startReceipt,
+        valid: () => !screenDisposed && race === requestedRace && lastPhase === 'ready',
+        start: () => requestedRace.start(), activate: item => requestedRace.useRivalItem(item) });
+    } catch (error) {
+      if (!screenDisposed) { get('focus-feedback').textContent = error instanceof Error ? error.message : '아이템을 사용할 수 없습니다.'; focusMessageUntil = performance.now() + 2500; }
+    } finally { focusPending = false; if (!screenDisposed) startButton.disabled = false; }
+  };
+  startButton.addEventListener('click', () => { startButton.blur(); void beginRace(); }, listen);
   pauseButton.addEventListener('click', () => { pauseButton.blur(); if (previewing) leavePreview(); else race?.togglePause(); }, listen);
   awakeningButton.addEventListener('click', () => {
     if (awakeningButton.disabled) return;
@@ -916,7 +953,7 @@ export function mountRace(root: HTMLDivElement, onExit: () => void, configuratio
   get('race-restart').addEventListener('click', requestRestart, listen);
   window.addEventListener('speedracer:restart-request', requestRestart, listen);
   get('restart-cancel').addEventListener('click', () => restartConfirm.close(), listen);
-  get('restart-accept').addEventListener('click', () => { restartConfirm.close('restart'); prepareRace(); race?.start(); }, listen);
+  get('restart-accept').addEventListener('click', () => { restartConfirm.close('restart'); prepareRace(); void beginRace(); }, listen);
   restartConfirm.addEventListener('close', () => {
     if (screenDisposed || restartConfirm.returnValue === 'restart') return;
     (lastPhase === 'paused' ? get('race-restart') : startButton).focus({ preventScroll: true });

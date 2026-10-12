@@ -7,18 +7,18 @@ const track={length:10000,halfWidth:12,checkpointSpacing:25,heightObstacles:[],s
 const input={...NEUTRAL_INPUT,throttle:true};
 const race=(slots=2)=>createTimeAttack(track,DRIVING_TUNING,createRaceRecords({trackId:'focus',configurationId:'assisted'},undefined),slots);
 const advance=(r,seconds)=>{for(let i=0;i<Math.round(seconds*100);i++)r.step(.01,input);};
-test('focus slows physics to 45% for two real seconds while race timing remains real',()=>{
+test('focus slows physics to 30% for five real seconds while race timing remains real',()=>{
   const focused=race(),control=race(0);focused.start();control.start();advance(focused,3);advance(control,3);
   focused.model.state.speed=control.model.state.speed=DRIVING_TUNING.topSpeed;
-  assert.equal(focused.useFocus(),true);advance(focused,2);advance(control,.9);
+  assert.equal(focused.useFocus(),true);advance(focused,5);advance(control,1.5);
   assert.ok(Math.abs(focused.model.state.distance-control.model.state.distance)<1e-5);
-  assert.ok(Math.abs(focused.model.state.elapsed-2)<1e-7);assert.ok(focused.snapshot().focusRemaining<1e-7);
+  assert.ok(Math.abs(focused.model.state.elapsed-5)<1e-7);assert.ok(focused.snapshot().focusRemaining<1e-7);
   assert.equal(focused.snapshot().assisted,true);assert.equal(control.snapshot().assisted,false);
 });
 test('focus only activates during a race, freezes with pause, cannot overlap and resets per new race',()=>{
   const r=race();assert.equal(r.useFocus(),false);r.start();advance(r,3);const id=r.snapshot().raceId;
   assert.equal(r.useFocus(),true);assert.equal(r.useFocus(),false);advance(r,.5);r.pause();const before=r.snapshot();advance(r,20);assert.deepEqual(r.snapshot(),before);
-  r.start();advance(r,2.6);assert.equal(r.useFocus(),true);advance(r,3.1);assert.equal(r.useFocus(),false);
+  r.start();advance(r,4.6);assert.equal(r.useFocus(),true);advance(r,5.1);assert.equal(r.useFocus(),false);
   r.restart();assert.notEqual(r.snapshot().raceId,id);assert.equal(r.snapshot().focusUsed,0);assert.equal(r.snapshot().focusRemaining,0);
 });
 test('first record is distinct from improving an existing best for points',()=>{

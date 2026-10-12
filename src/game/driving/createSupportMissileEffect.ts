@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { SupportMissileSnapshot } from './supportMissile.js';
+import { SUPPORT_MISSILE_STOP, type SupportMissileSnapshot } from './supportMissile.js';
 
 export interface MissileTargetEntry { rival: { id: string }; object: THREE.Object3D }
 export interface SupportMissileEffect {
@@ -12,7 +12,7 @@ export interface SupportMissileEffect {
 export const MISSILE_COLOR = '#ff5a3c';
 const TRAIL = 10, SPARKS = 10, FLASH_SECONDS = 0.3, RING_SECONDS = 0.35, SPARK_LIFE = 0.42, TRAIL_SECONDS = 0.15;
 const HEAD_GLOW = 0, HEAD_TIP = 1, FLASH = 2, TRAIL_AT = 3, SPARK_AT = TRAIL_AT + TRAIL, COUNT = SPARK_AT + SPARKS;
-const STOP_SECONDS = 2, CAGE_RADIUS = 3.7, ARCS = 6;
+const STOP_SECONDS = SUPPORT_MISSILE_STOP, CAGE_RADIUS = 3.7, ARCS = 6;
 
 const pointVertex = /* glsl */ `
   attribute float aAlpha;

@@ -12,9 +12,12 @@ export type RacePhase = 'ready' | 'countdown' | 'running' | 'paused' | 'finished
 
 export interface RaceRules { laps?: number; lapLimit?: number; practice?: boolean; drift?: boolean; parry?: boolean }
 
+import { ITEM_STACK_LIMIT } from '../progression/itemLoadout.js';
+import { FOCUS_DURATION, FOCUS_MOTION_SCALE } from '../progression/catalog.js';
+
 /** Owns race timing and transitions; the renderer only steps and displays it. */
 export function createTimeAttack(track: Track, performance: DronePerformance, records: ReturnType<typeof createRaceRecords>, focusSlots = 0, rules: RaceRules = {}) {
-  if (!Number.isInteger(focusSlots) || focusSlots < 0 || focusSlots > 2) throw new RangeError('Invalid focus slots');
+  if (!Number.isInteger(focusSlots) || focusSlots < 0 || focusSlots > ITEM_STACK_LIMIT) throw new RangeError('Invalid focus slots');
   const totalLaps = rules.laps ?? RACE_LAPS;
   const lapLimit = rules.practice ? null : rules.lapLimit ?? null;
   if (lapLimit !== null && (!Number.isFinite(lapLimit) || lapLimit <= 0)) throw new Error('Invalid lap deadline');
@@ -43,7 +46,7 @@ export function createTimeAttack(track: Track, performance: DronePerformance, re
   return {
     model,
     get phase() { return phase; },
-    get motionScale() { return focusRemaining > 0 ? .45 : 1; },
+    get motionScale() { return focusRemaining > 0 ? FOCUS_MOTION_SCALE : 1; },
     snapshot() {
       const p = progress.snapshot();
       const cleanSegments = clean.snapshot();
@@ -81,7 +84,7 @@ export function createTimeAttack(track: Track, performance: DronePerformance, re
     },
     useFocus() {
       if (phase !== 'running' || model.state.awakeningRemaining > 0 || focusUsed >= focusSlots || focusCooldown > 0) return false;
-      focusUsed++; focusRemaining = 2; focusCooldown = 3; return true;
+      focusUsed++; focusRemaining = FOCUS_DURATION; focusCooldown = FOCUS_DURATION; return true;
     },
     step(delta: number, input: DrivingInput, frozen = false) {
       let remaining = Math.max(0, Math.min(Number.isFinite(delta) ? delta : 0, 0.1));
@@ -94,7 +97,7 @@ export function createTimeAttack(track: Track, performance: DronePerformance, re
       // Split at the end of the effect so neither physics nor the clock gains an extra slowed frame.
       while (remaining > 1e-8 && phase === 'running') {
         const duration = focusRemaining > 0 ? Math.min(remaining, focusRemaining) : remaining;
-        const scale = focusRemaining > 0 ? .45 : 1;
+        const scale = focusRemaining > 0 ? FOCUS_MOTION_SCALE : 1;
         const startedAt = model.state.elapsed;
         if (frozen) {
           model.state.elapsed += duration;
