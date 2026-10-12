@@ -21,12 +21,28 @@ export type UpgradeLevels = Record<UpgradeId, number>;
 export const emptyLevels = (): UpgradeLevels => ({ engine: 0, brakes: 0, steering: 0, stabilizer: 0, battery: 0 });
 export const FOCUS_PRICE = 60;
 export const INVENTORY_LIMIT = 99;
+export const FOCUS_DURATION = 5;
+export const FOCUS_MOTION_SCALE = .3;
+export const FOCUS_DESCRIPTION = '5초 동안 모든 기체의 주행 속도를 70% 낮춥니다. 경기 시계는 정상적으로 흐릅니다.';
 export const RIVAL_ITEMS = [
-  { id: 'support-missile', name: '지원 미사일', price: 100, duration: 2, description: '나를 추월한 상대 한 대에게 자동 발사합니다. 0.4초 비행 후 2초 정지 · 경기당 1발.' },
-  { id: 'time-stop', name: '시간 정지', price: 120, duration: 1, description: '상대 기체를 1초 동안 멈춥니다. 내 기체와 경기 시계는 계속 움직입니다.' },
+  { id: 'speed-10', name: '기본 속도 강화 10%', price: 500, duration: 0, description: '출발 때 자동 사용 · 레이스 내내 일반 주행 최고 속도 +10%. 경기당 1개 소비 · 가장 높은 강화만 적용.' },
+  { id: 'speed-20', name: '기본 속도 강화 20%', price: 800, duration: 0, description: '출발 때 자동 사용 · 레이스 내내 일반 주행 최고 속도 +20%. 경기당 1개 소비 · 가장 높은 강화만 적용.' },
+  { id: 'speed-30', name: '기본 속도 강화 30%', price: 1100, duration: 0, description: '출발 때 자동 사용 · 레이스 내내 일반 주행 최고 속도 +30%. 경기당 1개 소비 · 가장 높은 강화만 적용.' },
+  { id: 'head-start', name: '선행 출발', price: 100, duration: 5, description: '출발 때 자동 사용 · 상대가 5초 늦게 출발합니다. 여러 개 장착해도 경기당 1개만 소비합니다.' },
+  { id: 'boost-10', name: '부스트 강화 10%', price: 400, duration: 0, description: '출발 때 자동 사용 · 레이스 내내 부스트 속도 +10%. 경기당 1개 소비 · 가장 높은 강화만 적용.' },
+  { id: 'boost-20', name: '부스트 강화 20%', price: 600, duration: 0, description: '출발 때 자동 사용 · 레이스 내내 부스트 속도 +20%. 경기당 1개 소비 · 가장 높은 강화만 적용.' },
+  { id: 'boost-30', name: '부스트 강화 30%', price: 800, duration: 0, description: '출발 때 자동 사용 · 레이스 내내 부스트 속도 +30%. 경기당 1개 소비 · 가장 높은 강화만 적용.' },
+  { id: 'support-missile', name: '지원 미사일', price: 100, duration: 5, description: '2랩부터 나를 추월한 상대 한 대에게 자동 발사합니다. 0.4초 비행 후 5초 정지 · 장착 수량만큼, 매번 새로운 추월에 반응.' },
+  { id: 'time-stop', name: '시간 정지', price: 120, duration: 3, description: '상대 기체를 3초 동안 멈춥니다. 내 기체와 경기 시계는 계속 움직입니다.' },
   { id: 'interference', name: '전파 교란', price: 100, duration: 3, description: '앞쪽 180m 안의 가장 가까운 상대 기체 최대 2대의 목표 속도를 3초 동안 50%로 낮춥니다.' },
 ] as const;
 export type RivalItemId = typeof RIVAL_ITEMS[number]['id'];
+export const boostItemBonus = (id: string): number => id === 'boost-10' ? .1 : id === 'boost-20' ? .2 : id === 'boost-30' ? .3 : 0;
+export const speedItemBonus = (id: string): number => id === 'speed-10' ? .1 : id === 'speed-20' ? .2 : id === 'speed-30' ? .3 : 0;
+export const isStartItem = (id: string): boolean => id === 'head-start' || boostItemBonus(id) > 0 || speedItemBonus(id) > 0;
+export const isAutomaticItem = (id: string): boolean => id === 'support-missile' || isStartItem(id);
+export const itemAllowedInMode = (id: string, mode: string): boolean => mode === 'competition' || boostItemBonus(id) > 0 || speedItemBonus(id) > 0;
+export const emptyItemInventory = (): Record<RivalItemId, number> => Object.fromEntries(RIVAL_ITEMS.map(item => [item.id, 0])) as Record<RivalItemId, number>;
 export const isRivalItem = (id: unknown): id is RivalItemId => RIVAL_ITEMS.some(item => item.id === id);
 
 /** Permanent upgrades apply once to the base craft; never compound previous results. */

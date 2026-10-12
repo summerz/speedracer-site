@@ -4,6 +4,7 @@ import { focusPrimary } from './platform/menuNavigation';
 import { menuHeader } from './menuHeader';
 import { DRONE_CATALOG, droneStats } from './game/drone/droneCatalog';
 import { CRAFT_PRICES, craftResaleValue, STARTER_ID, emptyLevels, FOCUS_PRICE, RIVAL_ITEMS, INVENTORY_LIMIT, UPGRADES, UPGRADE_COSTS, upgradedConfiguration } from './game/progression/catalog';
+import { FOCUS_DESCRIPTION, itemAllowedInMode } from './game/progression/catalog';
 import type { UpgradeId, RivalItemId } from './game/progression/catalog';
 import type { ProgressCommand } from './game/progression/progress';
 import type { ProgressStore } from './game/progression/progressStore';
@@ -93,9 +94,9 @@ export function mountShop(root: HTMLDivElement, store: ProgressStore, onBack: ()
     } else {
       get('shop-products').innerHTML = `<div class="shop-detail"><p class="eyebrow">RACE ITEMS</p><h2>주행 아이템</h2><p class="shop-note">장착은 캠페인에서 트랙을 고른 뒤 출전 직전에 선택합니다 <a href="#campaign">캠페인으로 ↗</a></p><div class="shop-item-grid">${(() => {
         const card = (name: string, desc: string, stock: number, price: number, attrs: string, only: boolean, icon = '') => `<article class="shop-upgrade shop-item"><div class="item-name"><h3>${icon}${name}</h3>${only ? '<span class="scope">경쟁 레이스 전용</span>' : ''}</div><p>${desc}</p><span class="stock">보유 ${stock} / ${INVENTORY_LIMIT}</span><div class="shop-action"><button type="button" class="primary-action" ${attrs} ${busy || stock >= INVENTORY_LIMIT || profile.balance < price ? 'disabled' : ''}>${price} P · 1개 구매</button>${stock >= INVENTORY_LIMIT ? '<small>최대 보유</small>' : insufficient(price, profile.balance)}</div></article>`;
-        return card('집중 모드', '2초 동안 모든 기체의 주행을 45% 속도로 늦춥니다. 경기 시계는 정상적으로 흐릅니다. · 모든 모드', profile.focus, FOCUS_PRICE, 'data-action="focus"', false)
-          + RIVAL_ITEMS.map(item => card(item.name, item.description, profile.rivalInventory[item.id], item.price, `data-rival-buy="${item.id}"`, true, itemIcon(item.id))).join('');
-      })()}</div><div class="shop-footnote"><p>합계 2개 장착 · 공통 재사용 대기 3초. 아이템 장착 경기는 보조 기록으로 분리하며 기본 보상은 80%, 기록 갱신 보너스는 없습니다. 사용하지 않은 수량은 남습니다.</p><p>타임어택에서는 상대 기체 대상 아이템이 출전에 포함되지 않습니다. 전파 교란은 앞쪽 180m 안에 대상이 없으면 소비하지 않습니다. V / 패드 LB로 사용 가능한 다음 아이템을 쓰거나 주행 버튼을 눌러 선택하세요.</p></div></div>`;
+        return card('집중 모드', `${FOCUS_DESCRIPTION} · 모든 모드`, profile.focus, FOCUS_PRICE, 'data-action="focus"', false)
+          + RIVAL_ITEMS.map(item => card(item.name, item.description, profile.rivalInventory[item.id], item.price, `data-rival-buy="${item.id}"`, !itemAllowedInMode(item.id, 'time-attack'), itemIcon(item.id))).join('');
+      })()}</div><div class="shop-footnote"><p>두 종류 · 종류당 최대 5개 장착. 아이템 장착 경기는 보조 기록으로 분리하며 기본 보상은 80%, 기록 갱신 보너스는 없습니다. 사용하지 않은 수량은 남습니다.</p><p>타임어택에서는 상대 기체 대상 아이템이 출전에 포함되지 않습니다. 전파 교란은 앞쪽 180m 안에 대상이 없으면 소비하지 않습니다. Q / E로 1번 / 2번 슬롯을 사용하거나 패드 LB로 사용 가능한 다음 아이템을 쓰세요. 또는 주행 버튼을 눌러 선택하세요.</p></div></div>`;
     }
     markPrimary();
   };

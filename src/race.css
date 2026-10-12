@@ -24,6 +24,8 @@
 .race-pause .key-badge { position:absolute; top:calc(100% + 5px); left:50%; transform:translateX(-50%); background:#071724df; }
 .race-focus .key-badge { margin-left:6px; }
 .race-focus small { font:inherit; }
+.race-focus .item-icon { vertical-align:middle; margin-right:5px; }
+.race-focus .item-tier { display:none; }
 .race-pause:hover { background:#1b414b; }
 .race-pause:disabled { opacity:.4; }
 .race-pause.on-pip { width:44px; height:44px; font-size:21px; background:#102c38; }
@@ -665,3 +667,7 @@ button:focus-visible { outline:2px solid #c9f9f2; outline-offset:3px; }
   .rank-context small { font-size:17px; }
   .fork-timer { font-size:21px; padding:4px 16px; }
 }
+
+.has-touch-controls .race-focus .item-name { display:none; }
+.has-touch-controls .race-focus .item-icon { width:23px; height:23px; margin:0; }
+.has-touch-controls .race-focus .item-tier { display:block; font:9px/1 'IBM Plex Mono',monospace; }

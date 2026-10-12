@@ -1,6 +1,6 @@
 /** Player-only automatic consumable. All durations use unpaused real race seconds. */
 export const SUPPORT_MISSILE_FLIGHT = .4;
-export const SUPPORT_MISSILE_STOP = 2;
+export const SUPPORT_MISSILE_STOP = 5;
 export type MissilePosition = { x: number; y: number; z: number };
 export interface MissileRacer {
   id: string; active: boolean; distance: number; offset: number; altitude: number;
@@ -21,7 +21,8 @@ const closeEnough = (player: MissileRacer, rival: MissileRacer, range: number) =
 };
 const worldDistance = (a: MissilePosition, b: MissilePosition) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
 
-export function createSupportMissile() {
+export function createSupportMissile(capacity = 1) {
+  let launches = 0;
   let spent = false, serial = 0, hitEventId = 0, targetId: string | null = null;
   let requestId: number | null = null, requestAge = 0, flight = 0, stopRemaining = 0;
   let launchPosition: MissilePosition | null = null, position: MissilePosition | null = null;
@@ -45,11 +46,11 @@ export function createSupportMissile() {
     },
     launch(id: number, player: MissileRacer, rivals: readonly MissileRacer[], cooldown: number) {
       if (id !== requestId || !canLaunch(player, rivals, cooldown)) return false;
-      spent = true; requestId = null; flight = SUPPORT_MISSILE_FLIGHT;
+      spent = true; launches++; requestId = null; flight = SUPPORT_MISSILE_FLIGHT;
       launchPosition = { ...player.position }; position = { ...launchPosition }; return true;
     },
     reject(id: number) { if (id === requestId) clearRequest(); },
-    step(dt: number, player: MissileRacer, rivals: readonly MissileRacer[]) {
+    step(dt: number, player: MissileRacer, rivals: readonly MissileRacer[], enabled = true) {
       stopRemaining = Math.max(0, stopRemaining - dt);
       const rival = target(rivals);
       if (flight > 1e-8) {
@@ -60,7 +61,13 @@ export function createSupportMissile() {
           y: from.y + (rival.position.y - from.y) * u, z: from.z + (rival.position.z - from.z) * u };
         if (flight <= 1e-8) { flight = 0; stopRemaining = SUPPORT_MISSILE_STOP; hitEventId++; }
       }
+      if (spent && flight <= 1e-8 && stopRemaining <= 1e-8 && launches < capacity) {
+        spent = false; targetId = null; position = null; launchPosition = null;
+        behind.clear(); previous.clear();
+      }
       if (spent) return;
+      // Discard first-lap crossings; entering lap two cannot fire a stale request.
+      if (!enabled) { clearRequest(); behind.clear(); previous.clear(); return; }
       if (requestId !== null) {
         requestAge += dt;
         if (!rival || !closeEnough(player, rival, 180) || requestAge > 4) clearRequest();

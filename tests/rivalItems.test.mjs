@@ -17,11 +17,12 @@ test('existing profiles migrate AI inventories without losing ownership, balance
   const old = funded(); delete old.rivalInventory; delete old.rivalSlots; delete old.rivalUses;
   const restored = validateProgress(old);
   assert.equal(restored.balance,2000); assert.deepEqual(restored.owned, old.owned);
-  assert.deepEqual(restored.rivalInventory, {'time-stop':0,interference:0,'support-missile':0});
+  assert.ok(Object.values(restored.rivalInventory).every(count => count === 0));
+  assert.equal(Object.keys(restored.rivalInventory).length, 10);
   assert.deepEqual(restored.rivalSlots, []);
 });
 
-test('AI purchases and equipment require competition, share the two-charge limit, and charge fixed prices', () => {
+test('AI purchases and equipment require competition, share the two-type limit, and charge fixed prices', () => {
   let p = funded();
   assert.throws(() => applyCommand(p,{kind:'rival-buy',item:'time-stop',mode:'time-attack'}));
   p = applyCommand(p,{kind:'rival-buy',item:'time-stop',mode:competition});
@@ -61,7 +62,7 @@ test('pending AI charges reserve capacity and malformed saves are rejected', () 
   }
 });
 
-test('time stop freezes all running rivals for one real second while player and clocks continue', () => {
+test('time stop freezes all running rivals for three real seconds while player and clocks continue', () => {
   const race = started();
   race.rivals.forEach((p,i)=> { p.controller.model.state.distance = 100 + i*200; });
   const before = race.rivals.map(p=>({...p.controller.model.state}));
@@ -75,7 +76,7 @@ test('time stop freezes all running rivals for one real second while player and 
   }
   assert.ok(race.model.state.distance > 0);
   race.pause(); const paused = race.snapshot(); advance(race,2); assert.deepEqual(race.snapshot(),paused);
-  race.start(); advance(race,.5);
+  race.start(); advance(race,2.5);
   assert.ok(race.rivals.every((p,i)=>p.controller.model.state.distance===before[i].distance));
   advance(race,.1); assert.ok(race.rivals.every((p,i)=>p.controller.model.state.distance>before[i].distance));
   assert.equal(race.snapshot().items.find(p=>p.id==='time-stop').remaining,0);

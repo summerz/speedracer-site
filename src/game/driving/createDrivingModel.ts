@@ -197,6 +197,13 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
     state.awakeningRemaining = 0; handoffRemaining = .65;
   };
   return {
+    /** Race-long item modifiers; always derive from the original craft, never compound. */
+    setSpeedBonuses(ordinary: number, boost: number) {
+      if (![ordinary, boost].every(value => Number.isFinite(value) && value >= 0 && value <= .3)) throw new RangeError('Invalid speed bonus');
+      tuning.topSpeed = performance.topSpeed * (1 + ordinary);
+      tuning.boostSpeed = performance.boostSpeed * (1 + boost);
+      tuning.boostStage2Speed = performance.boostStage2Speed * (1 + boost);
+    },
     state,
     altitudeProfile,
     boostStage2Seconds,
@@ -354,11 +361,11 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
         if (input.brake && driftMix === 0) state.speed = oldSpeed >= tuning.crawlSpeed ? Math.max(tuning.crawlSpeed, state.speed) : Math.min(tuning.crawlSpeed, state.speed);
         if (state.speed > ceiling) state.speed = Math.max(ceiling, state.speed - 18 * dt);
         if (!awake && handoffRemaining > 0) {
-          state.speed = Math.max(Math.min(state.speed, ceiling), state.speed - (tuning.boostStage2Speed * AWAKENING_SPEED_SCALE - tuning.topSpeed) / .65 * dt);
+          state.speed = Math.max(Math.min(state.speed, ceiling), state.speed - (performance.boostStage2Speed * AWAKENING_SPEED_SCALE - tuning.topSpeed) / .65 * dt);
           handoffRemaining = Math.max(0, handoffRemaining - dt);
         }
         if (awake) {
-          const awakeSpeed = tuning.boostStage2Speed * AWAKENING_SPEED_SCALE * guidedScale;
+          const awakeSpeed = performance.boostStage2Speed * AWAKENING_SPEED_SCALE * guidedScale;
           state.speed = oldSpeed + clamp(awakeSpeed - oldSpeed, -tuning.boostStage2Acceleration * 3 * dt, tuning.boostStage2Acceleration * 3 * dt);
         }
         const speed = (oldSpeed + state.speed) * 0.5;
@@ -578,7 +585,7 @@ export function createDrivingModel(track: Track, performance: DronePerformance =
             collectedCores.set(i, lap); state.awakeningCores++; state.coresCollected++;
           }
         }
-        if (awake) state.speed = Math.min(state.speed, tuning.boostStage2Speed * AWAKENING_SPEED_SCALE);
+        if (awake) state.speed = Math.min(state.speed, performance.boostStage2Speed * AWAKENING_SPEED_SCALE);
         const boundary = track.halfWidth - tuning.craftHalfWidth;
         if (Math.abs(state.offset) < boundary - 0.5) offTrackEpisode = false;
         // High flight can clear the posts. Keep forward progress when it strays

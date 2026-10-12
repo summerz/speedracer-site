@@ -197,7 +197,7 @@ export function createRace(
   let storage: Storage | undefined;
   try { storage = window.localStorage; } catch { /* Private browsing can deny storage. */ }
   const trackId = course ? `${course.id}:v${course.revision}` : `neon-circuit-v3:${difficulty?.id ?? 'beginner'}`;
-  const records = createRaceRecords({ laps: course?.laps, trackId, configurationId: JSON.stringify({ ...(challenge !== 'normal' ? { challenge } : {}), performance: config.performance, altitude: track.altitudeProfile, ...(focusSlots || rivalSlots.length ? { assisted: true } : {}), ...(rivalSlots.includes('support-missile') ? { rivalItems: [...rivalSlots].sort(), focusSlots } : {}), ...(mode === 'competition' ? { mode } : {}) }) }, storage);
+  const records = createRaceRecords({ laps: course?.laps, trackId, configurationId: JSON.stringify({ ...(challenge !== 'normal' ? { challenge } : {}), performance: config.performance, altitude: track.altitudeProfile, ...(focusSlots || rivalSlots.length ? { assisted: true } : {}), ...(focusSlots || rivalSlots.length ? { itemRules: 2, rivalItems: [...rivalSlots].sort(), focusSlots } : {}), ...(mode === 'competition' ? { mode, aiBalance: 2 } : {}) }) }, storage);
   const training = !!guidance.practice || !!guidance.tutorial;
   const timeAttack = createRaceSession(track, config, records, focusSlots, mode, Math.random, coarsePointer.matches ? 'touch' : 'desktop', { practice: training, parry: !guidance.tutorial, drift: !guidance.tutorial, ...(course ? { laps: course.laps, ...(mode === 'time-attack' ? { lapLimit: challengeLapLimit(course, challenge) } : {}) } : {}) }, course?.rating, rivalSlots, challenge);
   const rivalVisuals = createRivalVisuals(scene, track, timeAttack.rivals);
@@ -423,7 +423,7 @@ export function createRace(
     views.cycleTrack(); resize(); notify();
   };
   const continueTutorial = () => { if (timeAttack.phase !== 'running') return false; const continued = guidance.tutorial?.continue() ?? false; if (continued) notify(); return continued; };
-  const controlCodes = new Set(['KeyE', 'KeyS', 'KeyA', 'KeyD', 'KeyW', 'ArrowLeft', 'ArrowRight', 'ArrowDown', 'ArrowUp', 'Space', 'KeyR', 'KeyC', 'KeyX', 'Escape', 'Enter']);
+  const controlCodes = new Set(['KeyS', 'KeyA', 'KeyD', 'KeyW', 'ArrowLeft', 'ArrowRight', 'ArrowDown', 'ArrowUp', 'Space', 'KeyR', 'KeyC', 'KeyX', 'Escape', 'Enter']);
   window.addEventListener('speedracer:pad-action', (event) => {
     if (lost || document.querySelector('dialog[open]')) return;
     const action = (event as CustomEvent<string>).detail;
@@ -459,7 +459,7 @@ export function createRace(
     if (event.code === 'Enter') { if (!event.repeat) continueTutorial(); return; }
     if (!event.repeat && event.code === 'Escape') { togglePause(); return; }
     if (!event.repeat && event.code === 'KeyR') { window.dispatchEvent(new CustomEvent('speedracer:restart-request')); return; }
-    if (event.code === 'ArrowLeft' || event.code === 'ArrowRight' || event.code === 'KeyE') { if (!event.repeat) useParry(); return; }
+    if (event.code === 'ArrowLeft' || event.code === 'ArrowRight') { if (!event.repeat) useParry(); return; }
     if (event.code === 'KeyW') { if (!event.repeat) useAwakening(); return; }
     if (event.code === 'Space') {
       spaceHeld = true;
