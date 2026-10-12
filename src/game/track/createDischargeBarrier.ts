@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { HeightObstacle } from './createTrack';
 export type BarrierReadiness = 'neutral' | 'ready' | 'blocked';
 
@@ -30,23 +31,26 @@ export function createDischargeBarrier(obstacle: HeightObstacle, halfWidth: numb
   const directionMarkers: THREE.Mesh[] = [];
   const count = Math.max(2, Math.ceil((top - bottom) / 0.75));
   const heights = Array.from({ length: count }, (_, i) => bottom + 0.35 + i / (count - 1) * (top - bottom - 0.7));
+  const housingParts: THREE.BufferGeometry[] = [], ringParts: THREE.BufferGeometry[] = [];
+  const movingRingGeometry = obstacle.motion ? new THREE.TorusGeometry(.52, .11, 5, 12) : undefined;
+  const markerGeometry = obstacle.motion ? new THREE.ConeGeometry(.4, .8, 3) : undefined;
   for (const side of [-1, 1]) {
-    const base = new THREE.Mesh(baseGeometry, housing); base.position.set(side * halfWidth, 0.15, 0); object.add(base);
-    const post = new THREE.Mesh(postGeometry, housing); post.position.set(side * halfWidth, (top + 0.3) / 2, 0); object.add(post);
-    for (const y of heights) {
-      const ring = new THREE.Mesh(ringGeometry, contact); ring.rotation.x = Math.PI / 2;
-      ring.position.set(side * halfWidth, y, 0); object.add(ring);
-    }
-    if (obstacle.motion) {
+    housingParts.push(baseGeometry.clone().translate(side * halfWidth, 0.15, 0));
+    housingParts.push(postGeometry.clone().translate(side * halfWidth, (top + 0.3) / 2, 0));
+    for (const y of heights) ringParts.push(ringGeometry.clone().rotateX(Math.PI / 2).translate(side * halfWidth, y, 0));
+    if (movingRingGeometry && markerGeometry) {
       for (const edge of [-1, 1]) {
-        const ring = new THREE.Mesh(new THREE.TorusGeometry(.52, .11, 5, 12), contact);
+        const ring = new THREE.Mesh(movingRingGeometry, contact);
         ring.rotation.x = Math.PI / 2; ring.position.x = side * halfWidth;
         ring.userData.edge = edge; movingRings.push(ring); object.add(ring);
       }
-      const marker = new THREE.Mesh(new THREE.ConeGeometry(.4, .8, 3), contact);
+      const marker = new THREE.Mesh(markerGeometry, contact);
       marker.position.x = side * (halfWidth + .8); directionMarkers.push(marker); object.add(marker);
     }
   }
+  const housingGeometry = mergeGeometries(housingParts)!, staticRingGeometry = mergeGeometries(ringParts)!;
+  object.add(new THREE.Mesh(housingGeometry, housing), new THREE.Mesh(staticRingGeometry, contact));
+  [...housingParts, ...ringParts, baseGeometry, postGeometry, ringGeometry].forEach(g => g.dispose());
   const positions: number[] = [], uvs: number[] = [], seeds: number[] = [], indices: number[] = [];
   const segments = 80;
   const ribbon = (start: number, end: number, y: number, seed: number, branch: boolean) => {
